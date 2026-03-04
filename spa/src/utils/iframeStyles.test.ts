@@ -10,8 +10,13 @@ describe('iframeStyles', () => {
 
         const styleTags = doc.querySelectorAll(`#${ISSUE_DIALOG_STYLE_ID}`);
         expect(styleTags.length).toBe(1);
-        expect(styleTags[0]?.textContent).toContain('#top-menu');
-        expect(styleTags[0]?.textContent).toContain('#content > h2');
+        const css = styleTags[0]?.textContent || '';
+        expect(css).toContain('#top-menu');
+        expect(css).toContain('#content > h2');
+        expect(css).toContain('#issue-form > p.buttons');
+        expect(css).toContain('#issue-form > .buttons');
+        expect(css).not.toContain(', p.buttons,');
+        expect(css).not.toContain(', .buttons,');
     });
 
     it('detects error message from standard error elements', () => {

@@ -13,8 +13,10 @@ const ISSUE_DIALOG_HIDE_SELECTORS = [
     // '#content .tabs > ul li',
     '#content > h2',
     '#content > .contextual',
-    'p.buttons',
-    '.buttons',
+    // Hide only issue form action rows to avoid hiding nested modal dialog buttons
+    // (e.g. "new version" dialog opened from the issue form).
+    '#issue-form > p.buttons',
+    '#issue-form > .buttons',
     '#issue-form > input[type="submit"]',
     '#issue-form > a[href*="preview"]',
     '#issue-form a[href*="/issues"]',
