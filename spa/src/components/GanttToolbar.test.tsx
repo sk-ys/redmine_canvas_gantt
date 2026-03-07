@@ -76,7 +76,7 @@ describe('GanttToolbar shortcuts', () => {
         expect(useUIStore.getState().rightPaneVisible).toBe(true);
     });
 
-    it('updates row height via custom list menu', () => {
+    it('updates row height via checkbox list menu and keeps it open', () => {
         useTaskStore.setState({
             filterText: '',
             allTasks: [],
@@ -87,7 +87,11 @@ describe('GanttToolbar shortcuts', () => {
             taskStatuses: [],
             selectedStatusIds: [],
             modifiedTaskIds: new Set(),
-            autoSave: true
+            autoSave: true,
+            viewport: {
+                ...useTaskStore.getState().viewport,
+                rowHeight: 36
+            }
         });
 
         render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
@@ -96,9 +100,28 @@ describe('GanttToolbar shortcuts', () => {
         expect(rowHeightButton).toHaveTextContent('M');
 
         fireEvent.click(rowHeightButton);
-        fireEvent.click(screen.getByRole('menuitemradio', { name: 'XL' }));
+        expect(screen.getByTestId('row-height-menu')).toBeInTheDocument();
+        expect(screen.getByLabelText('M')).toBeChecked();
 
+        fireEvent.click(screen.getByLabelText('XL'));
         expect(useTaskStore.getState().viewport.rowHeight).toBe(52);
+        expect(screen.getByTestId('row-height-menu')).toBeInTheDocument();
+        expect(screen.getByLabelText('XL')).toBeChecked();
         expect(screen.getByTestId('row-height-menu-button')).toHaveTextContent('XL');
+
+        fireEvent.click(screen.getByLabelText('S'));
+        expect(useTaskStore.getState().viewport.rowHeight).toBe(28);
+        expect(screen.getByTestId('row-height-menu')).toBeInTheDocument();
+        expect(screen.getByLabelText('S')).toBeChecked();
+        expect(screen.getByTestId('row-height-menu-button')).toHaveTextContent('S');
+
+        fireEvent.click(rowHeightButton);
+        expect(screen.queryByTestId('row-height-menu')).not.toBeInTheDocument();
+
+        fireEvent.click(rowHeightButton);
+        expect(screen.getByTestId('row-height-menu')).toBeInTheDocument();
+
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByTestId('row-height-menu')).not.toBeInTheDocument();
     });
 });
