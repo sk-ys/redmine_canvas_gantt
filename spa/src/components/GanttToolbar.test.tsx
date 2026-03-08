@@ -187,6 +187,10 @@ describe('GanttToolbar shortcuts', () => {
         expect(screen.getByTestId('relation-settings-menu')).toBeInTheDocument();
         expect(screen.getByLabelText(RelationType.Precedes)).toBeChecked();
         expect(screen.getByTestId('auto-calculate-delay-toggle')).toBeChecked();
+        expect(screen.getByTestId('auto-calculate-delay-info')).toHaveAttribute('data-tooltip', 'If the relation type supports delay, fill it automatically from task dates. If dates are missing, delay stays empty.');
+        expect(screen.getByTestId('relation-type-info-precedes')).toHaveAttribute('data-tooltip', 'The predecessor task must finish before the successor task starts.');
+        expect(screen.getByTestId('relation-type-info-relates')).toHaveAttribute('data-tooltip', 'Creates a reference link only. It does not apply any schedule constraint.');
+        expect(screen.getByTestId('relation-type-info-blocks')).toHaveAttribute('data-tooltip', 'The source task blocks the target task until the blocking work is finished.');
 
         fireEvent.click(screen.getByLabelText(RelationType.Blocks));
         expect(useUIStore.getState().defaultRelationType).toBe(RelationType.Blocks);

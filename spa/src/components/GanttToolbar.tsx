@@ -11,6 +11,43 @@ interface GanttToolbarProps {
     onZoomChange: (level: ZoomLevel) => void;
 }
 
+const InfoTooltipButton: React.FC<{ testId: string; tooltip: string }> = ({ testId, tooltip }) => (
+    <button
+        type="button"
+        data-testid={testId}
+        data-tooltip={tooltip}
+        aria-label={tooltip}
+        onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        }}
+        onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        }}
+        style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '18px',
+            height: '18px',
+            borderRadius: '999px',
+            border: '1px solid #d0d7de',
+            backgroundColor: '#fff',
+            color: '#666',
+            cursor: 'help',
+            flexShrink: 0,
+            padding: 0
+        }}
+    >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 10v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="7" r="1.2" fill="currentColor" />
+        </svg>
+    </button>
+);
+
 export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomChange }) => {
     const {
         viewport, updateViewport, groupByProject, setGroupByProject, groupByAssignee, setGroupByAssignee, organizeByDependency, setOrganizeByDependency,
@@ -280,11 +317,24 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
 
     const isAllStatusesSelected = taskStatuses.length > 0 && selectedStatusIds.length === taskStatuses.length;
 
-    const relationTypeOptions: Array<{ value: DefaultRelationType; label: string }> = [
-        { value: RelationType.Precedes, label: RelationType.Precedes },
-        { value: RelationType.Relates, label: RelationType.Relates },
-        { value: RelationType.Blocks, label: RelationType.Blocks }
+    const relationTypeOptions: Array<{ value: DefaultRelationType; label: string; info: string }> = [
+        {
+            value: RelationType.Precedes,
+            label: RelationType.Precedes,
+            info: i18n.t('label_relation_type_precedes_info') || 'The predecessor task must finish before the successor task starts.'
+        },
+        {
+            value: RelationType.Relates,
+            label: RelationType.Relates,
+            info: i18n.t('label_relation_type_relates_info') || 'Creates a reference link only. It does not apply any schedule constraint.'
+        },
+        {
+            value: RelationType.Blocks,
+            label: RelationType.Blocks,
+            info: i18n.t('label_relation_type_blocks_info') || 'The source task blocks the target task until the blocking work is finished.'
+        }
     ];
+    const autoCalculateDelayInfo = i18n.t('label_auto_calculate_relation_delay_info') || 'If the relation type supports delay, fill it automatically from task dates. If dates are missing, delay stays empty.';
     const hasCustomRelationSettings = defaultRelationType !== RelationType.Precedes || !autoCalculateDelay;
 
     const toggleAllStatuses = () => {
@@ -1042,46 +1092,68 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                 {i18n.t('label_default_relation_type') || 'Default relation type'}
                             </div>
                             {relationTypeOptions.map(option => (
-                                <label
+                                <div
                                     key={option.value}
                                     style={{
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '8px',
+                                        justifyContent: 'space-between',
                                         padding: '4px 0',
                                         color: defaultRelationType === option.value ? '#1a73e8' : '#444',
-                                        cursor: 'pointer',
-                                        fontWeight: defaultRelationType === option.value ? 600 : 400
+                                        fontWeight: defaultRelationType === option.value ? 600 : 400,
+                                        gap: '8px'
                                     }}
                                 >
-                                    <input
-                                        type="radio"
-                                        name="default-relation-type"
-                                        aria-label={option.label}
-                                        checked={defaultRelationType === option.value}
-                                        onChange={() => setDefaultRelationType(option.value)}
-                                    />
-                                    {option.label}
-                                </label>
+                                    <label
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            cursor: 'pointer',
+                                            flex: 1
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="default-relation-type"
+                                            aria-label={option.label}
+                                            checked={defaultRelationType === option.value}
+                                            onChange={() => setDefaultRelationType(option.value)}
+                                        />
+                                        {option.label}
+                                    </label>
+                                    <InfoTooltipButton testId={`relation-type-info-${option.value}`} tooltip={option.info} />
+                                </div>
                             ))}
                             <div style={{ height: '1px', backgroundColor: '#f0f0f0', margin: '10px 0' }} />
-                            <label
+                            <div
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
+                                    justifyContent: 'space-between',
                                     gap: '8px',
-                                    color: '#444',
-                                    cursor: 'pointer'
+                                    color: '#444'
                                 }}
                             >
-                                <input
-                                    data-testid="auto-calculate-delay-toggle"
-                                    type="checkbox"
-                                    checked={autoCalculateDelay}
-                                    onChange={(event) => setAutoCalculateDelay(event.target.checked)}
-                                />
-                                {i18n.t('label_auto_calculate_relation_delay') || 'Auto calculate relation delay'}
-                            </label>
+                                <label
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        flex: 1
+                                    }}
+                                >
+                                    <input
+                                        data-testid="auto-calculate-delay-toggle"
+                                        type="checkbox"
+                                        checked={autoCalculateDelay}
+                                        onChange={(event) => setAutoCalculateDelay(event.target.checked)}
+                                    />
+                                    {i18n.t('label_auto_calculate_relation_delay') || 'Auto calculate relation delay'}
+                                </label>
+                                <InfoTooltipButton testId="auto-calculate-delay-info" tooltip={autoCalculateDelayInfo} />
+                            </div>
                         </div>
                     )}
                 </div>
