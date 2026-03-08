@@ -55,13 +55,12 @@ const RelationEditorPopover: React.FC<{
     target: RelationPopoverTarget;
     taskById: Map<string, Task>;
     relations: Relation[];
-    autoCalculateDelay: boolean;
     position: { x: number; y: number };
     onClose: () => void;
     onCreate: (draftRelation: DraftRelation, rawType: string, delay?: number) => Promise<void>;
     onUpdate: (relationId: string, rawType: string, delay?: number) => Promise<void>;
     onDelete: (relationId: string) => Promise<void>;
-}> = ({ popoverRef, target, taskById, relations, autoCalculateDelay, position, onClose, onCreate, onUpdate, onDelete }) => {
+}> = ({ popoverRef, target, taskById, relations, position, onClose, onCreate, onUpdate, onDelete }) => {
     const [relationType, setRelationType] = React.useState<DefaultRelationType>(target.initialType);
     const [delayValue, setDelayValue] = React.useState(target.initialDelay !== undefined ? String(target.initialDelay) : '');
     const [autoDelayMessage, setAutoDelayMessage] = React.useState<string | null>(target.initialAutoDelayMessage ?? null);
@@ -88,18 +87,12 @@ const RelationEditorPopover: React.FC<{
             return;
         }
 
-        if (!autoCalculateDelay) {
-            setDelayValue('');
-            setAutoDelayMessage(null);
-            return;
-        }
-
         const fromTask = taskById.get(target.from.id);
         const toTask = taskById.get(target.to.id);
         const autoDelay = calculateDelay(RelationType.Precedes, fromTask, toTask);
         setDelayValue(autoDelay.delay !== undefined ? String(autoDelay.delay) : '');
         setAutoDelayMessage(autoDelay.message ?? null);
-    }, [autoCalculateDelay, target.from.id, target.to.id, taskById]);
+    }, [target.from.id, target.to.id, taskById]);
 
     const handleSave = React.useCallback(async () => {
         const rawType = target.isDraft
@@ -368,8 +361,6 @@ export const HtmlOverlay: React.FC = () => {
     const zoomLevel = useTaskStore(state => state.zoomLevel);
     const rowCount = useTaskStore(state => state.rowCount);
     const dependencyEditMode = useUIStore(state => state.dependencyEditMode);
-    const defaultRelationType = useUIStore(state => state.defaultRelationType);
-    const autoCalculateDelay = useUIStore(state => state.autoCalculateDelay);
 
     const overlayRef = React.useRef<HTMLDivElement>(null);
     const contextMenuRef = React.useRef<HTMLDivElement>(null);
@@ -519,12 +510,12 @@ export const HtmlOverlay: React.FC = () => {
 
         const fromTask = taskById.get(fromId);
         const toTask = taskById.get(targetId);
-        const initialDelay = autoCalculateDelay ? calculateDelay(defaultRelationType, fromTask, toTask) : {};
+        const initialDelay = calculateDelay(RelationType.Precedes, fromTask, toTask);
 
         setDraftRelation({
             from: fromId,
             to: targetId,
-            type: defaultRelationType,
+            type: RelationType.Precedes,
             delay: initialDelay.delay,
             autoDelayMessage: initialDelay.message,
             anchor: {
@@ -532,7 +523,7 @@ export const HtmlOverlay: React.FC = () => {
                 y: (start.y + pointer.y) / 2
             }
         });
-    }, [autoCalculateDelay, defaultRelationType, handleMouseMove, setDraftRelation, taskById]);
+    }, [handleMouseMove, setDraftRelation, taskById]);
 
     const startDraft = React.useCallback((taskId: string, x: number, y: number) => {
         if (!dependencyEditMode) return;
@@ -826,7 +817,6 @@ export const HtmlOverlay: React.FC = () => {
                     target={relationPopoverTarget}
                     taskById={taskById}
                     relations={relations}
-                    autoCalculateDelay={autoCalculateDelay}
                     position={relationPosition ?? { x: 8, y: 8 }}
                     onClose={clearRelationSelection}
                     onCreate={handleCreateRelation}

@@ -31,9 +31,7 @@ const persistSelections = () => {
         rowHeight: taskState.viewport.rowHeight,
         selectedStatusIds: taskState.selectedStatusIds,
         sortConfig: taskState.sortConfig,
-        autoSave: taskState.autoSave,
-        defaultRelationType: uiState.defaultRelationType,
-        autoCalculateDelay: uiState.autoCalculateDelay
+        autoSave: taskState.autoSave
     });
 };
 
