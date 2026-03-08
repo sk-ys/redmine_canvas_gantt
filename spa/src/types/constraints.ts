@@ -12,6 +12,14 @@ export const RelationType = {
 
 export type RelationType = typeof RelationType[keyof typeof RelationType];
 
+export const DEFAULT_RELATION_TYPES = [
+    RelationType.Precedes,
+    RelationType.Relates,
+    RelationType.Blocks
+] as const;
+
+export type DefaultRelationType = typeof DEFAULT_RELATION_TYPES[number];
+
 export const GANTT_RELATIONS = [
     RelationType.Precedes,
     RelationType.Follows,

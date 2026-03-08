@@ -19,6 +19,7 @@ vi.mock('../api/client', () => ({
 import { apiClient } from '../api/client';
 
 describe('HtmlOverlay', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
     const viewport: Viewport = {
         startDate: 0,
         scrollX: 0,
@@ -72,7 +73,13 @@ describe('HtmlOverlay', () => {
             apiKey: 'key',
             settings: { default_relation_type: 'precedes', auto_calculate_delay: '1', dependency_edit_mode: '1' }
         };
-        useUIStore.setState({ issueDialogUrl: null, dependencyEditMode: true });
+        useUIStore.setState({
+            ...useUIStore.getState(),
+            issueDialogUrl: null,
+            dependencyEditMode: true,
+            defaultRelationType: RelationType.Precedes,
+            autoCalculateDelay: true
+        });
         useTaskStore.setState({
             tasks: [],
             relations: [],
@@ -134,13 +141,119 @@ describe('HtmlOverlay', () => {
         fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
         fireEvent.mouseUp(window);
 
-        const createButton = await screen.findByTestId('relation-dialog-create');
-        fireEvent.click(createButton);
-
         await waitFor(() => {
             expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, undefined);
             expect(apiClient.fetchData).toHaveBeenCalled();
             expect(useTaskStore.getState().relations).toEqual([relation]);
+        });
+        expect(screen.queryByTestId('relation-type-select')).not.toBeInTheDocument();
+    });
+
+    it('uses the personal default relation type for drag-created relations', async () => {
+        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Blocks };
+        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [task1, task2],
+            relations: [relation],
+            versions: [],
+            customFields: [],
+            project: { id: 'p1', name: 'Project' },
+            statuses: [],
+            permissions: { editable: true, viewable: true }
+        });
+
+        act(() => {
+            useUIStore.setState({ ...useUIStore.getState(), defaultRelationType: RelationType.Blocks });
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+
+        const overlay = container.firstElementChild as HTMLDivElement;
+        vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
+            x: 0,
+            y: 0,
+            top: 0,
+            left: 0,
+            right: 800,
+            bottom: 600,
+            width: 800,
+            height: 600,
+            toJSON: () => ({})
+        } as DOMRect);
+
+        const handles = container.querySelectorAll('.dependency-handle');
+        fireEvent.mouseDown(handles[1]);
+
+        const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
+        const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
+        fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
+        fireEvent.mouseUp(window);
+
+        await waitFor(() => {
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Blocks, undefined);
+        });
+    });
+
+    it('does not send delay when auto calculate delay is disabled', async () => {
+        const autoDelayTask1: Task = {
+            ...task1,
+            startDate: 0,
+            dueDate: DAY_MS
+        };
+        const autoDelayTask2: Task = {
+            ...task2,
+            startDate: DAY_MS * 5,
+            dueDate: DAY_MS * 7
+        };
+        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes };
+        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [autoDelayTask1, autoDelayTask2],
+            relations: [relation],
+            versions: [],
+            customFields: [],
+            project: { id: 'p1', name: 'Project' },
+            statuses: [],
+            permissions: { editable: true, viewable: true }
+        });
+
+        act(() => {
+            useUIStore.setState({
+                ...useUIStore.getState(),
+                defaultRelationType: RelationType.Precedes,
+                autoCalculateDelay: false
+            });
+            useTaskStore.getState().setTasks([autoDelayTask1, autoDelayTask2]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+
+        const overlay = container.firstElementChild as HTMLDivElement;
+        vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
+            x: 0,
+            y: 0,
+            top: 0,
+            left: 0,
+            right: 800,
+            bottom: 600,
+            width: 800,
+            height: 600,
+            toJSON: () => ({})
+        } as DOMRect);
+
+        const handles = container.querySelectorAll('.dependency-handle');
+        fireEvent.mouseDown(handles[1]);
+
+        const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
+        const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
+        fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
+        fireEvent.mouseUp(window);
+
+        await waitFor(() => {
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, undefined);
         });
     });
 

@@ -2,10 +2,30 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GanttToolbar } from './GanttToolbar';
 import { useTaskStore } from '../stores/TaskStore';
-import { useUIStore } from '../stores/UIStore';
+import { useUIStore, getInitialRelationSettings } from '../stores/UIStore';
+import '../stores/preferencesWatcher';
+import { RelationType } from '../types/constraints';
 
 describe('GanttToolbar shortcuts', () => {
     beforeEach(() => {
+        window.localStorage.clear();
+        window.RedmineCanvasGantt = {
+            ...(window.RedmineCanvasGantt ?? {
+                projectId: 1,
+                apiBase: '',
+                redmineBase: '',
+                authToken: '',
+                apiKey: '',
+                nonWorkingWeekDays: [],
+                i18n: {}
+            }),
+            settings: {
+                ...(window.RedmineCanvasGantt?.settings ?? {}),
+                default_relation_type: RelationType.Precedes,
+                auto_calculate_delay: '1',
+                dependency_edit_mode: '1'
+            }
+        };
         useTaskStore.setState(useTaskStore.getInitialState(), true);
         useUIStore.setState(useUIStore.getInitialState(), true);
     });
@@ -145,5 +165,48 @@ describe('GanttToolbar shortcuts', () => {
 
         fireEvent.mouseDown(document.body);
         expect(screen.queryByTestId('row-height-menu')).not.toBeInTheDocument();
+    });
+
+    it('updates relation settings via header menu and restores them from preferences', () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        const { unmount } = render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+
+        fireEvent.click(screen.getByTestId('relation-settings-menu-button'));
+        expect(screen.getByTestId('relation-settings-menu')).toBeInTheDocument();
+        expect(screen.getByLabelText(RelationType.Precedes)).toBeChecked();
+        expect(screen.getByTestId('auto-calculate-delay-toggle')).toBeChecked();
+
+        fireEvent.click(screen.getByLabelText(RelationType.Blocks));
+        expect(useUIStore.getState().defaultRelationType).toBe(RelationType.Blocks);
+        expect(screen.getByTestId('relation-settings-menu')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('auto-calculate-delay-toggle'));
+        expect(useUIStore.getState().autoCalculateDelay).toBe(false);
+        expect(screen.getByTestId('relation-settings-menu')).toBeInTheDocument();
+
+        unmount();
+
+        useUIStore.setState({
+            ...useUIStore.getState(),
+            ...getInitialRelationSettings()
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        fireEvent.click(screen.getByTestId('relation-settings-menu-button'));
+
+        expect(screen.getByLabelText(RelationType.Blocks)).toBeChecked();
+        expect(screen.getByTestId('auto-calculate-delay-toggle')).not.toBeChecked();
     });
 });

@@ -55,6 +55,9 @@ window.RedmineCanvasGantt = {
         label_loading: 'Loading...'
     },
     settings: {
-        row_height: '32'
+        row_height: '32',
+        default_relation_type: 'precedes',
+        auto_calculate_delay: '1',
+        dependency_edit_mode: '1'
     }
 };

@@ -291,9 +291,22 @@ RSpec.describe CanvasGanttsController, type: :controller do
       allow(controller).to receive(:set_permissions) do
         controller.instance_variable_set(:@permissions, { editable: true, viewable: true })
       end
+      allow(controller).to receive(:descendant_project_ids).and_return([1, 2])
       allow(IssueRelation).to receive(:find).with('77').and_return(relation)
       allow(relation).to receive(:issue_from).and_return(issue_from)
       allow(relation).to receive(:issue_to).and_return(issue_to)
+    end
+
+    it 'destroys a relation when either side belongs to a descendant project' do
+      allow(relation).to receive(:issue_from).and_return(instance_double(Issue, project_id: 2, editable?: true))
+      allow(relation).to receive(:issue_to).and_return(instance_double(Issue, project_id: 3, editable?: true))
+      allow(relation).to receive(:destroy)
+
+      delete :destroy_relation, params: { project_id: 'demo', id: '77' }, format: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq('status' => 'ok')
+      expect(relation).to have_received(:destroy)
     end
 
     it 'returns forbidden when owned issue is not editable' do
@@ -304,8 +317,8 @@ RSpec.describe CanvasGanttsController, type: :controller do
     end
 
     it 'returns not found when relation is outside the current project' do
-      allow(relation).to receive(:issue_from).and_return(instance_double(Issue, project_id: 2, editable?: true))
-      allow(relation).to receive(:issue_to).and_return(instance_double(Issue, project_id: 3, editable?: true))
+      allow(relation).to receive(:issue_from).and_return(instance_double(Issue, project_id: 3, editable?: true))
+      allow(relation).to receive(:issue_to).and_return(instance_double(Issue, project_id: 4, editable?: true))
 
       delete :destroy_relation, params: { project_id: 'demo', id: '77' }, format: :json
 
