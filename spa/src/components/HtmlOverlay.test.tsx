@@ -77,15 +77,13 @@ describe('HtmlOverlay', () => {
             redmineBase: '',
             authToken: 'token',
             apiKey: 'key',
-            settings: { default_relation_type: 'precedes', auto_calculate_delay: '1', dependency_edit_mode: '1' }
+            settings: { dependency_edit_mode: '1' }
         };
 
         useUIStore.setState({
             ...useUIStore.getState(),
             issueDialogUrl: null,
-            dependencyEditMode: true,
-            defaultRelationType: RelationType.Precedes,
-            autoCalculateDelay: true
+            dependencyEditMode: true
         });
 
         useTaskStore.setState({
@@ -195,6 +193,31 @@ describe('HtmlOverlay', () => {
 
         expect(await screen.findByTestId('relation-error')).toHaveTextContent('Delay is required for this relation type');
         expect(apiClient.createRelation).not.toHaveBeenCalled();
+    });
+
+    it('recalculates and clears delay as relation type changes in the draft editor', async () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setDraftRelation({
+                from: '1',
+                to: '2',
+                type: RelationType.Precedes,
+                delay: 2,
+                autoDelayMessage: 'Auto delay',
+                anchor: { x: 100, y: 80 }
+            });
+        });
+
+        render(<HtmlOverlay />);
+
+        const relationTypeSelect = await screen.findByTestId('relation-type-select');
+        expect(screen.getByTestId('relation-delay-input')).toHaveValue('2');
+
+        fireEvent.change(relationTypeSelect, { target: { value: RelationType.Relates } });
+        expect(screen.queryByTestId('relation-delay-input')).not.toBeInTheDocument();
+
+        fireEvent.change(relationTypeSelect, { target: { value: RelationType.Precedes } });
+        expect(await screen.findByTestId('relation-delay-input')).toHaveValue('2');
     });
 
     it('deletes a relation from the popover after confirmation', async () => {

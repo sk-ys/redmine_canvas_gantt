@@ -22,8 +22,6 @@ Redmine::Plugin.register :redmine_canvas_gantt do
     'inline_edit_done_ratio' => '1',
     'inline_edit_due_date' => '1',
     'inline_edit_custom_fields' => '1',
-    'default_relation_type' => 'precedes',
-    'auto_calculate_delay' => '1',
     'dependency_edit_mode' => '1',
     'row_height' => '36',
     'use_vite_dev_server' => '0'
