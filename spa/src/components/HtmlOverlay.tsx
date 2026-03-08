@@ -171,24 +171,26 @@ const RelationEditorPopover: React.FC<{
                 border: '1px solid rgba(15, 23, 42, 0.12)',
                 borderRadius: 12,
                 boxShadow: '0 18px 36px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08)',
-                padding: 14,
+                padding: 16,
                 zIndex: 10001,
-                pointerEvents: 'auto'
+                pointerEvents: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
             }}
         >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', letterSpacing: '0.02em' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', letterSpacing: '0.02em', margin: 0 }}>
                         {i18n.t('label_relation_title') || 'Dependency'}
                     </div>
-                    <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4, margin: 0 }}>
                         <span style={{ fontWeight: 600, color: '#0f172a' }}>#{target.from.id}</span> {target.from.subject}
                         {' '}→{' '}
                         <span style={{ fontWeight: 600, color: '#0f172a' }}>#{target.to.id}</span> {target.to.subject}
                     </div>
                 </div>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#334155' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#334155', margin: 0 }}>
                     <span style={{ fontWeight: 600 }}>{i18n.t('label_relation_type') || 'Relation type'}</span>
                     <select
                         data-testid="relation-type-select"
@@ -196,12 +198,15 @@ const RelationEditorPopover: React.FC<{
                         disabled={saving}
                         onChange={(event) => updateDelayForType(event.target.value as DefaultRelationType)}
                         style={{
-                            height: 34,
+                            boxSizing: 'border-box',
+                            height: 36,
                             borderRadius: 8,
                             border: '1px solid #cbd5e1',
                             padding: '0 10px',
                             fontSize: 13,
-                            color: '#0f172a'
+                            color: '#0f172a',
+                            margin: 0,
+                            fontFamily: 'inherit'
                         }}
                     >
                         <option value={RelationType.Precedes}>{RelationType.Precedes}</option>
@@ -211,7 +216,7 @@ const RelationEditorPopover: React.FC<{
                 </label>
 
                 {supportsDelay && (
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#334155' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#334155', margin: 0 }}>
                         <span style={{ fontWeight: 600 }}>{i18n.t('label_delay') || 'Delay'}</span>
                         <input
                             data-testid="relation-delay-input"
@@ -225,47 +230,58 @@ const RelationEditorPopover: React.FC<{
                                 setError(null);
                             }}
                             style={{
-                                height: 34,
+                                boxSizing: 'border-box',
+                                height: 36,
                                 borderRadius: 8,
                                 border: error ? '1px solid #ef4444' : '1px solid #cbd5e1',
                                 padding: '0 10px',
                                 fontSize: 13,
-                                color: '#0f172a'
+                                color: '#0f172a',
+                                margin: 0,
+                                fontFamily: 'inherit'
                             }}
                         />
                     </label>
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.45 }}>
+                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.45, margin: 0 }}>
                         {helperText}
                     </div>
                     {supportsDelay && autoDelayMessage && (
-                        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.45 }}>
+                        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.45, margin: 0 }}>
                             {autoDelayMessage}
                         </div>
                     )}
                     {error && (
-                        <div data-testid="relation-error" style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.45 }}>
+                        <div data-testid="relation-error" style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.45, margin: 0 }}>
                             {error}
                         </div>
                     )}
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
                     <button
                         type="button"
                         data-testid="relation-cancel-button"
                         onClick={onClose}
                         disabled={saving}
                         style={{
+                            boxSizing: 'border-box',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             border: '1px solid #cbd5e1',
                             background: '#fff',
                             color: '#334155',
                             borderRadius: 8,
-                            padding: '7px 12px',
+                            padding: '0 12px',
+                            height: 32,
                             fontSize: 13,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            margin: 0,
+                            fontFamily: 'inherit',
+                            lineHeight: 1
                         }}
                     >
                         {i18n.t('button_cancel') || 'Cancel'}
@@ -279,13 +295,21 @@ const RelationEditorPopover: React.FC<{
                             }}
                             disabled={saving}
                             style={{
+                                boxSizing: 'border-box',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
                                 border: '1px solid rgba(220, 38, 38, 0.18)',
                                 background: '#fff5f5',
                                 color: '#dc2626',
                                 borderRadius: 8,
-                                padding: '7px 12px',
+                                padding: '0 12px',
+                                height: 32,
                                 fontSize: 13,
-                                cursor: 'pointer'
+                                cursor: 'pointer',
+                                margin: 0,
+                                fontFamily: 'inherit',
+                                lineHeight: 1
                             }}
                         >
                             {i18n.t('button_delete') || 'Delete'}
@@ -299,13 +323,21 @@ const RelationEditorPopover: React.FC<{
                         }}
                         disabled={saving}
                         style={{
+                            boxSizing: 'border-box',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             border: '1px solid #1d4ed8',
                             background: '#1d4ed8',
                             color: '#fff',
                             borderRadius: 8,
-                            padding: '7px 12px',
+                            padding: '0 12px',
+                            height: 32,
                             fontSize: 13,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            margin: 0,
+                            fontFamily: 'inherit',
+                            lineHeight: 1
                         }}
                     >
                         {i18n.t('button_save') || 'Save'}

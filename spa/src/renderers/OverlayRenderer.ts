@@ -189,7 +189,7 @@ export class OverlayRenderer {
             const isDraft = relation.id === '__draft__';
             const isSelected = isDraft || relation.id === selectedRelationId;
             ctx.save();
-            ctx.strokeStyle = isSelected ? '#1a73e8' : '#888';
+            ctx.strokeStyle = isSelected ? '#2563eb' : '#888';
             ctx.lineWidth = isSelected ? 3 : 1.5;
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
@@ -212,7 +212,7 @@ export class OverlayRenderer {
                 points[points.length - 2],
                 points[points.length - 1],
                 viewport,
-                isSelected ? '#1a73e8' : '#888',
+                isSelected ? '#2563eb' : '#888',
                 isSelected ? 7 : 6
             );
         });

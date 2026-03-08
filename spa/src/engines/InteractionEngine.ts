@@ -137,11 +137,12 @@ export class InteractionEngine {
         return snapToUtcDay(timestamp);
     }
 
-    private getCursorForHit(hit: { task: Task | null; region: 'body' | 'start' | 'end' }): string {
+    private getCursorForHit(hit: { task: Task | null; region: 'body' | 'start' | 'end'; relation: Relation | null }): string {
         if (this.drag.mode === 'task-move') return TASK_MOVE_CURSOR;
         if (this.drag.mode === 'task-resize-start' || this.drag.mode === 'task-resize-end') return TASK_RESIZE_CURSOR;
         if (this.drag.mode === 'pan') return DEFAULT_CURSOR;
 
+        if (hit.relation) return 'pointer';
         if (!hit.task) return DEFAULT_CURSOR;
         if (hit.task.hasChildren) return TASK_DISABLED_PARENT_CURSOR;
         if (!hit.task.editable) return DEFAULT_CURSOR;
@@ -280,6 +281,7 @@ export class InteractionEngine {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         const hit = this.hitTest(x, y);
+        const relationHit = this.hitTestRelation(x, y);
 
         // Skip hover update during task drag to keep tooltip visible
         const isTaskDragging = this.drag.mode === 'task-move' ||
@@ -313,7 +315,7 @@ export class InteractionEngine {
             }
         }
 
-        this.container.style.cursor = this.getCursorForHit(hit);
+        this.container.style.cursor = this.getCursorForHit({ ...hit, relation: relationHit });
 
         if (this.drag.mode === 'none') return;
 
