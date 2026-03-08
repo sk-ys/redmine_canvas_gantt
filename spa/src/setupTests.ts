@@ -52,9 +52,16 @@ window.RedmineCanvasGantt = {
         button_delete: 'Delete',
         button_save: 'Save',
         button_cancel: 'Cancel',
-        label_loading: 'Loading...'
+        label_loading: 'Loading...',
+        label_auto_calculate_relation_delay_info: 'If the relation type supports delay, fill it automatically from task dates. If dates are missing, delay stays empty.',
+        label_relation_type_precedes_info: 'The predecessor task must finish before the successor task starts.',
+        label_relation_type_relates_info: 'Creates a reference link only. It does not apply any schedule constraint.',
+        label_relation_type_blocks_info: 'The source task blocks the target task until the blocking work is finished.'
     },
     settings: {
-        row_height: '32'
+        row_height: '32',
+        default_relation_type: 'precedes',
+        auto_calculate_delay: '1',
+        dependency_edit_mode: '1'
     }
 };

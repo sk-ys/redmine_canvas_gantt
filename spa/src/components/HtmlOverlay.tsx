@@ -7,6 +7,29 @@ import { apiClient } from '../api/client';
 import { RelationType } from '../types/constraints';
 import { useUIStore } from '../stores/UIStore';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DELAY_ENABLED_RELATIONS: ReadonlySet<string> = new Set([RelationType.Precedes, RelationType.Follows]);
+
+const calculateDelay = (relationType: string, fromTask?: { startDate?: number; dueDate?: number }, toTask?: { startDate?: number; dueDate?: number }): { delay?: number; message?: string } => {
+    if (!DELAY_ENABLED_RELATIONS.has(relationType)) {
+        return {};
+    }
+
+    const predecessor = relationType === RelationType.Precedes ? fromTask : toTask;
+    const successor = relationType === RelationType.Precedes ? toTask : fromTask;
+
+    if (!predecessor?.dueDate || !successor?.startDate) {
+        return { message: i18n.t('label_relation_delay_auto_calc_unavailable') || 'No auto calculation due to missing dates.' };
+    }
+
+    const delay = Math.floor((successor.startDate - predecessor.dueDate) / DAY_MS) - 1;
+    if (delay < 0) {
+        return { message: i18n.t('label_relation_delay_auto_calc_unavailable') || 'No auto calculation due to missing dates.' };
+    }
+
+    return { delay };
+};
+
 export const HtmlOverlay: React.FC = () => {
     const hoveredTaskId = useTaskStore(state => state.hoveredTaskId);
     const contextMenu = useTaskStore(state => state.contextMenu);
@@ -19,6 +42,9 @@ export const HtmlOverlay: React.FC = () => {
     const viewport = useTaskStore(state => state.viewport);
     const zoomLevel = useTaskStore(state => state.zoomLevel);
     const rowCount = useTaskStore(state => state.rowCount);
+    const dependencyEditMode = useUIStore(state => state.dependencyEditMode);
+    const defaultRelationType = useUIStore(state => state.defaultRelationType);
+    const autoCalculateDelay = useUIStore(state => state.autoCalculateDelay);
 
     const overlayRef = React.useRef<HTMLDivElement>(null);
     const contextMenuRef = React.useRef<HTMLDivElement>(null);
@@ -69,6 +95,19 @@ export const HtmlOverlay: React.FC = () => {
         setDraftState({ ...currentDraft, pointer: point, targetId: targetTask ? targetTask.id : undefined });
     }, [hitTestTask, setDraftState, toLocalPoint]);
 
+    const createRelation = React.useCallback(async (fromId: string, toId: string, relationType: string, delay?: number) => {
+        const { addRelation } = useTaskStore.getState();
+        try {
+            const relation = await apiClient.createRelation(fromId, toId, relationType, delay);
+            addRelation(relation);
+            await refreshData();
+            useUIStore.getState().addNotification(i18n.t('label_relation_added') || 'Dependency created', 'success');
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : undefined;
+            useUIStore.getState().addNotification(message || i18n.t('label_error') || 'Failed to create relation', 'error');
+        }
+    }, [refreshData]);
+
     const handleMouseUp = React.useCallback(async () => {
         const currentDraft = draftRef.current;
         if (!currentDraft) return;
@@ -81,35 +120,26 @@ export const HtmlOverlay: React.FC = () => {
         const { fromId, targetId } = currentDraft;
         if (!targetId || targetId === fromId) return;
 
-        const { relations, addRelation } = useTaskStore.getState();
-        const alreadyLinked = relations.some(r => r.from === fromId && r.to === targetId && r.type === RelationType.Precedes);
+        const { relations } = useTaskStore.getState();
+        const alreadyLinked = relations.some(r => r.from === fromId && r.to === targetId && r.type === defaultRelationType);
         if (alreadyLinked) {
             useUIStore.getState().addNotification(i18n.t('label_relation_already_exists') || 'Relation already exists', 'info');
             return;
         }
 
-        try {
-            const relation = await apiClient.createRelation(fromId, targetId, RelationType.Precedes);
-            addRelation(relation);
-            try {
-                await refreshData();
-            } catch (refreshError: unknown) {
-                const message = refreshError instanceof Error ? refreshError.message : undefined;
-                useUIStore.getState().addNotification(message || 'Failed to refresh data.', 'warning');
-            }
-            useUIStore.getState().addNotification(i18n.t('label_relation_added') || 'Dependency created', 'success');
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : undefined;
-            useUIStore.getState().addNotification(message || i18n.t('label_error') || 'Failed to create relation', 'error');
-        }
-    }, [handleMouseMove, refreshData]);
+        const fromTask = taskById.get(fromId);
+        const toTask = taskById.get(targetId);
+        const initialDelay = autoCalculateDelay ? calculateDelay(defaultRelationType, fromTask, toTask) : {};
+        await createRelation(fromId, targetId, defaultRelationType, initialDelay.delay);
+    }, [autoCalculateDelay, createRelation, defaultRelationType, handleMouseMove, taskById]);
 
     const startDraft = React.useCallback((taskId: string, x: number, y: number) => {
+        if (!dependencyEditMode) return;
         const startPoint = { x, y };
         setDraftState({ fromId: taskId, start: startPoint, pointer: startPoint });
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
-    }, [handleMouseMove, handleMouseUp, setDraftState]);
+    }, [dependencyEditMode, handleMouseMove, handleMouseUp, setDraftState]);
 
     React.useEffect(() => {
         const handleGlobalMouseDown = (e: MouseEvent) => {
@@ -271,6 +301,7 @@ export const HtmlOverlay: React.FC = () => {
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
             >
                 {visibleTasks.map(task => {
+                    if (!dependencyEditMode) return null;
                     if (task.id !== hoveredTaskId) return null;
 
                     const bounds = LayoutEngine.getTaskBounds(task, viewport, 'hit', zoomLevel);

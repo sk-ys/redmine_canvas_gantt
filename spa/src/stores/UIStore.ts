@@ -1,8 +1,46 @@
 import { create } from 'zustand';
 import { loadPreferences } from '../utils/preferences';
+import { DEFAULT_RELATION_TYPES, RelationType, type DefaultRelationType } from '../types/constraints';
 
 export const DEFAULT_COLUMNS = ['status', 'assignee', 'startDate', 'dueDate', 'ratioDone'];
 const preferences = loadPreferences();
+
+const isDefaultRelationType = (value: unknown): value is DefaultRelationType =>
+    DEFAULT_RELATION_TYPES.includes(value as DefaultRelationType);
+
+const resolveDefaultRelationType = (value: unknown): DefaultRelationType => {
+    if (isDefaultRelationType(value)) {
+        return value;
+    }
+
+    const fallback = window.RedmineCanvasGantt?.settings?.default_relation_type?.toString();
+    if (isDefaultRelationType(fallback)) {
+        return fallback;
+    }
+
+    return RelationType.Precedes;
+};
+
+const resolveAutoCalculateDelay = (value: unknown): boolean => {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+
+    return window.RedmineCanvasGantt?.settings?.auto_calculate_delay?.toString() !== '0';
+};
+
+export const getInitialRelationSettings = (): {
+    defaultRelationType: DefaultRelationType;
+    autoCalculateDelay: boolean;
+} => {
+    const nextPreferences = loadPreferences();
+    return {
+        defaultRelationType: resolveDefaultRelationType(nextPreferences.defaultRelationType),
+        autoCalculateDelay: resolveAutoCalculateDelay(nextPreferences.autoCalculateDelay)
+    };
+};
+
+const initialRelationSettings = getInitialRelationSettings();
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
 
@@ -24,6 +62,9 @@ interface UIState {
     isFullScreen: boolean;
     issueDialogUrl: string | null;
     isSidebarResizing: boolean;
+    dependencyEditMode: boolean;
+    defaultRelationType: DefaultRelationType;
+    autoCalculateDelay: boolean;
     addNotification: (message: string, type?: NotificationType) => void;
     removeNotification: (id: string) => void;
     toggleProgressLine: () => void;
@@ -40,6 +81,10 @@ interface UIState {
     openIssueDialog: (url: string) => void;
     closeIssueDialog: () => void;
     setSidebarResizing: (value: boolean) => void;
+    toggleDependencyEditMode: () => void;
+    setDependencyEditMode: (value: boolean) => void;
+    setDefaultRelationType: (value: DefaultRelationType) => void;
+    setAutoCalculateDelay: (value: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -65,6 +110,9 @@ export const useUIStore = create<UIState>((set) => ({
     isFullScreen: false,
     issueDialogUrl: null,
     isSidebarResizing: false,
+    dependencyEditMode: window.RedmineCanvasGantt?.settings?.dependency_edit_mode?.toString() !== '0',
+    defaultRelationType: initialRelationSettings.defaultRelationType,
+    autoCalculateDelay: initialRelationSettings.autoCalculateDelay,
     addNotification: (message, type = 'info') => {
         const id = Math.random().toString(36).substring(7);
         set((state) => ({
@@ -110,5 +158,9 @@ export const useUIStore = create<UIState>((set) => ({
     toggleFullScreen: () => set((state) => ({ isFullScreen: !state.isFullScreen })),
     openIssueDialog: (url) => set(() => ({ issueDialogUrl: url })),
     closeIssueDialog: () => set(() => ({ issueDialogUrl: null })),
-    setSidebarResizing: (value) => set(() => ({ isSidebarResizing: value }))
+    setSidebarResizing: (value) => set(() => ({ isSidebarResizing: value })),
+    toggleDependencyEditMode: () => set((state) => ({ dependencyEditMode: !state.dependencyEditMode })),
+    setDependencyEditMode: (value) => set(() => ({ dependencyEditMode: value })),
+    setDefaultRelationType: (value) => set(() => ({ defaultRelationType: value })),
+    setAutoCalculateDelay: (value) => set(() => ({ autoCalculateDelay: value }))
 }));

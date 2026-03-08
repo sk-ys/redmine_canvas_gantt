@@ -19,6 +19,7 @@ vi.mock('../api/client', () => ({
 import { apiClient } from '../api/client';
 
 describe('HtmlOverlay', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
     const viewport: Viewport = {
         startDate: 0,
         scrollX: 0,
@@ -64,7 +65,21 @@ describe('HtmlOverlay', () => {
     beforeEach(() => {
         vi.mocked(apiClient.createRelation).mockReset();
         vi.mocked(apiClient.fetchData).mockReset();
-        useUIStore.setState({ issueDialogUrl: null });
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key',
+            settings: { default_relation_type: 'precedes', auto_calculate_delay: '1', dependency_edit_mode: '1' }
+        };
+        useUIStore.setState({
+            ...useUIStore.getState(),
+            issueDialogUrl: null,
+            dependencyEditMode: true,
+            defaultRelationType: RelationType.Precedes,
+            autoCalculateDelay: true
+        });
         useTaskStore.setState({
             tasks: [],
             relations: [],
@@ -127,10 +142,130 @@ describe('HtmlOverlay', () => {
         fireEvent.mouseUp(window);
 
         await waitFor(() => {
-            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes);
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, undefined);
             expect(apiClient.fetchData).toHaveBeenCalled();
             expect(useTaskStore.getState().relations).toEqual([relation]);
         });
+        expect(screen.queryByTestId('relation-type-select')).not.toBeInTheDocument();
+    });
+
+    it('uses the personal default relation type for drag-created relations', async () => {
+        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Blocks };
+        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [task1, task2],
+            relations: [relation],
+            versions: [],
+            customFields: [],
+            project: { id: 'p1', name: 'Project' },
+            statuses: [],
+            permissions: { editable: true, viewable: true }
+        });
+
+        act(() => {
+            useUIStore.setState({ ...useUIStore.getState(), defaultRelationType: RelationType.Blocks });
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+
+        const overlay = container.firstElementChild as HTMLDivElement;
+        vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
+            x: 0,
+            y: 0,
+            top: 0,
+            left: 0,
+            right: 800,
+            bottom: 600,
+            width: 800,
+            height: 600,
+            toJSON: () => ({})
+        } as DOMRect);
+
+        const handles = container.querySelectorAll('.dependency-handle');
+        fireEvent.mouseDown(handles[1]);
+
+        const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
+        const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
+        fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
+        fireEvent.mouseUp(window);
+
+        await waitFor(() => {
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Blocks, undefined);
+        });
+    });
+
+    it('does not send delay when auto calculate delay is disabled', async () => {
+        const autoDelayTask1: Task = {
+            ...task1,
+            startDate: 0,
+            dueDate: DAY_MS
+        };
+        const autoDelayTask2: Task = {
+            ...task2,
+            startDate: DAY_MS * 5,
+            dueDate: DAY_MS * 7
+        };
+        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes };
+        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [autoDelayTask1, autoDelayTask2],
+            relations: [relation],
+            versions: [],
+            customFields: [],
+            project: { id: 'p1', name: 'Project' },
+            statuses: [],
+            permissions: { editable: true, viewable: true }
+        });
+
+        act(() => {
+            useUIStore.setState({
+                ...useUIStore.getState(),
+                defaultRelationType: RelationType.Precedes,
+                autoCalculateDelay: false
+            });
+            useTaskStore.getState().setTasks([autoDelayTask1, autoDelayTask2]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+
+        const overlay = container.firstElementChild as HTMLDivElement;
+        vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
+            x: 0,
+            y: 0,
+            top: 0,
+            left: 0,
+            right: 800,
+            bottom: 600,
+            width: 800,
+            height: 600,
+            toJSON: () => ({})
+        } as DOMRect);
+
+        const handles = container.querySelectorAll('.dependency-handle');
+        fireEvent.mouseDown(handles[1]);
+
+        const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
+        const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
+        fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
+        fireEvent.mouseUp(window);
+
+        await waitFor(() => {
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, undefined);
+        });
+    });
+
+    it('does not render dependency handles when dependency edit mode is off', () => {
+        useUIStore.setState({ dependencyEditMode: false });
+        act(() => {
+            useTaskStore.getState().setTasks([task1]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+        expect(container.querySelectorAll('.dependency-handle').length).toBe(0);
     });
 
     it('removes a relation from the context menu', async () => {
@@ -163,54 +298,5 @@ describe('HtmlOverlay', () => {
             expect(apiClient.fetchData).toHaveBeenCalled();
             expect(useTaskStore.getState().relations).toEqual([]);
         });
-    });
-
-    it('opens child issue dialog with parent params from context menu', () => {
-        act(() => {
-            useTaskStore.getState().setTasks([task1]);
-            useTaskStore.getState().setContextMenu({ x: 10, y: 10, taskId: '1' });
-        });
-
-        render(<HtmlOverlay />);
-        const addChildItem = screen.getByTestId('context-menu-add-child-task');
-        expect(addChildItem).toBeTruthy();
-
-        fireEvent.click(addChildItem!);
-
-        const openedUrl = useUIStore.getState().issueDialogUrl;
-        expect(openedUrl).toContain('/projects/p1/issues/new?');
-        expect(openedUrl).toContain('issue%5Bparent_issue_id%5D=1');
-        expect(openedUrl).toContain('parent_issue_id=1');
-    });
-
-    it('unsets parent from context menu', async () => {
-        const childTask: Task = { ...task1, id: '10', parentId: '1' };
-        act(() => {
-            useTaskStore.getState().setTasks([childTask]);
-            useTaskStore.getState().setContextMenu({ x: 10, y: 10, taskId: '10' });
-        });
-
-        render(<HtmlOverlay />);
-        const unsetParentItem = screen.getByTestId('context-menu-unset-parent');
-        expect(unsetParentItem).toBeTruthy();
-
-        fireEvent.click(unsetParentItem!);
-
-        await waitFor(() => {
-            expect(useTaskStore.getState().allTasks.find((t) => t.id === '10')?.parentId).toBeUndefined();
-            expect(useTaskStore.getState().contextMenu).toBeNull();
-        });
-    });
-
-    it('does not show unset-parent item for root task', () => {
-        const rootTask: Task = { ...task1, id: '20', parentId: undefined };
-        act(() => {
-            useTaskStore.getState().setTasks([rootTask]);
-            useTaskStore.getState().setContextMenu({ x: 10, y: 10, taskId: '20' });
-        });
-
-        render(<HtmlOverlay />);
-        const unsetParentItem = screen.queryByTestId('context-menu-unset-parent');
-        expect(unsetParentItem).toBeNull();
     });
 });

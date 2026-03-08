@@ -4,11 +4,49 @@ import type { ZoomLevel } from '../types';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore, DEFAULT_COLUMNS } from '../stores/UIStore';
 import { i18n } from '../utils/i18n';
+import { RelationType, type DefaultRelationType } from '../types/constraints';
 
 interface GanttToolbarProps {
     zoomLevel: ZoomLevel;
     onZoomChange: (level: ZoomLevel) => void;
 }
+
+const InfoTooltipButton: React.FC<{ testId: string; tooltip: string }> = ({ testId, tooltip }) => (
+    <button
+        type="button"
+        data-testid={testId}
+        data-tooltip={tooltip}
+        aria-label={tooltip}
+        onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        }}
+        onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        }}
+        style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '18px',
+            height: '18px',
+            borderRadius: '999px',
+            border: '1px solid #d0d7de',
+            backgroundColor: '#fff',
+            color: '#666',
+            cursor: 'help',
+            flexShrink: 0,
+            padding: 0
+        }}
+    >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 10v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="7" r="1.2" fill="currentColor" />
+        </svg>
+    </button>
+);
 
 export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomChange }) => {
     const {
@@ -30,7 +68,13 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         showPointsOrphans,
         togglePointsOrphans,
         isFullScreen,
-        toggleFullScreen
+        toggleFullScreen,
+        dependencyEditMode,
+        toggleDependencyEditMode,
+        defaultRelationType,
+        autoCalculateDelay,
+        setDefaultRelationType,
+        setAutoCalculateDelay
     } = useUIStore();
     const isRightPaneMaximized = !leftPaneVisible && rightPaneVisible;
     const isLeftPaneMaximized = leftPaneVisible && !rightPaneVisible;
@@ -41,6 +85,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     const [showVersionMenu, setShowVersionMenu] = React.useState(false);
     const [showStatusMenu, setShowStatusMenu] = React.useState(false);
     const [showRowHeightMenu, setShowRowHeightMenu] = React.useState(false);
+    const [showRelationSettingsMenu, setShowRelationSettingsMenu] = React.useState(false);
 
     const filterMenuRef = React.useRef<HTMLDivElement>(null);
     const filterInputRef = React.useRef<HTMLInputElement>(null);
@@ -50,6 +95,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     const versionMenuRef = React.useRef<HTMLDivElement>(null);
     const statusMenuRef = React.useRef<HTMLDivElement>(null);
     const rowHeightMenuRef = React.useRef<HTMLDivElement>(null);
+    const relationSettingsMenuRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
         if (!showFilterMenu) return;
@@ -112,11 +158,14 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
             if (showRowHeightMenu && rowHeightMenuRef.current && !rowHeightMenuRef.current.contains(target)) {
                 setShowRowHeightMenu(false);
             }
+            if (showRelationSettingsMenu && relationSettingsMenuRef.current && !relationSettingsMenuRef.current.contains(target)) {
+                setShowRelationSettingsMenu(false);
+            }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showFilterMenu, showColumnMenu, showAssigneeMenu, showProjectMenu, showVersionMenu, showStatusMenu, showRowHeightMenu]);
+    }, [showFilterMenu, showColumnMenu, showAssigneeMenu, showProjectMenu, showVersionMenu, showStatusMenu, showRowHeightMenu, showRelationSettingsMenu]);
 
     const handleTodayClick = () => {
         const now = Date.now();
@@ -267,6 +316,26 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     };
 
     const isAllStatusesSelected = taskStatuses.length > 0 && selectedStatusIds.length === taskStatuses.length;
+
+    const relationTypeOptions: Array<{ value: DefaultRelationType; label: string; info: string }> = [
+        {
+            value: RelationType.Precedes,
+            label: RelationType.Precedes,
+            info: i18n.t('label_relation_type_precedes_info') || 'The predecessor task must finish before the successor task starts.'
+        },
+        {
+            value: RelationType.Relates,
+            label: RelationType.Relates,
+            info: i18n.t('label_relation_type_relates_info') || 'Creates a reference link only. It does not apply any schedule constraint.'
+        },
+        {
+            value: RelationType.Blocks,
+            label: RelationType.Blocks,
+            info: i18n.t('label_relation_type_blocks_info') || 'The source task blocks the target task until the blocking work is finished.'
+        }
+    ];
+    const autoCalculateDelayInfo = i18n.t('label_auto_calculate_relation_delay_info') || 'If the relation type supports delay, fill it automatically from task dates. If dates are missing, delay stays empty.';
+    const hasCustomRelationSettings = defaultRelationType !== RelationType.Precedes || !autoCalculateDelay;
 
     const toggleAllStatuses = () => {
         if (isAllStatusesSelected) {
@@ -929,6 +998,165 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
 
 
 
+
+                <button
+                    onClick={toggleDependencyEditMode}
+                    title={i18n.t('label_dependency_edit_mode') || 'Dependency Edit Mode'}
+                    data-testid="dependency-edit-mode-button"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '0',
+                        borderRadius: '6px',
+                        border: '1px solid #e0e0e0',
+                        backgroundColor: dependencyEditMode ? '#e8f0fe' : '#fff',
+                        color: dependencyEditMode ? '#1a73e8' : '#333',
+                        cursor: 'pointer',
+                        height: '32px',
+                        width: '32px',
+                        position: 'relative'
+                    }}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 12h6" />
+                        <path d="M14 12h6" />
+                        <circle cx="10" cy="12" r="2" />
+                        <circle cx="14" cy="12" r="2" />
+                    </svg>
+                    {dependencyEditMode && (
+                        <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, backgroundColor: '#1a73e8', borderRadius: '50%' }} />
+                    )}
+                </button>
+
+                <div
+                    ref={relationSettingsMenuRef}
+                    style={{ display: 'flex', alignItems: 'center', position: 'relative' }}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setShowRelationSettingsMenu(prev => !prev)}
+                        title={i18n.t('label_dependency_settings') || 'Dependency settings'}
+                        aria-haspopup="menu"
+                        aria-expanded={showRelationSettingsMenu}
+                        data-testid="relation-settings-menu-button"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                            padding: '0 6px',
+                            borderRadius: '6px',
+                            border: '1px solid #e0e0e0',
+                            backgroundColor: '#fff',
+                            color: '#333',
+                            cursor: 'pointer',
+                            height: '32px',
+                            position: 'relative'
+                        }}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M8 12h8" />
+                            <circle cx="6" cy="12" r="2" />
+                            <circle cx="18" cy="12" r="2" />
+                        </svg>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                        {hasCustomRelationSettings && (
+                            <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, backgroundColor: '#1a73e8', borderRadius: '50%' }} />
+                        )}
+                    </button>
+                    {showRelationSettingsMenu && (
+                        <div
+                            role="menu"
+                            data-testid="relation-settings-menu"
+                            style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                marginTop: '4px',
+                                background: '#fff',
+                                border: '1px solid #e0e0e0',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                padding: '12px',
+                                zIndex: 20,
+                                minWidth: '240px'
+                            }}
+                        >
+                            <div style={{ fontWeight: 600, marginBottom: '8px', color: '#333' }}>
+                                {i18n.t('label_dependency_settings') || 'Dependency settings'}
+                            </div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#666' }}>
+                                {i18n.t('label_default_relation_type') || 'Default relation type'}
+                            </div>
+                            {relationTypeOptions.map(option => (
+                                <div
+                                    key={option.value}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '4px 0',
+                                        color: defaultRelationType === option.value ? '#1a73e8' : '#444',
+                                        fontWeight: defaultRelationType === option.value ? 600 : 400,
+                                        gap: '8px'
+                                    }}
+                                >
+                                    <label
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            cursor: 'pointer',
+                                            flex: 1
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="default-relation-type"
+                                            aria-label={option.label}
+                                            checked={defaultRelationType === option.value}
+                                            onChange={() => setDefaultRelationType(option.value)}
+                                        />
+                                        {option.label}
+                                    </label>
+                                    <InfoTooltipButton testId={`relation-type-info-${option.value}`} tooltip={option.info} />
+                                </div>
+                            ))}
+                            <div style={{ height: '1px', backgroundColor: '#f0f0f0', margin: '10px 0' }} />
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '8px',
+                                    color: '#444'
+                                }}
+                            >
+                                <label
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        flex: 1
+                                    }}
+                                >
+                                    <input
+                                        data-testid="auto-calculate-delay-toggle"
+                                        type="checkbox"
+                                        checked={autoCalculateDelay}
+                                        onChange={(event) => setAutoCalculateDelay(event.target.checked)}
+                                    />
+                                    {i18n.t('label_auto_calculate_relation_delay') || 'Auto calculate relation delay'}
+                                </label>
+                                <InfoTooltipButton testId="auto-calculate-delay-info" tooltip={autoCalculateDelayInfo} />
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 <button
                     onClick={() => setOrganizeByDependency(!organizeByDependency)}

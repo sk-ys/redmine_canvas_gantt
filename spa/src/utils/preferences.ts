@@ -1,4 +1,5 @@
 import type { ViewMode, Viewport, ZoomLevel } from '../types';
+import type { DefaultRelationType } from '../types/constraints';
 
 type StoredViewport = Pick<Viewport, 'startDate' | 'scrollX' | 'scrollY' | 'scale'>;
 
@@ -23,6 +24,8 @@ export interface StoredPreferences {
     sortConfig?: { key: string; direction: 'asc' | 'desc' } | null;
     selectedVersionIds?: string[];
     autoSave?: boolean;
+    defaultRelationType?: DefaultRelationType;
+    autoCalculateDelay?: boolean;
 }
 
 const STORAGE_KEY = 'canvasGantt:preferences';
