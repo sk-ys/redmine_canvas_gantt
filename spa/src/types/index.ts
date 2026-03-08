@@ -46,6 +46,15 @@ export interface Relation {
     delay?: number; // Delay in days (Redmine supports this)
 }
 
+export interface DraftRelation {
+    from: string;
+    to: string;
+    type: string;
+    delay?: number;
+    autoDelayMessage?: string;
+    anchor?: { x: number; y: number };
+}
+
 export interface Version {
     id: string;
     name: string;

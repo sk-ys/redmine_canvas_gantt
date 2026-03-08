@@ -112,3 +112,35 @@ describe('apiClient.createRelation', () => {
         expect(rel).toEqual({ id: '2', from: '10', to: '11', type: 'precedes', delay: 0 });
     });
 });
+
+describe('apiClient.updateRelation', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        delete window.RedmineCanvasGantt;
+    });
+
+    it('sends PATCH payload and parses updated relation', async () => {
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key'
+        };
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                relation: { id: 3, issue_from_id: 10, issue_to_id: 11, relation_type: 'blocks', delay: null }
+            })
+        });
+        vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+        const rel = await apiClient.updateRelation('3', 'blocks');
+
+        expect(fetchMock).toHaveBeenCalledWith('/projects/1/canvas_gantt/relations/3.json', expect.objectContaining({
+            method: 'PATCH'
+        }));
+        expect(rel).toEqual({ id: '3', from: '10', to: '11', type: 'blocks', delay: undefined });
+    });
+});

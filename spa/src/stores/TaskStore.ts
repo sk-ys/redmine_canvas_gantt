@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Task, Relation, Viewport, ViewMode, ZoomLevel, LayoutRow, Version, TaskStatus } from '../types';
+import type { Task, Relation, DraftRelation, Viewport, ViewMode, ZoomLevel, LayoutRow, Version, TaskStatus } from '../types';
 import { ZOOM_SCALES } from '../utils/grid';
 import { TaskLogicService } from '../services/TaskLogicService';
 import { loadPreferences, savePreferences } from '../utils/preferences';
@@ -30,6 +30,8 @@ interface TaskState {
     organizeByDependency: boolean;
     viewportFromStorage: boolean;
     selectedTaskId: string | null;
+    selectedRelationId: string | null;
+    draftRelation: DraftRelation | null;
     hoveredTaskId: string | null;
     contextMenu: { x: number; y: number; taskId: string } | null;
     projectExpansion: Record<string, boolean>;
@@ -60,8 +62,12 @@ interface TaskState {
     setSelectedStatusFromServer: (ids: number[]) => void;
     setShowVersions: (show: boolean) => void;
     addRelation: (relation: Relation) => void;
+    replaceRelation: (relation: Relation) => void;
     removeRelation: (relationId: string) => void;
     selectTask: (id: string | null) => void;
+    selectRelation: (id: string | null) => void;
+    setDraftRelation: (relation: DraftRelation | null) => void;
+    clearRelationSelection: () => void;
     setHoveredTask: (id: string | null) => void;
     setContextMenu: (menu: { x: number; y: number; taskId: string } | null) => void;
     updateTask: (id: string, updates: Partial<Task>) => void;
@@ -763,6 +769,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     organizeByDependency: preferences.organizeByDependency ?? false,
     viewportFromStorage: Boolean(preferences.viewport),
     selectedTaskId: null,
+    selectedRelationId: null,
+    draftRelation: null,
     hoveredTaskId: null,
     contextMenu: null,
     projectExpansion: {},
@@ -818,6 +826,10 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const layout = buildLayoutFromState(state, { relations });
         return {
             relations,
+            selectedRelationId: state.selectedRelationId && relations.some(relation => relation.id === state.selectedRelationId)
+                ? state.selectedRelationId
+                : null,
+            draftRelation: null,
             tasks: layout.tasks,
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
@@ -863,6 +875,22 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const layout = buildLayoutFromState(state, { relations: nextRelations });
         return {
             relations: nextRelations,
+            draftRelation: null,
+            tasks: layout.tasks,
+            layoutRows: layout.layoutRows,
+            rowCount: layout.rowCount
+        };
+    }),
+    replaceRelation: (relation) => set((state) => {
+        const existingIndex = state.relations.findIndex(r => r.id === relation.id);
+        const nextRelations =
+            existingIndex === -1
+                ? [...state.relations, relation]
+                : state.relations.map((current) => current.id === relation.id ? relation : current);
+        const layout = buildLayoutFromState(state, { relations: nextRelations });
+        return {
+            relations: nextRelations,
+            draftRelation: null,
             tasks: layout.tasks,
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
@@ -873,14 +901,36 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const layout = buildLayoutFromState(state, { relations: nextRelations });
         return {
             relations: nextRelations,
+            selectedRelationId: state.selectedRelationId === relationId ? null : state.selectedRelationId,
             tasks: layout.tasks,
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
     }),
-    selectTask: (id) => set({ selectedTaskId: id }),
+    selectTask: (id) => set({
+        selectedTaskId: id,
+        selectedRelationId: null,
+        draftRelation: null,
+        contextMenu: null
+    }),
+    selectRelation: (id) => set({
+        selectedTaskId: null,
+        selectedRelationId: id,
+        draftRelation: null,
+        contextMenu: null
+    }),
+    setDraftRelation: (relation) => set({
+        selectedTaskId: null,
+        selectedRelationId: null,
+        draftRelation: relation,
+        contextMenu: null
+    }),
+    clearRelationSelection: () => set({ selectedRelationId: null, draftRelation: null }),
     setHoveredTask: (id) => set({ hoveredTaskId: id }),
-    setContextMenu: (menu) => set({ contextMenu: menu }),
+    setContextMenu: (menu) => set({
+        contextMenu: menu,
+        ...(menu ? { selectedRelationId: null, draftRelation: null } : {})
+    }),
     setSortingSuspended: (suspended) => set((state) => {
         if (!suspended && state.isSortingSuspended) {
             // Turning it off -> trigger re-layout

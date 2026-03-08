@@ -12,7 +12,9 @@ vi.mock('../api/client', () => ({
         fetchData: vi.fn(),
         updateTask: vi.fn(),
         createRelation: vi.fn(),
-        deleteRelation: vi.fn()
+        updateRelation: vi.fn(),
+        deleteRelation: vi.fn(),
+        deleteTask: vi.fn()
     }
 }));
 
@@ -24,7 +26,7 @@ describe('HtmlOverlay', () => {
         startDate: 0,
         scrollX: 0,
         scrollY: 0,
-        scale: 1,
+        scale: 1 / DAY_MS,
         width: 800,
         height: 600,
         rowHeight: 32
@@ -37,7 +39,7 @@ describe('HtmlOverlay', () => {
         projectName: 'Project',
         displayOrder: 1,
         startDate: 0,
-        dueDate: 10,
+        dueDate: DAY_MS,
         ratioDone: 0,
         statusId: 1,
         lockVersion: 0,
@@ -52,19 +54,23 @@ describe('HtmlOverlay', () => {
         projectId: 'p1',
         projectName: 'Project',
         displayOrder: 2,
-        startDate: 0,
-        dueDate: 10,
+        startDate: DAY_MS * 4,
+        dueDate: DAY_MS * 5,
         ratioDone: 0,
         statusId: 1,
         lockVersion: 0,
         editable: true,
-        rowIndex: 0,
+        rowIndex: 1,
         hasChildren: false
     };
 
     beforeEach(() => {
         vi.mocked(apiClient.createRelation).mockReset();
-        vi.mocked(apiClient.fetchData).mockReset();
+        vi.mocked(apiClient.updateRelation).mockReset();
+        vi.mocked(apiClient.deleteRelation).mockReset();
+        vi.mocked(apiClient.deleteTask).mockReset();
+        vi.stubGlobal('confirm', vi.fn(() => true));
+
         window.RedmineCanvasGantt = {
             projectId: 1,
             apiBase: '/projects/1/canvas_gantt',
@@ -73,6 +79,7 @@ describe('HtmlOverlay', () => {
             apiKey: 'key',
             settings: { default_relation_type: 'precedes', auto_calculate_delay: '1', dependency_edit_mode: '1' }
         };
+
         useUIStore.setState({
             ...useUIStore.getState(),
             issueDialogUrl: null,
@@ -80,7 +87,9 @@ describe('HtmlOverlay', () => {
             defaultRelationType: RelationType.Precedes,
             autoCalculateDelay: true
         });
+
         useTaskStore.setState({
+            ...useTaskStore.getState(),
             tasks: [],
             relations: [],
             viewport,
@@ -90,33 +99,15 @@ describe('HtmlOverlay', () => {
             groupByProject: false,
             viewportFromStorage: false,
             selectedTaskId: null,
+            selectedRelationId: null,
+            draftRelation: null,
             hoveredTaskId: null,
             contextMenu: null
         });
     });
 
-    it('creates a relation by dragging a dependency handle onto another task', async () => {
-        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes };
-        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
-        vi.mocked(apiClient.fetchData).mockResolvedValue({
-            tasks: [task1, task2],
-            relations: [relation],
-            versions: [],
-            customFields: [],
-            project: { id: 'p1', name: 'Project' },
-            statuses: [],
-            permissions: { editable: true, viewable: true }
-        });
-
-        act(() => {
-            useTaskStore.getState().setTasks([task1, task2]);
-            useTaskStore.getState().setHoveredTask('1');
-        });
-
-        const { container } = render(<HtmlOverlay />);
-
+    const mockOverlayRect = (container: HTMLElement) => {
         const overlay = container.firstElementChild as HTMLDivElement;
-        expect(overlay).toBeTruthy();
         vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
             x: 0,
             y: 0,
@@ -128,137 +119,156 @@ describe('HtmlOverlay', () => {
             height: 600,
             toJSON: () => ({})
         } as DOMRect);
+    };
+
+    it('opens a draft relation popover after dragging a dependency handle', async () => {
+        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes, delay: 0 };
+        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
+
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+        mockOverlayRect(container);
 
         const handles = container.querySelectorAll('.dependency-handle');
-        expect(handles.length).toBe(2);
-
         fireEvent.mouseDown(handles[1]);
 
         const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
-        expect(arrangedTask2).toBeTruthy();
-
         const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
         fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
         fireEvent.mouseUp(window);
 
+        expect(await screen.findByTestId('relation-editor')).toBeInTheDocument();
+        expect(screen.getByTestId('relation-type-select')).toHaveValue(RelationType.Precedes);
+
+        fireEvent.click(screen.getByTestId('relation-save-button'));
+
         await waitFor(() => {
-            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, undefined);
-            expect(apiClient.fetchData).toHaveBeenCalled();
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, 2);
             expect(useTaskStore.getState().relations).toEqual([relation]);
+            expect(useTaskStore.getState().draftRelation).toBeNull();
         });
-        expect(screen.queryByTestId('relation-type-select')).not.toBeInTheDocument();
     });
 
-    it('uses the personal default relation type for drag-created relations', async () => {
-        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Blocks };
-        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
-        vi.mocked(apiClient.fetchData).mockResolvedValue({
-            tasks: [task1, task2],
-            relations: [relation],
-            versions: [],
-            customFields: [],
-            project: { id: 'p1', name: 'Project' },
-            statuses: [],
-            permissions: { editable: true, viewable: true }
-        });
+    it('updates an existing relation from the popover', async () => {
+        const existingRelation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Follows, delay: 2 };
+        const updatedRelation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Blocked };
+        vi.mocked(apiClient.updateRelation).mockResolvedValue(updatedRelation);
 
         act(() => {
-            useUIStore.setState({ ...useUIStore.getState(), defaultRelationType: RelationType.Blocks });
             useTaskStore.getState().setTasks([task1, task2]);
-            useTaskStore.getState().setHoveredTask('1');
+            useTaskStore.getState().setRelations([existingRelation]);
+            useTaskStore.getState().selectRelation('rel-1');
         });
 
-        const { container } = render(<HtmlOverlay />);
+        render(<HtmlOverlay />);
 
-        const overlay = container.firstElementChild as HTMLDivElement;
-        vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
-            x: 0,
-            y: 0,
-            top: 0,
-            left: 0,
-            right: 800,
-            bottom: 600,
-            width: 800,
-            height: 600,
-            toJSON: () => ({})
-        } as DOMRect);
-
-        const handles = container.querySelectorAll('.dependency-handle');
-        fireEvent.mouseDown(handles[1]);
-
-        const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
-        const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
-        fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
-        fireEvent.mouseUp(window);
+        expect(await screen.findByTestId('relation-type-select')).toHaveValue(RelationType.Precedes);
+        fireEvent.change(screen.getByTestId('relation-type-select'), { target: { value: RelationType.Blocks } });
+        fireEvent.click(screen.getByTestId('relation-save-button'));
 
         await waitFor(() => {
-            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Blocks, undefined);
+            expect(apiClient.updateRelation).toHaveBeenCalledWith('rel-1', RelationType.Blocked, undefined);
+            expect(useTaskStore.getState().relations).toEqual([updatedRelation]);
+            expect(useTaskStore.getState().selectedRelationId).toBeNull();
         });
     });
 
-    it('does not send delay when auto calculate delay is disabled', async () => {
-        const autoDelayTask1: Task = {
-            ...task1,
-            startDate: 0,
-            dueDate: DAY_MS
-        };
-        const autoDelayTask2: Task = {
-            ...task2,
-            startDate: DAY_MS * 5,
-            dueDate: DAY_MS * 7
-        };
-        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes };
-        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
-        vi.mocked(apiClient.fetchData).mockResolvedValue({
-            tasks: [autoDelayTask1, autoDelayTask2],
-            relations: [relation],
-            versions: [],
-            customFields: [],
-            project: { id: 'p1', name: 'Project' },
-            statuses: [],
-            permissions: { editable: true, viewable: true }
+    it('shows validation error when delay is blank for precedes', async () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setDraftRelation({
+                from: '1',
+                to: '2',
+                type: RelationType.Precedes,
+                anchor: { x: 100, y: 80 }
+            });
         });
 
+        render(<HtmlOverlay />);
+        const delayInput = await screen.findByTestId('relation-delay-input');
+        fireEvent.change(delayInput, { target: { value: '' } });
+        fireEvent.click(screen.getByTestId('relation-save-button'));
+
+        expect(await screen.findByTestId('relation-error')).toHaveTextContent('Delay is required for this relation type');
+        expect(apiClient.createRelation).not.toHaveBeenCalled();
+    });
+
+    it('deletes a relation from the popover after confirmation', async () => {
+        vi.mocked(apiClient.deleteRelation).mockResolvedValue(undefined);
+
         act(() => {
-            useUIStore.setState({
-                ...useUIStore.getState(),
-                defaultRelationType: RelationType.Precedes,
-                autoCalculateDelay: false
-            });
-            useTaskStore.getState().setTasks([autoDelayTask1, autoDelayTask2]);
-            useTaskStore.getState().setHoveredTask('1');
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setRelations([{ id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes }]);
+            useTaskStore.getState().selectRelation('rel-1');
+        });
+
+        render(<HtmlOverlay />);
+        fireEvent.click(await screen.findByTestId('relation-delete-button'));
+
+        await waitFor(() => {
+            expect(apiClient.deleteRelation).toHaveBeenCalledWith('rel-1');
+            expect(useTaskStore.getState().relations).toEqual([]);
+        });
+    });
+
+    it('keeps relation selection when clicking inside the gantt viewport', async () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setRelations([{ id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes }]);
+            useTaskStore.getState().selectRelation('rel-1');
         });
 
         const { container } = render(<HtmlOverlay />);
+        expect(await screen.findByTestId('relation-editor')).toBeInTheDocument();
 
-        const overlay = container.firstElementChild as HTMLDivElement;
-        vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
-            x: 0,
-            y: 0,
-            top: 0,
-            left: 0,
-            right: 800,
-            bottom: 600,
-            width: 800,
-            height: 600,
-            toJSON: () => ({})
-        } as DOMRect);
+        fireEvent.mouseDown(container);
 
-        const handles = container.querySelectorAll('.dependency-handle');
-        fireEvent.mouseDown(handles[1]);
+        expect(useTaskStore.getState().selectedRelationId).toBe('rel-1');
+    });
 
-        const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
-        const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
-        fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
-        fireEvent.mouseUp(window);
+    it('keeps relation selection when clicking inside the relation popover and clears it on outside click', async () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setRelations([{ id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes }]);
+            useTaskStore.getState().selectRelation('rel-1');
+        });
+
+        render(<HtmlOverlay />);
+        const relationEditor = await screen.findByTestId('relation-editor');
+
+        fireEvent.mouseDown(relationEditor);
+        expect(useTaskStore.getState().selectedRelationId).toBe('rel-1');
+
+        fireEvent.mouseDown(document.body);
+        await waitFor(() => {
+            expect(useTaskStore.getState().selectedRelationId).toBeNull();
+        });
+    });
+
+    it('clears relation selection on Escape', async () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setRelations([{ id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes }]);
+            useTaskStore.getState().selectRelation('rel-1');
+        });
+
+        render(<HtmlOverlay />);
+        expect(await screen.findByTestId('relation-editor')).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
 
         await waitFor(() => {
-            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, undefined);
+            expect(useTaskStore.getState().selectedRelationId).toBeNull();
         });
     });
 
     it('does not render dependency handles when dependency edit mode is off', () => {
         useUIStore.setState({ dependencyEditMode: false });
+
         act(() => {
             useTaskStore.getState().setTasks([task1]);
             useTaskStore.getState().setHoveredTask('1');
@@ -266,37 +276,5 @@ describe('HtmlOverlay', () => {
 
         const { container } = render(<HtmlOverlay />);
         expect(container.querySelectorAll('.dependency-handle').length).toBe(0);
-    });
-
-    it('removes a relation from the context menu', async () => {
-        vi.mocked(apiClient.deleteRelation).mockResolvedValue(undefined);
-        vi.mocked(apiClient.fetchData).mockResolvedValue({
-            tasks: [task1, task2],
-            relations: [],
-            versions: [],
-            customFields: [],
-            statuses: [],
-            project: { id: 'p1', name: 'Project' },
-            permissions: { editable: true, viewable: true }
-        });
-
-        act(() => {
-            useTaskStore.getState().setTasks([task1, task2]);
-            useTaskStore.getState().setRelations([{ id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes }]);
-            useTaskStore.getState().setHoveredTask('1');
-            useTaskStore.getState().setContextMenu({ x: 10, y: 10, taskId: '1' });
-        });
-
-        render(<HtmlOverlay />);
-        const removeItem = screen.getByTestId('remove-relation-rel-1');
-        expect(removeItem).toBeTruthy();
-
-        fireEvent.click(removeItem!);
-
-        await waitFor(() => {
-            expect(apiClient.deleteRelation).toHaveBeenCalledWith('rel-1');
-            expect(apiClient.fetchData).toHaveBeenCalled();
-            expect(useTaskStore.getState().relations).toEqual([]);
-        });
     });
 });

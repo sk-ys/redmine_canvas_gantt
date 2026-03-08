@@ -4,30 +4,317 @@ import { useTaskStore } from '../stores/TaskStore';
 import { i18n } from '../utils/i18n';
 import { LayoutEngine } from '../engines/LayoutEngine';
 import { apiClient } from '../api/client';
-import { RelationType } from '../types/constraints';
+import { RelationType, type DefaultRelationType } from '../types/constraints';
 import { useUIStore } from '../stores/UIStore';
+import type { DraftRelation, Relation, Task } from '../types';
+import {
+    buildRelationRenderContext,
+    buildRelationRoutePoints,
+    getPolylineMidpoint,
+    shouldRenderRelationsAtZoom
+} from '../renderers/relationGeometry';
+import {
+    calculateDelay,
+    getRelationInfoText,
+    supportsDelayForUiType,
+    toEditableRelationView,
+    toRawRelationType,
+    type RelationDirection
+} from '../utils/relationEditing';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const DELAY_ENABLED_RELATIONS: ReadonlySet<string> = new Set([RelationType.Precedes, RelationType.Follows]);
+type TaskLabel = {
+    id: string;
+    subject: string;
+};
 
-const calculateDelay = (relationType: string, fromTask?: { startDate?: number; dueDate?: number }, toTask?: { startDate?: number; dueDate?: number }): { delay?: number; message?: string } => {
-    if (!DELAY_ENABLED_RELATIONS.has(relationType)) {
-        return {};
+type RelationPopoverTarget = {
+    relation: Relation | DraftRelation;
+    relationId: string | null;
+    isDraft: boolean;
+    direction: RelationDirection;
+    initialType: DefaultRelationType;
+    initialDelay?: number;
+    initialAutoDelayMessage?: string;
+    from: TaskLabel;
+    to: TaskLabel;
+};
+
+const RELATION_POPOVER_OFFSET = 12;
+
+const parseDelayInput = (value: string): number | null => {
+    if (!/^\d+$/.test(value.trim())) {
+        return null;
     }
 
-    const predecessor = relationType === RelationType.Precedes ? fromTask : toTask;
-    const successor = relationType === RelationType.Precedes ? toTask : fromTask;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+};
 
-    if (!predecessor?.dueDate || !successor?.startDate) {
-        return { message: i18n.t('label_relation_delay_auto_calc_unavailable') || 'No auto calculation due to missing dates.' };
-    }
+const RelationEditorPopover: React.FC<{
+    popoverRef: React.RefObject<HTMLDivElement | null>;
+    target: RelationPopoverTarget;
+    taskById: Map<string, Task>;
+    relations: Relation[];
+    autoCalculateDelay: boolean;
+    position: { x: number; y: number };
+    onClose: () => void;
+    onCreate: (draftRelation: DraftRelation, rawType: string, delay?: number) => Promise<void>;
+    onUpdate: (relationId: string, rawType: string, delay?: number) => Promise<void>;
+    onDelete: (relationId: string) => Promise<void>;
+}> = ({ popoverRef, target, taskById, relations, autoCalculateDelay, position, onClose, onCreate, onUpdate, onDelete }) => {
+    const [relationType, setRelationType] = React.useState<DefaultRelationType>(target.initialType);
+    const [delayValue, setDelayValue] = React.useState(target.initialDelay !== undefined ? String(target.initialDelay) : '');
+    const [autoDelayMessage, setAutoDelayMessage] = React.useState<string | null>(target.initialAutoDelayMessage ?? null);
+    const [error, setError] = React.useState<string | null>(null);
+    const [saving, setSaving] = React.useState(false);
+    React.useEffect(() => {
+        setRelationType(target.initialType);
+        setDelayValue(target.initialDelay !== undefined ? String(target.initialDelay) : '');
+        setAutoDelayMessage(target.initialAutoDelayMessage ?? null);
+        setError(null);
+        setSaving(false);
+    }, [target]);
 
-    const delay = Math.floor((successor.startDate - predecessor.dueDate) / DAY_MS) - 1;
-    if (delay < 0) {
-        return { message: i18n.t('label_relation_delay_auto_calc_unavailable') || 'No auto calculation due to missing dates.' };
-    }
+    const supportsDelay = supportsDelayForUiType(relationType);
+    const helperText = getRelationInfoText(relationType);
 
-    return { delay };
+    const updateDelayForType = React.useCallback((nextType: DefaultRelationType) => {
+        setRelationType(nextType);
+        setError(null);
+
+        if (!supportsDelayForUiType(nextType)) {
+            setDelayValue('');
+            setAutoDelayMessage(null);
+            return;
+        }
+
+        if (!autoCalculateDelay) {
+            setDelayValue('');
+            setAutoDelayMessage(null);
+            return;
+        }
+
+        const fromTask = taskById.get(target.from.id);
+        const toTask = taskById.get(target.to.id);
+        const autoDelay = calculateDelay(RelationType.Precedes, fromTask, toTask);
+        setDelayValue(autoDelay.delay !== undefined ? String(autoDelay.delay) : '');
+        setAutoDelayMessage(autoDelay.message ?? null);
+    }, [autoCalculateDelay, target.from.id, target.to.id, taskById]);
+
+    const handleSave = React.useCallback(async () => {
+        const rawType = target.isDraft
+            ? relationType
+            : toRawRelationType(relationType, target.direction);
+
+        let delay: number | undefined;
+        if (supportsDelay) {
+            if (delayValue.trim() === '') {
+                setError(i18n.t('label_relation_delay_required') || 'Delay is required for this relation type');
+                return;
+            }
+
+            const parsedDelay = parseDelayInput(delayValue);
+            if (parsedDelay === null) {
+                setError(i18n.t('label_relation_delay_invalid') || 'Delay must be 0 or greater');
+                return;
+            }
+            delay = parsedDelay;
+        }
+
+        const duplicate = relations.some((relation) => {
+            if (!target.isDraft && relation.id === target.relationId) {
+                return false;
+            }
+            return relation.from === target.relation.from && relation.to === target.relation.to && relation.type === rawType;
+        });
+        if (duplicate) {
+            setError(i18n.t('label_relation_already_exists') || 'Relation already exists');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            if (target.isDraft) {
+                await onCreate(target.relation as DraftRelation, rawType, delay);
+            } else if (target.relationId) {
+                await onUpdate(target.relationId, rawType, delay);
+            }
+        } catch (saveError: unknown) {
+            setError(saveError instanceof Error ? saveError.message : (i18n.t('label_failed_to_save') || 'Failed to save'));
+            setSaving(false);
+        }
+    }, [delayValue, onCreate, onUpdate, relationType, relations, supportsDelay, target]);
+
+    const handleDelete = React.useCallback(async () => {
+        if (!target.relationId) return;
+
+        setSaving(true);
+        try {
+            await onDelete(target.relationId);
+        } catch (deleteError: unknown) {
+            setError(deleteError instanceof Error ? deleteError.message : (i18n.t('label_relation_remove_failed') || 'Failed to remove relation'));
+            setSaving(false);
+        }
+    }, [onDelete, target.relationId]);
+
+    return createPortal(
+        <div
+            ref={popoverRef}
+            data-testid="relation-editor"
+            style={{
+                position: 'fixed',
+                top: position.y,
+                left: position.x,
+                width: 320,
+                boxSizing: 'border-box',
+                background: '#fff',
+                border: '1px solid rgba(15, 23, 42, 0.12)',
+                borderRadius: 12,
+                boxShadow: '0 18px 36px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08)',
+                padding: 14,
+                zIndex: 10001,
+                pointerEvents: 'auto'
+            }}
+        >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', letterSpacing: '0.02em' }}>
+                        {i18n.t('label_relation_title') || 'Dependency'}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4 }}>
+                        <span style={{ fontWeight: 600, color: '#0f172a' }}>#{target.from.id}</span> {target.from.subject}
+                        {' '}→{' '}
+                        <span style={{ fontWeight: 600, color: '#0f172a' }}>#{target.to.id}</span> {target.to.subject}
+                    </div>
+                </div>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#334155' }}>
+                    <span style={{ fontWeight: 600 }}>{i18n.t('label_relation_type') || 'Relation type'}</span>
+                    <select
+                        data-testid="relation-type-select"
+                        value={relationType}
+                        disabled={saving}
+                        onChange={(event) => updateDelayForType(event.target.value as DefaultRelationType)}
+                        style={{
+                            height: 34,
+                            borderRadius: 8,
+                            border: '1px solid #cbd5e1',
+                            padding: '0 10px',
+                            fontSize: 13,
+                            color: '#0f172a'
+                        }}
+                    >
+                        <option value={RelationType.Precedes}>{RelationType.Precedes}</option>
+                        <option value={RelationType.Relates}>{RelationType.Relates}</option>
+                        <option value={RelationType.Blocks}>{RelationType.Blocks}</option>
+                    </select>
+                </label>
+
+                {supportsDelay && (
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#334155' }}>
+                        <span style={{ fontWeight: 600 }}>{i18n.t('label_delay') || 'Delay'}</span>
+                        <input
+                            data-testid="relation-delay-input"
+                            type="text"
+                            inputMode="numeric"
+                            value={delayValue}
+                            disabled={saving}
+                            placeholder="0"
+                            onChange={(event) => {
+                                setDelayValue(event.target.value);
+                                setError(null);
+                            }}
+                            style={{
+                                height: 34,
+                                borderRadius: 8,
+                                border: error ? '1px solid #ef4444' : '1px solid #cbd5e1',
+                                padding: '0 10px',
+                                fontSize: 13,
+                                color: '#0f172a'
+                            }}
+                        />
+                    </label>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.45 }}>
+                        {helperText}
+                    </div>
+                    {supportsDelay && autoDelayMessage && (
+                        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.45 }}>
+                            {autoDelayMessage}
+                        </div>
+                    )}
+                    {error && (
+                        <div data-testid="relation-error" style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.45 }}>
+                            {error}
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button
+                        type="button"
+                        data-testid="relation-cancel-button"
+                        onClick={onClose}
+                        disabled={saving}
+                        style={{
+                            border: '1px solid #cbd5e1',
+                            background: '#fff',
+                            color: '#334155',
+                            borderRadius: 8,
+                            padding: '7px 12px',
+                            fontSize: 13,
+                            cursor: 'pointer'
+                        }}
+                    >
+                        {i18n.t('button_cancel') || 'Cancel'}
+                    </button>
+                    {!target.isDraft && target.relationId && (
+                        <button
+                            type="button"
+                            data-testid="relation-delete-button"
+                            onClick={() => {
+                                void handleDelete();
+                            }}
+                            disabled={saving}
+                            style={{
+                                border: '1px solid rgba(220, 38, 38, 0.18)',
+                                background: '#fff5f5',
+                                color: '#dc2626',
+                                borderRadius: 8,
+                                padding: '7px 12px',
+                                fontSize: 13,
+                                cursor: 'pointer'
+                            }}
+                        >
+                            {i18n.t('button_delete') || 'Delete'}
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        data-testid="relation-save-button"
+                        onClick={() => {
+                            void handleSave();
+                        }}
+                        disabled={saving}
+                        style={{
+                            border: '1px solid #1d4ed8',
+                            background: '#1d4ed8',
+                            color: '#fff',
+                            borderRadius: 8,
+                            padding: '7px 12px',
+                            fontSize: 13,
+                            cursor: 'pointer'
+                        }}
+                    >
+                        {i18n.t('button_save') || 'Save'}
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
 };
 
 export const HtmlOverlay: React.FC = () => {
@@ -35,8 +322,14 @@ export const HtmlOverlay: React.FC = () => {
     const contextMenu = useTaskStore(state => state.contextMenu);
     const tasks = useTaskStore(state => state.tasks);
     const relations = useTaskStore(state => state.relations);
+    const selectedRelationId = useTaskStore(state => state.selectedRelationId);
+    const draftRelation = useTaskStore(state => state.draftRelation);
     const setContextMenu = useTaskStore(state => state.setContextMenu);
-    const refreshData = useTaskStore(state => state.refreshData);
+    const setDraftRelation = useTaskStore(state => state.setDraftRelation);
+    const clearRelationSelection = useTaskStore(state => state.clearRelationSelection);
+    const addRelation = useTaskStore(state => state.addRelation);
+    const replaceRelation = useTaskStore(state => state.replaceRelation);
+    const removeRelation = useTaskStore(state => state.removeRelation);
     const canDropToRoot = useTaskStore(state => state.canDropToRoot);
     const moveTaskToRoot = useTaskStore(state => state.moveTaskToRoot);
     const viewport = useTaskStore(state => state.viewport);
@@ -48,11 +341,13 @@ export const HtmlOverlay: React.FC = () => {
 
     const overlayRef = React.useRef<HTMLDivElement>(null);
     const contextMenuRef = React.useRef<HTMLDivElement>(null);
-    const [draft, setDraft] = React.useState<{ fromId: string; start: { x: number; y: number }; pointer: { x: number; y: number }; targetId?: string } | null>(null);
-    const draftRef = React.useRef<typeof draft>(null);
+    const relationMenuRef = React.useRef<HTMLDivElement | null>(null);
+    const [dragDraft, setDragDraft] = React.useState<{ fromId: string; start: { x: number; y: number }; pointer: { x: number; y: number }; targetId?: string } | null>(null);
+    const dragDraftRef = React.useRef<typeof dragDraft>(null);
     const [menuPosition, setMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
+    const [relationPosition, setRelationPosition] = React.useState<{ x: number; y: number } | null>(null);
 
-    const taskById = React.useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+    const taskById = React.useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
     const contextTask = contextMenu ? taskById.get(contextMenu.taskId) ?? null : null;
     const fallbackProjectId = React.useMemo(() => {
         const projectId = window.RedmineCanvasGantt?.projectId;
@@ -62,9 +357,64 @@ export const HtmlOverlay: React.FC = () => {
     const [startRow, endRow] = LayoutEngine.getVisibleRowRange(viewport, rowCount || tasks.length);
     const visibleTasks = LayoutEngine.sliceTasksInRowRange(tasks, startRow, endRow);
 
-    const setDraftState = React.useCallback((next: typeof draft) => {
-        draftRef.current = next;
-        setDraft(next);
+    const activePersistedRelation = React.useMemo(
+        () => selectedRelationId ? relations.find((relation) => relation.id === selectedRelationId) ?? null : null,
+        [relations, selectedRelationId]
+    );
+    const activeRelation = activePersistedRelation ?? draftRelation;
+
+    const getTaskLabel = React.useCallback((taskId: string): TaskLabel => {
+        const task = taskById.get(taskId);
+        return {
+            id: taskId,
+            subject: task?.subject ? task.subject : taskId
+        };
+    }, [taskById]);
+
+    const relationPopoverTarget = React.useMemo<RelationPopoverTarget | null>(() => {
+        if (!activeRelation) return null;
+
+        const editableView = toEditableRelationView(activeRelation);
+        return {
+            relation: activeRelation,
+            relationId: activePersistedRelation?.id ?? null,
+            isDraft: !activePersistedRelation,
+            direction: editableView.direction,
+            initialType: editableView.uiType,
+            initialDelay: editableView.delay,
+            initialAutoDelayMessage: draftRelation?.autoDelayMessage,
+            from: getTaskLabel(editableView.fromId),
+            to: getTaskLabel(editableView.toId)
+        };
+    }, [activePersistedRelation, activeRelation, draftRelation, getTaskLabel]);
+
+    const relationAnchor = React.useMemo(() => {
+        if (!activeRelation) return null;
+
+        if (shouldRenderRelationsAtZoom(zoomLevel)) {
+            const totalRows = rowCount || tasks.length;
+            const bufferedTasks = LayoutEngine.sliceTasksInRowRange(
+                tasks,
+                Math.max(0, startRow - 50),
+                Math.min(totalRows - 1, endRow + 50)
+            );
+            const context = buildRelationRenderContext(bufferedTasks, viewport, zoomLevel);
+            const points = buildRelationRoutePoints(activeRelation, context, viewport);
+            if (points) {
+                const midpoint = getPolylineMidpoint(points);
+                return {
+                    x: midpoint.x - viewport.scrollX,
+                    y: midpoint.y - viewport.scrollY
+                };
+            }
+        }
+
+        return draftRelation?.anchor ?? null;
+    }, [activeRelation, draftRelation, endRow, rowCount, startRow, tasks, viewport, zoomLevel]);
+
+    const setDragDraftState = React.useCallback((next: typeof dragDraft) => {
+        dragDraftRef.current = next;
+        setDragDraft(next);
     }, []);
 
     const toLocalPoint = React.useCallback((clientX: number, clientY: number) => {
@@ -74,78 +424,96 @@ export const HtmlOverlay: React.FC = () => {
     }, []);
 
     const hitTestTask = React.useCallback((x: number, y: number) => {
-        // Dependency dragging only needs hit-testing against currently visible rows.
         const { viewport: currentViewport, tasks: currentTasks, rowCount: currentRowCount } = useTaskStore.getState();
-        const [s, e] = LayoutEngine.getVisibleRowRange(currentViewport, currentRowCount || currentTasks.length);
-        const candidates = LayoutEngine.sliceTasksInRowRange(currentTasks, s, e);
+        const [visibleStart, visibleEnd] = LayoutEngine.getVisibleRowRange(currentViewport, currentRowCount || currentTasks.length);
+        const candidates = LayoutEngine.sliceTasksInRowRange(currentTasks, visibleStart, visibleEnd);
+
         for (const task of candidates) {
             const bounds = LayoutEngine.getTaskBounds(task, currentViewport, 'hit', zoomLevel);
             if (x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height) {
                 return task;
             }
         }
+
         return null;
     }, [zoomLevel]);
 
-    const handleMouseMove = React.useCallback((e: MouseEvent) => {
-        const currentDraft = draftRef.current;
+    const handleMouseMove = React.useCallback((event: MouseEvent) => {
+        const currentDraft = dragDraftRef.current;
         if (!currentDraft) return;
-        const point = toLocalPoint(e.clientX, e.clientY);
+
+        const point = toLocalPoint(event.clientX, event.clientY);
         const targetTask = hitTestTask(point.x, point.y);
-        setDraftState({ ...currentDraft, pointer: point, targetId: targetTask ? targetTask.id : undefined });
-    }, [hitTestTask, setDraftState, toLocalPoint]);
+        setDragDraftState({ ...currentDraft, pointer: point, targetId: targetTask ? targetTask.id : undefined });
+    }, [hitTestTask, setDragDraftState, toLocalPoint]);
 
-    const createRelation = React.useCallback(async (fromId: string, toId: string, relationType: string, delay?: number) => {
-        const { addRelation } = useTaskStore.getState();
-        try {
-            const relation = await apiClient.createRelation(fromId, toId, relationType, delay);
-            addRelation(relation);
-            await refreshData();
-            useUIStore.getState().addNotification(i18n.t('label_relation_added') || 'Dependency created', 'success');
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : undefined;
-            useUIStore.getState().addNotification(message || i18n.t('label_error') || 'Failed to create relation', 'error');
-        }
-    }, [refreshData]);
+    const handleCreateRelation = React.useCallback(async (relation: DraftRelation, rawType: string, delay?: number) => {
+        const createdRelation = await apiClient.createRelation(relation.from, relation.to, rawType, delay);
+        addRelation(createdRelation);
+        clearRelationSelection();
+        useUIStore.getState().addNotification(i18n.t('label_relation_added') || 'Dependency created', 'success');
+    }, [addRelation, clearRelationSelection]);
 
-    const handleMouseUp = React.useCallback(async () => {
-        const currentDraft = draftRef.current;
+    const handleUpdateRelation = React.useCallback(async (relationId: string, rawType: string, delay?: number) => {
+        const updatedRelation = await apiClient.updateRelation(relationId, rawType, delay);
+        replaceRelation(updatedRelation);
+        clearRelationSelection();
+        useUIStore.getState().addNotification(i18n.t('label_relation_updated') || 'Dependency updated', 'success');
+    }, [clearRelationSelection, replaceRelation]);
+
+    const handleRemoveRelation = React.useCallback(async (relationId: string) => {
+        const message = i18n.t('label_relation_delete_confirmation') || 'Delete this dependency?';
+        if (!window.confirm(message)) return;
+
+        await apiClient.deleteRelation(relationId);
+        removeRelation(relationId);
+        clearRelationSelection();
+        setContextMenu(null);
+        useUIStore.getState().addNotification(i18n.t('label_relation_removed') || 'Dependency removed', 'success');
+    }, [clearRelationSelection, removeRelation, setContextMenu]);
+
+    const handleMouseUp = React.useCallback(() => {
+        const currentDraft = dragDraftRef.current;
         if (!currentDraft) return;
+
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
 
-        draftRef.current = null;
-        setDraft(null);
+        dragDraftRef.current = null;
+        setDragDraft(null);
 
-        const { fromId, targetId } = currentDraft;
+        const { fromId, targetId, start, pointer } = currentDraft;
         if (!targetId || targetId === fromId) return;
-
-        const { relations } = useTaskStore.getState();
-        const alreadyLinked = relations.some(r => r.from === fromId && r.to === targetId && r.type === defaultRelationType);
-        if (alreadyLinked) {
-            useUIStore.getState().addNotification(i18n.t('label_relation_already_exists') || 'Relation already exists', 'info');
-            return;
-        }
 
         const fromTask = taskById.get(fromId);
         const toTask = taskById.get(targetId);
         const initialDelay = autoCalculateDelay ? calculateDelay(defaultRelationType, fromTask, toTask) : {};
-        await createRelation(fromId, targetId, defaultRelationType, initialDelay.delay);
-    }, [autoCalculateDelay, createRelation, defaultRelationType, handleMouseMove, taskById]);
+
+        setDraftRelation({
+            from: fromId,
+            to: targetId,
+            type: defaultRelationType,
+            delay: initialDelay.delay,
+            autoDelayMessage: initialDelay.message,
+            anchor: {
+                x: (start.x + pointer.x) / 2,
+                y: (start.y + pointer.y) / 2
+            }
+        });
+    }, [autoCalculateDelay, defaultRelationType, handleMouseMove, setDraftRelation, taskById]);
 
     const startDraft = React.useCallback((taskId: string, x: number, y: number) => {
         if (!dependencyEditMode) return;
         const startPoint = { x, y };
-        setDraftState({ fromId: taskId, start: startPoint, pointer: startPoint });
+        setDragDraftState({ fromId: taskId, start: startPoint, pointer: startPoint });
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
-    }, [dependencyEditMode, handleMouseMove, handleMouseUp, setDraftState]);
+    }, [dependencyEditMode, handleMouseMove, handleMouseUp, setDragDraftState]);
 
     React.useEffect(() => {
-        const handleGlobalMouseDown = (e: MouseEvent) => {
+        const handleGlobalMouseDown = (event: MouseEvent) => {
             if (contextMenu) {
-                const target = e.target as HTMLElement;
-                // If it's not a menu item (which handles its own closure), close the menu
+                const target = event.target as HTMLElement;
                 if (!target.closest('.menu-item')) {
                     setContextMenu(null);
                 }
@@ -160,12 +528,42 @@ export const HtmlOverlay: React.FC = () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [handleMouseMove, handleMouseUp, contextMenu, setContextMenu]);
+    }, [contextMenu, handleMouseMove, handleMouseUp, setContextMenu]);
 
+    React.useEffect(() => {
+        if (!activeRelation) return;
+
+        const handleWindowMouseDown = (event: MouseEvent) => {
+            const target = event.target as Node | null;
+            if (relationMenuRef.current?.contains(target)) {
+                return;
+            }
+
+            const viewportElement = overlayRef.current?.parentElement;
+            if (target && viewportElement?.contains(target)) {
+                return;
+            }
+
+            useTaskStore.getState().clearRelationSelection();
+        };
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                useTaskStore.getState().clearRelationSelection();
+            }
+        };
+
+        window.addEventListener('mousedown', handleWindowMouseDown);
+        window.addEventListener('keydown', handleEscape);
+        return () => {
+            window.removeEventListener('mousedown', handleWindowMouseDown);
+            window.removeEventListener('keydown', handleEscape);
+        };
+    }, [activeRelation]);
 
     const relatedRelations = React.useMemo(() => {
         if (!contextMenu) return [];
-        return relations.filter(r => r.from === contextMenu.taskId || r.to === contextMenu.taskId);
+        return relations.filter((relation) => relation.from === contextMenu.taskId || relation.to === contextMenu.taskId);
     }, [contextMenu, relations]);
 
     React.useEffect(() => {
@@ -187,11 +585,11 @@ export const HtmlOverlay: React.FC = () => {
             const maxY = window.innerHeight - rect.height - margin;
             const nextX = Math.max(margin, Math.min(contextMenu.x, maxX));
             const nextY = Math.max(margin, Math.min(contextMenu.y, maxY));
-            setMenuPosition((prev) => {
-                if (!prev || prev.x !== nextX || prev.y !== nextY) {
+            setMenuPosition((previous) => {
+                if (!previous || previous.x !== nextX || previous.y !== nextY) {
                     return { x: nextX, y: nextY };
                 }
-                return prev;
+                return previous;
             });
         };
 
@@ -214,50 +612,78 @@ export const HtmlOverlay: React.FC = () => {
         };
     }, [contextMenu, relatedRelations.length]);
 
-    const getTaskLabel = React.useCallback((taskId: string) => {
-        const task = tasks.find(t => t.id === taskId);
-        return {
-            id: taskId,
-            subject: task?.subject ? task.subject : taskId
-        };
-    }, [tasks]);
+    React.useLayoutEffect(() => {
+        if (!relationPopoverTarget || !relationAnchor || !overlayRef.current || !relationMenuRef.current) {
+            setRelationPosition(null);
+            return;
+        }
 
-    const formatRelationLabel = React.useCallback((rel: { from: string; to: string }) => {
-        const from = getTaskLabel(rel.from);
-        const to = getTaskLabel(rel.to);
-        return { from, to };
+        const clampPosition = () => {
+            if (!overlayRef.current || !relationMenuRef.current || !relationAnchor) return;
+
+            const overlayRect = overlayRef.current.getBoundingClientRect();
+            const popoverRect = relationMenuRef.current.getBoundingClientRect();
+            const anchorX = overlayRect.left + relationAnchor.x;
+            const anchorY = overlayRect.top + relationAnchor.y;
+            const margin = 8;
+
+            const candidateAbove = {
+                x: anchorX - popoverRect.width / 2,
+                y: anchorY - popoverRect.height - RELATION_POPOVER_OFFSET
+            };
+            const candidateBelow = {
+                x: anchorX - popoverRect.width / 2,
+                y: anchorY + RELATION_POPOVER_OFFSET
+            };
+
+            const preferred = candidateAbove.y >= margin ? candidateAbove : candidateBelow;
+            const nextX = Math.max(margin, Math.min(preferred.x, window.innerWidth - popoverRect.width - margin));
+            const nextY = Math.max(margin, Math.min(preferred.y, window.innerHeight - popoverRect.height - margin));
+            setRelationPosition((previous) => {
+                if (!previous || previous.x !== nextX || previous.y !== nextY) {
+                    return { x: nextX, y: nextY };
+                }
+                return previous;
+            });
+        };
+
+        clampPosition();
+
+        const handleWindowResize = () => clampPosition();
+        window.addEventListener('resize', handleWindowResize);
+
+        if (typeof ResizeObserver !== 'undefined') {
+            const resizeObserver = new ResizeObserver(() => clampPosition());
+            resizeObserver.observe(relationMenuRef.current);
+            return () => {
+                resizeObserver.disconnect();
+                window.removeEventListener('resize', handleWindowResize);
+            };
+        }
+
+        return () => {
+            window.removeEventListener('resize', handleWindowResize);
+        };
+    }, [relationAnchor, relationPopoverTarget]);
+
+    const formatRelationLabel = React.useCallback((relation: { from: string; to: string }) => {
+        return {
+            from: getTaskLabel(relation.from),
+            to: getTaskLabel(relation.to)
+        };
     }, [getTaskLabel]);
 
-    const handleRemoveRelation = React.useCallback(async (relationId: string) => {
-        try {
-            await apiClient.deleteRelation(relationId);
-            useTaskStore.getState().removeRelation(relationId);
-            try {
-                await refreshData();
-            } catch (refreshError: unknown) {
-                const message = refreshError instanceof Error ? refreshError.message : undefined;
-                useUIStore.getState().addNotification(message || 'Failed to refresh data.', 'warning');
-            }
-            useUIStore.getState().addNotification(i18n.t('label_relation_removed') || 'Dependency removed', 'success');
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : undefined;
-            useUIStore.getState().addNotification(message || (i18n.t('label_relation_remove_failed') || 'Failed to remove relation'), 'error');
-        } finally {
-            useTaskStore.getState().setContextMenu(null);
-        }
-    }, [refreshData]);
-
     const handleTaskDelete = React.useCallback(async (taskId: string) => {
-        const msg = i18n.t('text_are_you_sure') || 'Are you sure?';
-        if (!window.confirm(msg)) return;
+        const message = i18n.t('text_are_you_sure') || 'Are you sure?';
+        if (!window.confirm(message)) return;
 
         try {
             await apiClient.deleteTask(taskId);
             useTaskStore.getState().removeTask(taskId);
             useUIStore.getState().addNotification((i18n.t('button_delete') || 'Delete') + ': ' + (i18n.t('label_success') || 'Success'), 'success');
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : undefined;
-            useUIStore.getState().addNotification(message || (i18n.t('label_delete_task_failed') || 'Failed to delete task'), 'error');
+            const messageText = error instanceof Error ? error.message : undefined;
+            useUIStore.getState().addNotification(messageText || (i18n.t('label_delete_task_failed') || 'Failed to delete task'), 'error');
         } finally {
             useTaskStore.getState().setContextMenu(null);
         }
@@ -300,14 +726,13 @@ export const HtmlOverlay: React.FC = () => {
                 ref={overlayRef}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
             >
-                {visibleTasks.map(task => {
+                {visibleTasks.map((task) => {
                     if (!dependencyEditMode) return null;
                     if (task.id !== hoveredTaskId) return null;
 
                     const bounds = LayoutEngine.getTaskBounds(task, viewport, 'hit', zoomLevel);
                     const centerY = bounds.y + bounds.height / 2;
-                    // Position handles OUTSIDE the task bar to avoid conflict with resize handles
-                    const handleOffset = 12; // Distance from bar edge
+                    const handleOffset = 12;
                     const baseStyle: React.CSSProperties = {
                         position: 'absolute',
                         top: centerY - 5,
@@ -319,12 +744,11 @@ export const HtmlOverlay: React.FC = () => {
                         boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
                         pointerEvents: 'auto',
                         cursor: 'crosshair',
-                        zIndex: 100 // Ensure above other things
+                        zIndex: 100
                     };
 
                     return (
                         <React.Fragment key={`handles-${task.id}`}>
-                            {/* Left handle - positioned outside the bar */}
                             <div
                                 className="dependency-handle"
                                 style={{ ...baseStyle, left: bounds.x - handleOffset - 5 }}
@@ -332,7 +756,6 @@ export const HtmlOverlay: React.FC = () => {
                                     startDraft(task.id, bounds.x, centerY);
                                 }}
                             />
-                            {/* Right handle - positioned outside the bar */}
                             <div
                                 className="dependency-handle"
                                 style={{ ...baseStyle, left: bounds.x + bounds.width + handleOffset - 5 }}
@@ -344,7 +767,7 @@ export const HtmlOverlay: React.FC = () => {
                     );
                 })}
 
-                {draft && (
+                {dragDraft && (
                     <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
                         <defs>
                             <marker id="draft-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
@@ -352,10 +775,10 @@ export const HtmlOverlay: React.FC = () => {
                             </marker>
                         </defs>
                         <line
-                            x1={draft.start.x}
-                            y1={draft.start.y}
-                            x2={draft.pointer.x}
-                            y2={draft.pointer.y}
+                            x1={dragDraft.start.x}
+                            y1={dragDraft.start.y}
+                            x2={dragDraft.pointer.x}
+                            y2={dragDraft.pointer.y}
                             stroke="#1a73e8"
                             strokeWidth={2}
                             strokeDasharray="5 5"
@@ -364,6 +787,21 @@ export const HtmlOverlay: React.FC = () => {
                     </svg>
                 )}
             </div>
+
+            {relationPopoverTarget && (
+                <RelationEditorPopover
+                    popoverRef={relationMenuRef}
+                    target={relationPopoverTarget}
+                    taskById={taskById}
+                    relations={relations}
+                    autoCalculateDelay={autoCalculateDelay}
+                    position={relationPosition ?? { x: 8, y: 8 }}
+                    onClose={clearRelationSelection}
+                    onCreate={handleCreateRelation}
+                    onUpdate={handleUpdateRelation}
+                    onDelete={handleRemoveRelation}
+                />
+            )}
 
             {contextMenu && createPortal(
                 <>
@@ -378,8 +816,8 @@ export const HtmlOverlay: React.FC = () => {
                             background: 'transparent'
                         }}
                         onClick={() => setContextMenu(null)}
-                        onContextMenu={(e) => {
-                            e.preventDefault();
+                        onContextMenu={(event) => {
+                            event.preventDefault();
                             setContextMenu(null);
                         }}
                     />
@@ -448,7 +886,6 @@ export const HtmlOverlay: React.FC = () => {
 
                         <div className="menu-item" data-testid="context-menu-add-child-task" onClick={() => {
                             const query = new URLSearchParams();
-                            // Redmine new issue form expects nested params; keep legacy param for compatibility.
                             query.set('issue[parent_issue_id]', contextMenu.taskId);
                             query.set('parent_issue_id', contextMenu.taskId);
                             useUIStore.getState().openIssueDialog(buildNewIssueUrl(query));
@@ -482,7 +919,9 @@ export const HtmlOverlay: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="menu-item danger" onClick={() => handleTaskDelete(contextMenu.taskId)}>
+                        <div className="menu-item danger" onClick={() => {
+                            void handleTaskDelete(contextMenu.taskId);
+                        }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
                             {i18n.t('button_delete')}
                         </div>
@@ -494,17 +933,19 @@ export const HtmlOverlay: React.FC = () => {
                                     {i18n.t('label_relations_remove_heading') || 'Remove dependency'}
                                 </div>
 
-                                {relatedRelations.map((rel) => {
-                                    const { from, to } = formatRelationLabel(rel);
+                                {relatedRelations.map((relation) => {
+                                    const { from, to } = formatRelationLabel(relation);
                                     const fromIsContext = contextMenu.taskId === from.id;
                                     const direction = fromIsContext ? '→' : '←';
 
                                     return (
                                         <div
-                                            key={rel.id}
+                                            key={relation.id}
                                             className="menu-item danger"
-                                            data-testid={`remove-relation-${rel.id}`}
-                                            onClick={() => handleRemoveRelation(rel.id)}
+                                            data-testid={`remove-relation-${relation.id}`}
+                                            onClick={() => {
+                                                void handleRemoveRelation(relation.id);
+                                            }}
                                             style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}
                                         >
                                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -512,7 +953,7 @@ export const HtmlOverlay: React.FC = () => {
                                                     <path d="M18.36 6.64a9 9 0 1 1-12.73 12.73 9 9 0 0 1 12.73-12.73z" />
                                                     <line x1="6" y1="6" x2="18" y2="18" />
                                                 </svg>
-                                                <span style={{ fontWeight: 600 }}>#{rel.id}</span>
+                                                <span style={{ fontWeight: 600 }}>#{relation.id}</span>
                                             </div>
                                             <div style={{ fontSize: '11px', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>
                                                 {from.subject} {direction} {to.subject}
