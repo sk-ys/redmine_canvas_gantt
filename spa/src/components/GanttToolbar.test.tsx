@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GanttToolbar } from './GanttToolbar';
+import { RelationType } from '../types/constraints';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
 import '../stores/preferencesWatcher';
@@ -111,7 +112,7 @@ describe('GanttToolbar shortcuts', () => {
         render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
         const button = screen.getByTestId('dependency-edit-mode-button');
         const initial = useUIStore.getState().dependencyEditMode;
-        expect(screen.queryByTestId('relation-settings-menu-button')).not.toBeInTheDocument();
+        expect(screen.getByTestId('relation-settings-menu-button')).toBeInTheDocument();
         fireEvent.click(button);
         expect(useUIStore.getState().dependencyEditMode).toBe(!initial);
     });
@@ -164,4 +165,31 @@ describe('GanttToolbar shortcuts', () => {
         fireEvent.mouseDown(document.body);
         expect(screen.queryByTestId('row-height-menu')).not.toBeInTheDocument();
     });
+
+    it('saves relation settings from toolbar menu', () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        fireEvent.click(screen.getByTestId('relation-settings-menu-button'));
+        fireEvent.change(screen.getByTestId('relation-default-type-select'), { target: { value: RelationType.Relates } });
+        fireEvent.click(screen.getByTestId('relation-auto-calculate-toggle'));
+        fireEvent.click(screen.getByTestId('relation-auto-apply-toggle'));
+        fireEvent.click(screen.getByTestId('relation-settings-save-button'));
+
+        expect(useUIStore.getState().defaultRelationType).toBe(RelationType.Relates);
+        expect(useUIStore.getState().autoCalculateDelay).toBe(false);
+        expect(useUIStore.getState().autoApplyDefaultRelation).toBe(false);
+    });
+
 });

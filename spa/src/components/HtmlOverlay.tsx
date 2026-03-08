@@ -361,6 +361,9 @@ export const HtmlOverlay: React.FC = () => {
     const zoomLevel = useTaskStore(state => state.zoomLevel);
     const rowCount = useTaskStore(state => state.rowCount);
     const dependencyEditMode = useUIStore(state => state.dependencyEditMode);
+    const defaultRelationType = useUIStore(state => state.defaultRelationType);
+    const autoCalculateDelay = useUIStore(state => state.autoCalculateDelay);
+    const autoApplyDefaultRelation = useUIStore(state => state.autoApplyDefaultRelation);
 
     const overlayRef = React.useRef<HTMLDivElement>(null);
     const contextMenuRef = React.useRef<HTMLDivElement>(null);
@@ -510,20 +513,40 @@ export const HtmlOverlay: React.FC = () => {
 
         const fromTask = taskById.get(fromId);
         const toTask = taskById.get(targetId);
-        const initialDelay = calculateDelay(RelationType.Precedes, fromTask, toTask);
+        const autoDelay = autoCalculateDelay && defaultRelationType === RelationType.Precedes
+            ? calculateDelay(RelationType.Precedes, fromTask, toTask)
+            : {};
+
+        const duplicate = relations.some((relation) => (
+            relation.from === fromId && relation.to === targetId && relation.type === defaultRelationType
+        ));
+        if (duplicate) {
+            useUIStore.getState().addNotification(i18n.t('label_relation_already_exists') || 'Relation already exists', 'warning');
+            return;
+        }
+
+        const relationDelay = defaultRelationType === RelationType.Precedes ? autoDelay.delay : undefined;
+
+        if (autoApplyDefaultRelation) {
+            void handleCreateRelation({ from: fromId, to: targetId, type: defaultRelationType }, defaultRelationType, relationDelay).catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : (i18n.t('label_relation_add_failed') || 'Failed to create relation');
+                useUIStore.getState().addNotification(message, 'error');
+            });
+            return;
+        }
 
         setDraftRelation({
             from: fromId,
             to: targetId,
-            type: RelationType.Precedes,
-            delay: initialDelay.delay,
-            autoDelayMessage: initialDelay.message,
+            type: defaultRelationType,
+            delay: relationDelay,
+            autoDelayMessage: defaultRelationType === RelationType.Precedes ? autoDelay.message : undefined,
             anchor: {
                 x: (start.x + pointer.x) / 2,
                 y: (start.y + pointer.y) / 2
             }
         });
-    }, [handleMouseMove, setDraftRelation, taskById]);
+    }, [autoApplyDefaultRelation, autoCalculateDelay, defaultRelationType, handleCreateRelation, handleMouseMove, relations, setDraftRelation, taskById]);
 
     const startDraft = React.useCallback((taskId: string, x: number, y: number) => {
         if (!dependencyEditMode) return;

@@ -119,11 +119,12 @@ describe('HtmlOverlay', () => {
         } as DOMRect);
     };
 
-    it('opens a draft relation popover after dragging a dependency handle', async () => {
+    it('opens a draft relation popover after dragging a dependency handle when auto apply is off', async () => {
         const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes, delay: 0 };
         vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
 
         act(() => {
+            useUIStore.setState({ autoApplyDefaultRelation: false });
             useTaskStore.getState().setTasks([task1, task2]);
             useTaskStore.getState().setHoveredTask('1');
         });
@@ -151,6 +152,39 @@ describe('HtmlOverlay', () => {
         });
     });
 
+
+
+    it('creates relation immediately after dragging when auto apply is on', async () => {
+        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes, delay: 2 };
+        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
+
+        act(() => {
+            useUIStore.setState({
+                autoApplyDefaultRelation: true,
+                defaultRelationType: RelationType.Precedes,
+                autoCalculateDelay: true
+            });
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+        mockOverlayRect(container);
+
+        const handles = container.querySelectorAll('.dependency-handle');
+        fireEvent.mouseDown(handles[1]);
+
+        const arrangedTask2 = useTaskStore.getState().tasks.find(t => t.id === '2');
+        const bounds2 = LayoutEngine.getTaskBounds(arrangedTask2!, viewport, 'hit', 2);
+        fireEvent.mouseMove(window, { clientX: bounds2.x + 1, clientY: bounds2.y + 1 });
+        fireEvent.mouseUp(window);
+
+        await waitFor(() => {
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, 2);
+            expect(useTaskStore.getState().relations).toEqual([relation]);
+        });
+        expect(screen.queryByTestId('relation-editor')).not.toBeInTheDocument();
+    });
     it('updates an existing relation from the popover', async () => {
         const existingRelation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Follows, delay: 2 };
         const updatedRelation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Blocked };
