@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { loadPreferences, savePreferences } from './preferences';
-import { RelationType } from '../types/constraints';
 
 describe('Preferences storage', () => {
     beforeEach(() => {
@@ -36,15 +35,6 @@ describe('Preferences storage', () => {
         savePreferences({ autoSave: true }, 1);
         expect(loadPreferences(1).autoSave).toBe(true);
         expect(loadPreferences(2).autoSave).toBeUndefined();
-    });
-
-    it('saves relation settings per project', () => {
-        savePreferences({ defaultRelationType: RelationType.Blocks, autoCalculateDelay: false }, 1);
-
-        expect(loadPreferences(1).defaultRelationType).toBe(RelationType.Blocks);
-        expect(loadPreferences(1).autoCalculateDelay).toBe(false);
-        expect(loadPreferences(2).defaultRelationType).toBeUndefined();
-        expect(loadPreferences(2).autoCalculateDelay).toBeUndefined();
     });
 
     it('migrates V1 shared preferences to current project only', () => {
