@@ -523,6 +523,27 @@ export const apiClient = {
         return relation;
     },
 
+    updateRelation: async (relationId: string, type: string, delay?: number): Promise<Relation> => {
+        const config = getConfig();
+        const response = await fetch(`${config.apiBase}/relations/${relationId}.json`, {
+            method: 'PATCH',
+            headers: buildJsonHeaders(config, true),
+            body: JSON.stringify({
+                relation: {
+                    relation_type: type,
+                    ...(typeof delay === 'number' ? { delay } : {})
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(await parseErrorMessage(response));
+        }
+
+        const payload = await response.json();
+        return normalizeRelation(payload, { fromId: '', toId: '', type });
+    },
+
     deleteRelation: async (relationId: string): Promise<void> => {
         const config = getConfig();
 

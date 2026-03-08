@@ -282,6 +282,114 @@ RSpec.describe CanvasGanttsController, type: :controller do
     end
   end
 
+  describe 'PATCH #update_relation' do
+    let(:relation) { instance_double(IssueRelation, id: 77, issue_from_id: 10, issue_to_id: 11, save: true) }
+    let(:issue_from) { instance_double(Issue, project_id: 1, editable?: false) }
+    let(:issue_to) { instance_double(Issue, project_id: 2, editable?: true) }
+
+    before do
+      allow(controller).to receive(:set_permissions) do
+        controller.instance_variable_set(:@permissions, { editable: true, viewable: true })
+      end
+      allow(controller).to receive(:descendant_project_ids).and_return([1, 2])
+      allow(IssueRelation).to receive(:find).with('77').and_return(relation)
+      allow(relation).to receive(:issue_from).and_return(issue_from)
+      allow(relation).to receive(:issue_to).and_return(issue_to)
+      allow(relation).to receive(:errors).and_return(double(full_messages: ['Save failed']))
+
+      current_type = 'precedes'
+      current_delay = 2
+      allow(relation).to receive(:relation_type) { current_type }
+      allow(relation).to receive(:delay) { current_delay }
+      allow(relation).to receive(:relation_type=) { |value| current_type = value }
+      allow(relation).to receive(:delay=) { |value| current_delay = value }
+    end
+
+    it 'updates a relation and returns the canonical payload' do
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'blocks' } },
+            format: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq(
+        'status' => 'ok',
+        'relation' => {
+          'id' => 77,
+          'from' => 10,
+          'to' => 11,
+          'type' => 'blocks',
+          'delay' => nil
+        }
+      )
+    end
+
+    it 'returns forbidden when owned issue is not editable' do
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'blocks' } },
+            format: :json
+
+      expect(response).to have_http_status(:forbidden)
+      expect(JSON.parse(response.body)).to eq('error' => 'Permission denied')
+    end
+
+    it 'returns not found when relation is outside the current project' do
+      allow(relation).to receive(:issue_from).and_return(instance_double(Issue, project_id: 3, editable?: true))
+      allow(relation).to receive(:issue_to).and_return(instance_double(Issue, project_id: 4, editable?: true))
+
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'blocks' } },
+            format: :json
+
+      expect(response).to have_http_status(:not_found)
+      expect(JSON.parse(response.body)).to eq('error' => 'Relation not found in this project')
+    end
+
+    it 'rejects an invalid relation type' do
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'duplicates' } },
+            format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('errors' => ['Relation type is invalid'])
+    end
+
+    it 'rejects blank delay for delay-capable relation types' do
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'precedes', delay: '' } },
+            format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('errors' => ['Delay is required for this relation type'])
+    end
+
+    it 'rejects non-integer delay values' do
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'precedes', delay: 'abc' } },
+            format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('errors' => ['Delay must be an integer that is 0 or greater'])
+    end
+
+    it 'rejects negative delay values' do
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'precedes', delay: '-1' } },
+            format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('errors' => ['Delay must be an integer that is 0 or greater'])
+    end
+
+    it 'rejects delay for non-delay relation types when explicitly provided' do
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'blocks', delay: '2' } },
+            format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('errors' => ['Delay is not allowed for this relation type'])
+    end
+  end
+
   describe 'DELETE #destroy_relation' do
     let(:relation) { instance_double(IssueRelation) }
     let(:issue_from) { instance_double(Issue, project_id: 1, editable?: false) }
@@ -324,6 +432,30 @@ RSpec.describe CanvasGanttsController, type: :controller do
 
       expect(response).to have_http_status(:not_found)
       expect(JSON.parse(response.body)).to eq('error' => 'Relation not found in this project')
+    end
+  end
+
+  describe '#build_relations' do
+    it 'serializes relation delay into the frontend payload' do
+      relation = instance_double(
+        IssueRelation,
+        id: 50,
+        issue_from_id: 10,
+        issue_to_id: 20,
+        relation_type: 'precedes',
+        delay: 3
+      )
+      issue = instance_double(Issue, relations: [relation])
+
+      expect(controller.send(:build_relations, [issue])).to eq([
+        {
+          id: 50,
+          from: 10,
+          to: 20,
+          type: 'precedes',
+          delay: 3
+        }
+      ])
     end
   end
 

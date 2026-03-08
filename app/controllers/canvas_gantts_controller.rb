@@ -111,6 +111,10 @@ class CanvasGanttsController < ApplicationController
     label_relation_type: :label_relation_type,
     label_relation_delay_auto_calc_unavailable: :label_relation_delay_auto_calc_unavailable,
     label_relation_delay_invalid: :label_relation_delay_invalid,
+    label_relation_delay_required: :label_relation_delay_required,
+    label_relation_updated: :label_relation_updated,
+    label_relation_delete_confirmation: :label_relation_delete_confirmation,
+    label_relation_title: :label_relation_title,
     label_delay: :label_delay,
     label_add_new_ticket: :label_issue_new,
     label_show_versions: :label_show_versions,
@@ -146,17 +150,19 @@ class CanvasGanttsController < ApplicationController
     author_id category_id estimated_hours project_id tracker_id fixed_version_id parent_issue_id
   ].freeze
   CUSTOM_FIELD_FORMATS = %w[string int float list bool date text].freeze
+  EDITABLE_RELATION_TYPES = %w[precedes follows blocks blocked relates].freeze
+  DELAY_RELATION_TYPES = %w[precedes follows].freeze
 
   menu_item :canvas_gantt
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'vite_asset_helper').to_s
 
   helper RedmineCanvasGantt::ViteAssetHelper
-  accept_api_auth :data, :edit_meta, :update, :bulk_create_subtasks, :destroy_relation
+  accept_api_auth :data, :edit_meta, :update, :bulk_create_subtasks, :update_relation, :destroy_relation
 
   before_action :find_project_by_project_id
   before_action :set_permissions
   before_action :ensure_view_permission, only: [:index, :data, :edit_meta]
-  before_action :ensure_edit_permission, only: [:update, :bulk_create_subtasks, :destroy_relation]
+  before_action :ensure_edit_permission, only: [:update, :bulk_create_subtasks, :update_relation, :destroy_relation]
   skip_forgery_protection only: [:asset]
   skip_before_action :find_project_by_project_id, :set_permissions, only: [:asset]
 
@@ -312,29 +318,38 @@ class CanvasGanttsController < ApplicationController
     render json: { error: l(:error_canvas_gantt_parent_task_not_found) }, status: :not_found
   end
 
+  # PATCH /projects/:project_id/canvas_gantt/relations/:id.json
+  def update_relation
+    relation = IssueRelation.find(params[:id])
+    return unless ensure_relation_editable!(relation)
+
+    relation_type = relation_params[:relation_type].to_s
+    unless EDITABLE_RELATION_TYPES.include?(relation_type)
+      render json: { errors: [l(:error_canvas_gantt_relation_type_invalid)] }, status: :unprocessable_entity
+      return
+    end
+
+    delay = normalize_relation_delay(relation_type)
+    return if performed?
+
+    relation.relation_type = relation_type
+    relation.delay = delay
+
+    if relation.save
+      render json: { status: 'ok', relation: serialize_relation(relation) }
+    else
+      render json: { errors: relation.errors.full_messages }, status: :unprocessable_entity
+    end
+  rescue ActiveRecord::RecordNotFound
+    render json: { error: l(:error_canvas_gantt_relation_not_found) }, status: :not_found
+  rescue => e
+    render json: { error: e.message }, status: :internal_server_error
+  end
+
   # DELETE /projects/:project_id/canvas_gantt/relations/:id.json
   def destroy_relation
     relation = IssueRelation.find(params[:id])
-
-    issue_from = relation.issue_from
-    issue_to = relation.issue_to
-
-    if issue_from.nil? || issue_to.nil?
-      render json: { error: l(:error_canvas_gantt_relation_not_found) }, status: :not_found
-      return
-    end
-
-    # Relations can be cross-project. Allow deletion when either side belongs to this project tree.
-    owned_issue = [issue_from, issue_to].find { |issue| descendant_project_ids.include?(issue.project_id) }
-    unless owned_issue
-      render json: { error: l(:error_canvas_gantt_relation_not_found_in_project) }, status: :not_found
-      return
-    end
-
-    unless @permissions[:editable] && owned_issue.editable?
-      render json: { error: l(:error_canvas_gantt_permission_denied) }, status: :forbidden
-      return
-    end
+    return unless ensure_relation_editable!(relation)
 
     relation.destroy
     render json: { status: 'ok' }
@@ -461,12 +476,7 @@ class CanvasGanttsController < ApplicationController
 
   def build_relations(issues)
     issues.flat_map(&:relations).uniq.map do |relation|
-      {
-        id: relation.id,
-        from: relation.issue_from_id,
-        to: relation.issue_to_id,
-        type: relation.relation_type
-      }
+      serialize_relation(relation)
     end
   end
 
@@ -614,6 +624,77 @@ class CanvasGanttsController < ApplicationController
 
   def permitted_task_params
     params.require(:task).permit(*(TASK_PERMITTED_ATTRIBUTES + [{ custom_field_values: {} }]))
+  end
+
+  def relation_params
+    params.require(:relation).permit(:relation_type, :delay)
+  end
+
+  def serialize_relation(relation)
+    {
+      id: relation.id,
+      from: relation.issue_from_id,
+      to: relation.issue_to_id,
+      type: relation.relation_type,
+      delay: relation.delay
+    }
+  end
+
+  def ensure_relation_editable!(relation)
+    issue_from = relation.issue_from
+    issue_to = relation.issue_to
+
+    if issue_from.nil? || issue_to.nil?
+      render json: { error: l(:error_canvas_gantt_relation_not_found) }, status: :not_found
+      return false
+    end
+
+    owned_issue = [issue_from, issue_to].find { |issue| descendant_project_ids.include?(issue.project_id) }
+    unless owned_issue
+      render json: { error: l(:error_canvas_gantt_relation_not_found_in_project) }, status: :not_found
+      return false
+    end
+
+    unless @permissions[:editable] && owned_issue.editable?
+      render json: { error: l(:error_canvas_gantt_permission_denied) }, status: :forbidden
+      return false
+    end
+
+    true
+  end
+
+  def normalize_relation_delay(relation_type)
+    raw_delay = relation_params[:delay]
+
+    unless DELAY_RELATION_TYPES.include?(relation_type)
+      if relation_delay_provided? && raw_delay.present?
+        render json: { errors: [l(:error_canvas_gantt_relation_delay_not_allowed)] }, status: :unprocessable_entity
+      end
+      return nil
+    end
+
+    if raw_delay.blank?
+      render json: { errors: [l(:error_canvas_gantt_relation_delay_required)] }, status: :unprocessable_entity
+      return nil
+    end
+
+    delay = Integer(raw_delay)
+    if delay.negative?
+      render json: { errors: [l(:error_canvas_gantt_relation_delay_invalid)] }, status: :unprocessable_entity
+      return nil
+    end
+
+    delay
+  rescue ArgumentError, TypeError
+    render json: { errors: [l(:error_canvas_gantt_relation_delay_invalid)] }, status: :unprocessable_entity
+    nil
+  end
+
+  def relation_delay_provided?
+    relation_payload = params[:relation]
+    return false unless relation_payload.respond_to?(:key?)
+
+    relation_payload.key?(:delay) || relation_payload.key?('delay')
   end
 
   def requested_parent_issue_id_provided?

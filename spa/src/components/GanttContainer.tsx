@@ -31,7 +31,7 @@ export const GanttContainer: React.FC = () => {
 
     const isSyncingScroll = useRef(false);
 
-    const { viewport, tasks, relations, selectedTaskId, rowCount, zoomLevel, viewportFromStorage, layoutRows, showVersions, updateViewport, setTasks, setRelations, setVersions, setCustomFields } = useTaskStore();
+    const { viewport, tasks, relations, selectedTaskId, selectedRelationId, draftRelation, rowCount, zoomLevel, viewportFromStorage, layoutRows, showVersions, updateViewport, setTasks, setRelations, setVersions, setCustomFields } = useTaskStore();
     const {
         sidebarWidth,
         setSidebarWidth,
@@ -133,7 +133,7 @@ export const GanttContainer: React.FC = () => {
         if (engines.current.bg) engines.current.bg.render(viewport, zoomLevel, selectedTaskId, tasks);
         if (engines.current.task) engines.current.task.render(viewport, tasks, rowCount, zoomLevel, relations, layoutRows, showPointsOrphans);
         if (engines.current.overlay) engines.current.overlay.render(viewport);
-    }, [viewport, tasks, zoomLevel, showProgressLine, rowCount, relations, selectedTaskId, layoutRows, showVersions, showPointsOrphans]);
+    }, [viewport, tasks, zoomLevel, showProgressLine, rowCount, relations, selectedTaskId, selectedRelationId, draftRelation, layoutRows, showVersions, showPointsOrphans]);
 
     return (
         <>

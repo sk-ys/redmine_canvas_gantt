@@ -1,7 +1,15 @@
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
 import { LayoutEngine } from './LayoutEngine';
-import type { Task } from '../types';
+import type { Relation, Task } from '../types';
+import {
+    buildRelationRenderContext,
+    buildRelationRoutePoints,
+    distanceToPolyline,
+    isRouteVisible,
+    RELATION_HIT_TOLERANCE_PX,
+    shouldRenderRelationsAtZoom
+} from '../renderers/relationGeometry';
 import { snapToUtcDay } from '../utils/time';
 
 type DragMode = 'none' | 'pan' | 'task-move' | 'task-resize-start' | 'task-resize-end';
@@ -9,6 +17,7 @@ const TASK_MOVE_CURSOR = 'move';
 const TASK_RESIZE_CURSOR = 'ew-resize';
 const TASK_DISABLED_PARENT_CURSOR = 'pointer';
 const DEFAULT_CURSOR = 'default';
+const RELATION_ROW_BUFFER = 50;
 
 interface DragState {
     mode: DragMode;
@@ -128,16 +137,55 @@ export class InteractionEngine {
         return snapToUtcDay(timestamp);
     }
 
-    private getCursorForHit(hit: { task: Task | null; region: 'body' | 'start' | 'end' }): string {
+    private getCursorForHit(hit: { task: Task | null; region: 'body' | 'start' | 'end'; relation: Relation | null }): string {
         if (this.drag.mode === 'task-move') return TASK_MOVE_CURSOR;
         if (this.drag.mode === 'task-resize-start' || this.drag.mode === 'task-resize-end') return TASK_RESIZE_CURSOR;
         if (this.drag.mode === 'pan') return DEFAULT_CURSOR;
 
+        if (hit.relation) return 'pointer';
         if (!hit.task) return DEFAULT_CURSOR;
         if (hit.task.hasChildren) return TASK_DISABLED_PARENT_CURSOR;
         if (!hit.task.editable) return DEFAULT_CURSOR;
         if (hit.region === 'start' || hit.region === 'end') return TASK_RESIZE_CURSOR;
         return TASK_MOVE_CURSOR;
+    }
+
+    private hitTestRelation(x: number, y: number): Relation | null {
+        const { tasks, relations, viewport, rowCount, zoomLevel } = useTaskStore.getState();
+        if (!shouldRenderRelationsAtZoom(zoomLevel)) {
+            return null;
+        }
+
+        const totalRows = rowCount || tasks.length;
+        const [startRow, endRow] = LayoutEngine.getVisibleRowRange(viewport, totalRows);
+        const bufferedTasks = LayoutEngine.sliceTasksInRowRange(
+            tasks,
+            Math.max(0, startRow - RELATION_ROW_BUFFER),
+            Math.min(totalRows - 1, endRow + RELATION_ROW_BUFFER)
+        );
+        const context = buildRelationRenderContext(bufferedTasks, viewport, zoomLevel);
+        const worldPoint = {
+            x: x + viewport.scrollX,
+            y: y + viewport.scrollY
+        };
+
+        let match: Relation | null = null;
+        let bestDistance = Infinity;
+
+        relations.forEach((relation) => {
+            const points = buildRelationRoutePoints(relation, context, viewport);
+            if (!points || !isRouteVisible(points, viewport)) {
+                return;
+            }
+
+            const distance = distanceToPolyline(worldPoint, points);
+            if (distance <= RELATION_HIT_TOLERANCE_PX && distance < bestDistance) {
+                bestDistance = distance;
+                match = relation;
+            }
+        });
+
+        return match;
     }
 
     private handleMouseDown = (e: MouseEvent) => {
@@ -155,6 +203,13 @@ export class InteractionEngine {
         const y = e.clientY - rect.top;
 
         const hit = this.hitTest(x, y);
+        if (!hit.task) {
+            const relation = this.hitTestRelation(x, y);
+            if (relation) {
+                useTaskStore.getState().selectRelation(relation.id);
+                return;
+            }
+        }
 
         if (hit.task && hit.task.editable) {
             // Check if parent task
@@ -226,6 +281,7 @@ export class InteractionEngine {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         const hit = this.hitTest(x, y);
+        const relationHit = this.hitTestRelation(x, y);
 
         // Skip hover update during task drag to keep tooltip visible
         const isTaskDragging = this.drag.mode === 'task-move' ||
@@ -259,7 +315,7 @@ export class InteractionEngine {
             }
         }
 
-        this.container.style.cursor = this.getCursorForHit(hit);
+        this.container.style.cursor = this.getCursorForHit({ ...hit, relation: relationHit });
 
         if (this.drag.mode === 'none') return;
 

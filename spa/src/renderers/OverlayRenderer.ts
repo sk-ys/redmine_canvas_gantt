@@ -1,20 +1,17 @@
-import type { Viewport, Task, Relation, ZoomLevel } from '../types';
+import type { Viewport, Task, Relation, DraftRelation, ZoomLevel } from '../types';
 import { LayoutEngine } from '../engines/LayoutEngine';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
-import { routeDependencyFS, type Point, type Rect, type RouteParams } from './dependencyRouting';
-import { filterRelationsForSelected, getOverflowBadgeLabel, MAX_SELECTED_RELATIONS } from './dependencyIndicators';
+import {
+    buildRelationRenderContext,
+    buildRelationRoutePoints,
+    isRouteVisible,
+    shouldRenderRelationsAtZoom
+} from './relationGeometry';
 
 export class OverlayRenderer {
     private canvas: HTMLCanvasElement;
     private static readonly DEPENDENCY_ROW_BUFFER = 50;
-    private static readonly DEPENDENCY_ROUTE_PARAMS: RouteParams = {
-        outset: 20,
-        inset: 12,
-        step: 24,
-        maxShift: 8
-    };
-    private dependencyCache = new Map<string, { key: string; points: Point[] }>();
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -26,10 +23,7 @@ export class OverlayRenderer {
 
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        const { tasks, relations, selectedTaskId, rowCount, zoomLevel } = useTaskStore.getState();
-
-        // Clean up stale cache entries for removed relations
-        this.cleanupDependencyCache(relations);
+        const { tasks, relations, draftRelation, selectedRelationId, selectedTaskId, rowCount, zoomLevel } = useTaskStore.getState();
         const totalRows = rowCount || tasks.length;
         const [startRow, endRow] = LayoutEngine.getVisibleRowRange(viewport, totalRows);
 
@@ -40,26 +34,8 @@ export class OverlayRenderer {
             Math.min(totalRows - 1, endRow + OverlayRenderer.DEPENDENCY_ROW_BUFFER)
         );
 
-        // Draw dependency lines
-        if (zoomLevel === 2) {
-            this.drawDependencies(ctx, viewport, bufferedTasks, relations, zoomLevel);
-        } else if (zoomLevel === 1 && selectedTaskId) {
-            const { relations: limitedRelations, overflowCount } = filterRelationsForSelected(
-                relations,
-                selectedTaskId,
-                MAX_SELECTED_RELATIONS
-            );
-            this.drawDependencies(ctx, viewport, bufferedTasks, limitedRelations, zoomLevel);
-
-            if (overflowCount > 0) {
-                const selectedTask = tasks.find(task => task.id === selectedTaskId);
-                if (selectedTask) {
-                    const bounds = LayoutEngine.getTaskBounds(selectedTask, viewport, 'bar', zoomLevel);
-                    if (this.isBoundsVisible(bounds, viewport)) {
-                        this.drawOverflowBadge(ctx, bounds, getOverflowBadgeLabel(overflowCount));
-                    }
-                }
-            }
+        if (shouldRenderRelationsAtZoom(zoomLevel)) {
+            this.drawDependencies(ctx, viewport, bufferedTasks, relations, draftRelation, zoomLevel, selectedRelationId);
         }
 
         // Draw selection highlight
@@ -197,75 +173,29 @@ export class OverlayRenderer {
         viewport: Viewport,
         tasks: Task[],
         relations: Relation[],
-        zoomLevel: ZoomLevel
+        draftRelation: DraftRelation | null,
+        zoomLevel: ZoomLevel,
+        selectedRelationId: string | null
     ) {
-        ctx.strokeStyle = '#888';
-        ctx.lineWidth = 1.5;
+        const context = buildRelationRenderContext(tasks, viewport, zoomLevel);
+        const drawableRelations = draftRelation ? [...relations, { id: '__draft__', ...draftRelation }] : relations;
 
-        const taskById = new Map<string, Task>(tasks.map((t) => [t.id, t]));
-        const rectById = new Map<string, Rect>();
-        const allRects: Array<{ id: string; rect: Rect }> = [];
-
-        for (const task of tasks) {
-            const bounds = LayoutEngine.getTaskBounds(task, viewport, 'bar', zoomLevel);
-            const rect = {
-                x: bounds.x + viewport.scrollX,
-                y: bounds.y + viewport.scrollY,
-                width: bounds.width,
-                height: bounds.height
-            };
-            rectById.set(task.id, rect);
-            allRects.push({ id: task.id, rect });
-        }
-
-        for (const rel of relations) {
-            const fromTask = taskById.get(rel.from);
-            const toTask = taskById.get(rel.to);
-            if (!fromTask || !toTask) continue;
-
-            // Skip drawing if dates are missing (prevents drawing lines from (0,0))
-            if (!Number.isFinite(fromTask.startDate) || !Number.isFinite(fromTask.dueDate) ||
-                !Number.isFinite(toTask.startDate) || !Number.isFinite(toTask.dueDate)) {
-                continue;
+        drawableRelations.forEach((relation) => {
+            const points = buildRelationRoutePoints(relation, context, viewport);
+            if (!points || !isRouteVisible(points, viewport)) {
+                return;
             }
 
-            const fromRect = rectById.get(rel.from);
-            const toRect = rectById.get(rel.to);
-            if (!fromRect || !toRect) continue;
-
-            const routeParams: RouteParams = {
-                ...OverlayRenderer.DEPENDENCY_ROUTE_PARAMS,
-                step: viewport.rowHeight
-            };
-            const cacheKey = buildCacheKey(fromRect, toRect, routeParams);
-            const cached = this.dependencyCache.get(rel.id);
-            let points = cached?.key === cacheKey ? cached.points : undefined;
-
-            if (!points) {
-                const obstacles: Rect[] = [];
-                for (const rectEntry of allRects) {
-                    if (rectEntry.id === rel.from || rectEntry.id === rel.to) continue;
-                    obstacles.push(rectEntry.rect);
-                }
-                const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-                points = routeDependencyFS(
-                    fromRect,
-                    toRect,
-                    obstacles,
-                    { scrollY: viewport.scrollY, height: viewport.height },
-                    {
-                        rowHeight: viewport.rowHeight,
-                        fromRowIndex: fromTask.rowIndex,
-                        toRowIndex: toTask.rowIndex,
-                        columnWidth: ONE_DAY_MS * viewport.scale
-                    },
-                    routeParams
-                );
-                this.dependencyCache.set(rel.id, { key: cacheKey, points });
+            const isDraft = relation.id === '__draft__';
+            const isSelected = isDraft || relation.id === selectedRelationId;
+            ctx.save();
+            ctx.strokeStyle = isSelected ? '#2563eb' : '#888';
+            ctx.lineWidth = isSelected ? 3 : 1.5;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            if (isDraft) {
+                ctx.setLineDash([6, 4]);
             }
-
-            if (!points) continue;
-            if (!isRouteVisible(points, viewport)) continue;
 
             ctx.beginPath();
             const first = points[0];
@@ -275,13 +205,27 @@ export class OverlayRenderer {
                 ctx.lineTo(point.x - viewport.scrollX, point.y - viewport.scrollY);
             }
             ctx.stroke();
+            ctx.restore();
 
-            this.drawArrowHead(ctx, points[points.length - 2], points[points.length - 1], viewport);
-        }
+            this.drawArrowHead(
+                ctx,
+                points[points.length - 2],
+                points[points.length - 1],
+                viewport,
+                isSelected ? '#2563eb' : '#888',
+                isSelected ? 7 : 6
+            );
+        });
     }
 
-    private drawArrowHead(ctx: CanvasRenderingContext2D, from: Point, to: Point, viewport: Viewport) {
-        const size = 6;
+    private drawArrowHead(
+        ctx: CanvasRenderingContext2D,
+        from: { x: number; y: number },
+        to: { x: number; y: number },
+        viewport: Viewport,
+        fillStyle: string,
+        size: number
+    ) {
         const fromX = from.x - viewport.scrollX;
         const fromY = from.y - viewport.scrollY;
         const toX = to.x - viewport.scrollX;
@@ -295,57 +239,8 @@ export class OverlayRenderer {
         ctx.lineTo(toX + Math.cos(a1) * size, toY + Math.sin(a1) * size);
         ctx.lineTo(toX + Math.cos(a2) * size, toY + Math.sin(a2) * size);
         ctx.closePath();
-        ctx.fillStyle = '#888';
+        ctx.fillStyle = fillStyle;
         ctx.fill();
-    }
-
-    private drawOverflowBadge(ctx: CanvasRenderingContext2D, bounds: { x: number; y: number; width: number; height: number }, label: string) {
-        if (!label) return;
-
-        ctx.save();
-        ctx.font = '11px sans-serif';
-        const paddingX = 6;
-        const textMetrics = ctx.measureText(label);
-        const textWidth = Math.ceil(textMetrics.width);
-        const badgeWidth = textWidth + paddingX * 2;
-        const badgeHeight = Math.max(16, Math.round(bounds.height * 0.6));
-
-        const badgeX = bounds.x + bounds.width + 6;
-        const badgeY = bounds.y + (bounds.height - badgeHeight) / 2;
-        const radius = 6;
-
-        ctx.beginPath();
-        ctx.moveTo(badgeX + radius, badgeY);
-        ctx.lineTo(badgeX + badgeWidth - radius, badgeY);
-        ctx.quadraticCurveTo(badgeX + badgeWidth, badgeY, badgeX + badgeWidth, badgeY + radius);
-        ctx.lineTo(badgeX + badgeWidth, badgeY + badgeHeight - radius);
-        ctx.quadraticCurveTo(badgeX + badgeWidth, badgeY + badgeHeight, badgeX + badgeWidth - radius, badgeY + badgeHeight);
-        ctx.lineTo(badgeX + radius, badgeY + badgeHeight);
-        ctx.quadraticCurveTo(badgeX, badgeY + badgeHeight, badgeX, badgeY + badgeHeight - radius);
-        ctx.lineTo(badgeX, badgeY + radius);
-        ctx.quadraticCurveTo(badgeX, badgeY, badgeX + radius, badgeY);
-        ctx.closePath();
-
-        ctx.fillStyle = '#e8f0fe';
-        ctx.fill();
-        ctx.strokeStyle = '#bcd3fb';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.fillStyle = '#1a73e8';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, badgeX + badgeWidth / 2, badgeY + badgeHeight / 2);
-        ctx.restore();
-    }
-
-    private isBoundsVisible(bounds: { x: number; y: number; width: number; height: number }, viewport: Viewport): boolean {
-        return !(
-            bounds.x + bounds.width < 0 ||
-            bounds.x > viewport.width ||
-            bounds.y + bounds.height < 0 ||
-            bounds.y > viewport.height
-        );
     }
 
     private drawSelectionHighlight(ctx: CanvasRenderingContext2D, viewport: Viewport, task: Task, zoomLevel: ZoomLevel) {
@@ -382,54 +277,4 @@ export class OverlayRenderer {
         }
     }
 
-    /**
-     * Removes stale cache entries for relations that no longer exist.
-     * This prevents memory leaks when relations are deleted.
-     */
-    private cleanupDependencyCache(currentRelations: Relation[]) {
-        const activeIds = new Set(currentRelations.map(r => r.id));
-        for (const cachedId of this.dependencyCache.keys()) {
-            if (!activeIds.has(cachedId)) {
-                this.dependencyCache.delete(cachedId);
-            }
-        }
-    }
-}
-
-function buildCacheKey(fromRect: Rect, toRect: Rect, params: RouteParams): string {
-    return [
-        fromRect.x,
-        fromRect.y,
-        fromRect.width,
-        fromRect.height,
-        toRect.x,
-        toRect.y,
-        toRect.width,
-        toRect.height,
-        params.outset,
-        params.inset,
-        params.step,
-        params.maxShift
-    ].join('|');
-}
-
-function isRouteVisible(points: Point[], viewport: Viewport): boolean {
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-
-    for (const point of points) {
-        minX = Math.min(minX, point.x);
-        maxX = Math.max(maxX, point.x);
-        minY = Math.min(minY, point.y);
-        maxY = Math.max(maxY, point.y);
-    }
-
-    const viewLeft = viewport.scrollX;
-    const viewRight = viewport.scrollX + viewport.width;
-    const viewTop = viewport.scrollY;
-    const viewBottom = viewport.scrollY + viewport.height;
-
-    return !(maxX < viewLeft || minX > viewRight || maxY < viewTop || minY > viewBottom);
 }

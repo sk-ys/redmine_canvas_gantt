@@ -4,6 +4,7 @@ import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
 import { LayoutEngine } from './LayoutEngine';
 import type { Relation, Task } from '../types';
+import { buildRelationRenderContext, buildRelationRoutePoints, getPolylineMidpoint } from '../renderers/relationGeometry';
 
 vi.mock('../api/client', () => ({
     apiClient: {
@@ -303,6 +304,158 @@ describe('InteractionEngine cursor behavior', () => {
         expect(container.style.cursor).toBe('move');
 
         window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        engine.detach();
+        container.remove();
+    });
+});
+
+describe('InteractionEngine relation selection', () => {
+    it('selects a visible relation when clicking near its route', () => {
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        setViewport({ scale: 1 / DAY_MS, rowHeight: 36 });
+        const container = createContainer();
+        const engine = new InteractionEngine(container);
+
+        const task1 = baseTask({ id: '1', rowIndex: 0, startDate: 0, dueDate: DAY_MS });
+        const task2 = baseTask({ id: '2', rowIndex: 1, startDate: DAY_MS * 4, dueDate: DAY_MS * 5 });
+        const relation: Relation = { id: 'r1', from: '1', to: '2', type: 'precedes' };
+
+        useTaskStore.setState({
+            allTasks: [task1, task2],
+            tasks: [task1, task2],
+            relations: [relation],
+            layoutRows: [],
+            rowCount: 2,
+            selectedTaskId: null,
+            selectedRelationId: null,
+            draftRelation: null
+        });
+
+        const { viewport, zoomLevel, tasks } = useTaskStore.getState();
+        const context = buildRelationRenderContext(tasks, viewport, zoomLevel);
+        const points = buildRelationRoutePoints(relation, context, viewport);
+        expect(points).toBeTruthy();
+        const midpoint = getPolylineMidpoint(points!);
+
+        container.dispatchEvent(new MouseEvent('mousedown', {
+            clientX: midpoint.x - viewport.scrollX,
+            clientY: midpoint.y - viewport.scrollY,
+            bubbles: true
+        }));
+
+        expect(useTaskStore.getState().selectedRelationId).toBe('r1');
+
+        engine.detach();
+        container.remove();
+    });
+
+    it('switches relation selection when clicking a different relation', () => {
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        setViewport({ scale: 1 / DAY_MS, rowHeight: 36 });
+        const container = createContainer();
+        const engine = new InteractionEngine(container);
+
+        const task1 = baseTask({ id: '1', rowIndex: 0, startDate: 0, dueDate: DAY_MS });
+        const task2 = baseTask({ id: '2', rowIndex: 1, startDate: DAY_MS * 4, dueDate: DAY_MS * 5 });
+        const task3 = baseTask({ id: '3', rowIndex: 2, startDate: DAY_MS * 8, dueDate: DAY_MS * 9 });
+        const relation1: Relation = { id: 'r1', from: '1', to: '2', type: 'precedes' };
+        const relation2: Relation = { id: 'r2', from: '2', to: '3', type: 'precedes' };
+
+        useTaskStore.setState({
+            allTasks: [task1, task2, task3],
+            tasks: [task1, task2, task3],
+            relations: [relation1, relation2],
+            layoutRows: [],
+            rowCount: 3,
+            selectedTaskId: null,
+            selectedRelationId: 'r1',
+            draftRelation: null
+        });
+
+        const { viewport, zoomLevel, tasks } = useTaskStore.getState();
+        const context = buildRelationRenderContext(tasks, viewport, zoomLevel);
+        const points = buildRelationRoutePoints(relation2, context, viewport);
+        expect(points).toBeTruthy();
+        const midpoint = getPolylineMidpoint(points!);
+
+        container.dispatchEvent(new MouseEvent('mousedown', {
+            clientX: midpoint.x - viewport.scrollX,
+            clientY: midpoint.y - viewport.scrollY,
+            bubbles: true
+        }));
+
+        expect(useTaskStore.getState().selectedRelationId).toBe('r2');
+
+        engine.detach();
+        container.remove();
+    });
+
+    it('clears relation selection when clicking empty space', () => {
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        setViewport({ scale: 1 / DAY_MS, rowHeight: 36 });
+        const container = createContainer();
+        const engine = new InteractionEngine(container);
+
+        const task1 = baseTask({ id: '1', rowIndex: 0, startDate: 0, dueDate: DAY_MS });
+        const task2 = baseTask({ id: '2', rowIndex: 1, startDate: DAY_MS * 4, dueDate: DAY_MS * 5 });
+        const relation: Relation = { id: 'r1', from: '1', to: '2', type: 'precedes' };
+
+        useTaskStore.setState({
+            allTasks: [task1, task2],
+            tasks: [task1, task2],
+            relations: [relation],
+            layoutRows: [],
+            rowCount: 2,
+            selectedTaskId: null,
+            selectedRelationId: 'r1',
+            draftRelation: null
+        });
+
+        container.dispatchEvent(new MouseEvent('mousedown', {
+            clientX: 780,
+            clientY: 580,
+            bubbles: true
+        }));
+
+        expect(useTaskStore.getState().selectedRelationId).toBeNull();
+        expect(useTaskStore.getState().selectedTaskId).toBeNull();
+
+        engine.detach();
+        container.remove();
+    });
+
+    it('selects a task and clears relation selection when clicking a task', () => {
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        setViewport({ scale: 1 / DAY_MS, rowHeight: 36 });
+        const container = createContainer();
+        const engine = new InteractionEngine(container);
+
+        const task1 = baseTask({ id: '1', rowIndex: 0, startDate: 0, dueDate: DAY_MS });
+        const task2 = baseTask({ id: '2', rowIndex: 1, startDate: DAY_MS * 4, dueDate: DAY_MS * 5 });
+        const relation: Relation = { id: 'r1', from: '1', to: '2', type: 'precedes' };
+
+        useTaskStore.setState({
+            allTasks: [task1, task2],
+            tasks: [task1, task2],
+            relations: [relation],
+            layoutRows: [],
+            rowCount: 2,
+            selectedTaskId: null,
+            selectedRelationId: 'r1',
+            draftRelation: null
+        });
+
+        const { viewport, zoomLevel } = useTaskStore.getState();
+        const bounds = LayoutEngine.getTaskBounds(task1, viewport, 'hit', zoomLevel);
+        container.dispatchEvent(new MouseEvent('mousedown', {
+            clientX: bounds.x + bounds.width / 2,
+            clientY: bounds.y + bounds.height / 2,
+            bubbles: true
+        }));
+
+        expect(useTaskStore.getState().selectedTaskId).toBe('1');
+        expect(useTaskStore.getState().selectedRelationId).toBeNull();
+
         engine.detach();
         container.remove();
     });
