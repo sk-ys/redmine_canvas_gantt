@@ -20,6 +20,7 @@ import {
     supportsDelayForUiType,
     toEditableRelationView,
     toRawRelationType,
+    validateRelationDelayConsistency,
     type RelationDirection
 } from '../utils/relationEditing';
 
@@ -121,6 +122,17 @@ const RelationEditorPopover: React.FC<{
             delay = parsedDelay;
         }
 
+        const consistency = validateRelationDelayConsistency(
+            rawType,
+            delay,
+            taskById.get(target.relation.from),
+            taskById.get(target.relation.to)
+        );
+        if (!consistency.valid) {
+            setError(consistency.message);
+            return;
+        }
+
         const duplicate = relations.some((relation) => {
             if (!target.isDraft && relation.id === target.relationId) {
                 return false;
@@ -143,7 +155,7 @@ const RelationEditorPopover: React.FC<{
             setError(saveError instanceof Error ? saveError.message : (i18n.t('label_failed_to_save') || 'Failed to save'));
             setSaving(false);
         }
-    }, [delayValue, onCreate, onUpdate, relationType, relations, supportsDelay, target]);
+    }, [delayValue, onCreate, onUpdate, relationType, relations, supportsDelay, target, taskById]);
 
     const handleDelete = React.useCallback(async () => {
         if (!target.relationId) return;

@@ -144,7 +144,7 @@ describe('HtmlOverlay', () => {
         fireEvent.click(screen.getByTestId('relation-save-button'));
 
         await waitFor(() => {
-            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, 2);
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, 0);
             expect(useTaskStore.getState().relations).toEqual([relation]);
             expect(useTaskStore.getState().draftRelation).toBeNull();
         });
@@ -268,7 +268,7 @@ describe('HtmlOverlay', () => {
         fireEvent.mouseUp(window);
 
         await waitFor(() => {
-            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, 2);
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, 0);
             expect(useTaskStore.getState().relations).toEqual([relation]);
         });
         expect(screen.queryByTestId('relation-editor')).not.toBeInTheDocument();
@@ -317,6 +317,67 @@ describe('HtmlOverlay', () => {
         expect(apiClient.createRelation).not.toHaveBeenCalled();
     });
 
+    it('blocks draft relation save when delay does not match current task dates', async () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setDraftRelation({
+                from: '1',
+                to: '2',
+                type: RelationType.Precedes,
+                delay: 3,
+                anchor: { x: 100, y: 80 }
+            });
+        });
+
+        render(<HtmlOverlay />);
+        fireEvent.click(await screen.findByTestId('relation-save-button'));
+
+        expect(await screen.findByTestId('relation-error')).toHaveTextContent('Delay does not match the current task dates.');
+        expect(apiClient.createRelation).not.toHaveBeenCalled();
+    });
+
+    it('blocks follows relation update when delay does not match current task dates', async () => {
+        const invalidFollowsRelation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Follows, delay: 0 };
+
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setRelations([invalidFollowsRelation]);
+            useTaskStore.getState().selectRelation('rel-1');
+        });
+
+        render(<HtmlOverlay />);
+        fireEvent.click(await screen.findByTestId('relation-save-button'));
+
+        expect(await screen.findByTestId('relation-error')).toHaveTextContent('Delay does not match the current task dates.');
+        expect(apiClient.updateRelation).not.toHaveBeenCalled();
+    });
+
+    it('allows save when dependency dates are missing', async () => {
+        const relation: Relation = { id: 'rel-1', from: '1', to: '2', type: RelationType.Precedes, delay: 0 };
+        vi.mocked(apiClient.createRelation).mockResolvedValue(relation);
+
+        act(() => {
+            useTaskStore.getState().setTasks([
+                { ...task1, dueDate: undefined },
+                task2
+            ]);
+            useTaskStore.getState().setDraftRelation({
+                from: '1',
+                to: '2',
+                type: RelationType.Precedes,
+                delay: 0,
+                anchor: { x: 100, y: 80 }
+            });
+        });
+
+        render(<HtmlOverlay />);
+        fireEvent.click(await screen.findByTestId('relation-save-button'));
+
+        await waitFor(() => {
+            expect(apiClient.createRelation).toHaveBeenCalledWith('1', '2', RelationType.Precedes, 0);
+        });
+    });
+
     it('recalculates and clears delay as relation type changes in the draft editor', async () => {
         act(() => {
             useTaskStore.getState().setTasks([task1, task2]);
@@ -339,7 +400,7 @@ describe('HtmlOverlay', () => {
         expect(screen.queryByTestId('relation-delay-input')).not.toBeInTheDocument();
 
         fireEvent.change(relationTypeSelect, { target: { value: RelationType.Precedes } });
-        expect(await screen.findByTestId('relation-delay-input')).toHaveValue('2');
+        expect(await screen.findByTestId('relation-delay-input')).toHaveValue('0');
     });
 
     it('deletes a relation from the popover after confirmation', async () => {

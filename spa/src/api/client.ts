@@ -493,12 +493,12 @@ export const apiClient = {
     createRelation: async (fromId: string, toId: string, type: string, delay?: number): Promise<Relation> => {
         const config = getConfig();
 
-        const redmineBase = config.redmineBase || '';
-        const response = await fetch(`${redmineBase}/issues/${fromId}/relations.json`, {
+        const response = await fetch(`${config.apiBase}/relations.json`, {
             method: 'POST',
             headers: buildJsonHeaders(config, true),
             body: JSON.stringify({
                 relation: {
+                    issue_from_id: fromId,
                     issue_to_id: toId,
                     relation_type: type,
                     ...(typeof delay === 'number' ? { delay } : {})

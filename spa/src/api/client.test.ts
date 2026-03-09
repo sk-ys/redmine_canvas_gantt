@@ -90,6 +90,9 @@ describe('apiClient.createRelation', () => {
         vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
         const rel = await apiClient.createRelation('10', '11', 'precedes');
+        expect(fetchMock).toHaveBeenCalledWith('/projects/1/canvas_gantt/relations.json', expect.objectContaining({
+            method: 'POST'
+        }));
         expect(rel).toEqual({ id: '1', from: '10', to: '11', type: 'precedes', delay: undefined });
     });
 
@@ -109,6 +112,9 @@ describe('apiClient.createRelation', () => {
         vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
         const rel = await apiClient.createRelation('10', '11', 'precedes');
+        expect(fetchMock).toHaveBeenCalledWith('/projects/1/canvas_gantt/relations.json', expect.objectContaining({
+            method: 'POST'
+        }));
         expect(rel).toEqual({ id: '2', from: '10', to: '11', type: 'precedes', delay: 0 });
     });
 });

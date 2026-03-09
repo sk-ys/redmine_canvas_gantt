@@ -57,6 +57,7 @@ window.RedmineCanvasGantt = {
         label_relation_updated: 'Dependency updated',
         label_relation_delay_invalid: 'Delay must be 0 or greater',
         label_relation_delay_required: 'Delay is required for this relation type',
+        label_relation_delay_mismatch: 'Delay does not match the current task dates.',
         label_relation_remove_failed: 'Failed to remove dependency',
         label_relation_removed: 'Dependency removed',
         label_relation_added: 'Dependency created',
