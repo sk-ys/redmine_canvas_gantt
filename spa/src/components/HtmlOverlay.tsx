@@ -40,6 +40,12 @@ type RelationPopoverTarget = {
 };
 
 const RELATION_POPOVER_OFFSET = 12;
+const RESIZE_HANDLE_HOVER_BG = 'rgba(26, 115, 232, 0.18)';
+const RESIZE_HANDLE_HOVER_BORDER = 'rgba(26, 115, 232, 0.68)';
+const RESIZE_HANDLE_SELECTED_BG = 'rgba(26, 115, 232, 0.24)';
+const RESIZE_HANDLE_SELECTED_BORDER = 'rgba(26, 115, 232, 0.82)';
+const RESIZE_HANDLE_GRIP = 'rgba(26, 115, 232, 0.92)';
+const RESIZE_HANDLE_SHADOW = '0 1px 3px rgba(26, 115, 232, 0.18)';
 
 const parseDelayInput = (value: string): number | null => {
     if (!/^\d+$/.test(value.trim())) {
@@ -344,6 +350,7 @@ const RelationEditorPopover: React.FC<{
 
 export const HtmlOverlay: React.FC = () => {
     const hoveredTaskId = useTaskStore(state => state.hoveredTaskId);
+    const selectedTaskId = useTaskStore(state => state.selectedTaskId);
     const contextMenu = useTaskStore(state => state.contextMenu);
     const tasks = useTaskStore(state => state.tasks);
     const relations = useTaskStore(state => state.relations);
@@ -764,6 +771,13 @@ export const HtmlOverlay: React.FC = () => {
         useTaskStore.getState().setContextMenu(null);
     }, [canDropToRoot, moveTaskToRoot]);
 
+    const isResizableTask = React.useCallback((task: Task) => (
+        task.editable &&
+        !task.hasChildren &&
+        Number.isFinite(task.startDate) &&
+        Number.isFinite(task.dueDate)
+    ), []);
+
     return (
         <>
             <div
@@ -771,11 +785,18 @@ export const HtmlOverlay: React.FC = () => {
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
             >
                 {visibleTasks.map((task) => {
-                    if (task.id !== hoveredTaskId) return null;
+                    const isDependencyDragging = dragDraft !== null;
+                    const showDependencyHandles = task.id === hoveredTaskId;
+                    const showResizeHandles = !isDependencyDragging && isResizableTask(task) && (task.id === hoveredTaskId || task.id === selectedTaskId);
+                    if (!showDependencyHandles && !showResizeHandles) return null;
 
                     const bounds = LayoutEngine.getTaskBounds(task, viewport, 'hit', zoomLevel);
                     const centerY = bounds.y + bounds.height / 2;
                     const handleOffset = 12;
+                    const resizeHandleWidth = Math.max(8, Math.min(12, Math.floor(bounds.width / 3)));
+                    const resizeHandleHeight = Math.max(18, Math.min(28, bounds.height - 4));
+                    const resizeHandleTop = bounds.y + (bounds.height - resizeHandleHeight) / 2;
+                    const isSelectedResizeHandle = task.id === selectedTaskId && task.id !== hoveredTaskId;
                     const baseStyle: React.CSSProperties = {
                         position: 'absolute',
                         top: centerY - 5,
@@ -790,22 +811,69 @@ export const HtmlOverlay: React.FC = () => {
                         zIndex: 100
                     };
 
+                    const resizeHandleBaseStyle: React.CSSProperties = {
+                        position: 'absolute',
+                        top: resizeHandleTop,
+                        width: resizeHandleWidth,
+                        height: resizeHandleHeight,
+                        borderRadius: 999,
+                        background: isSelectedResizeHandle ? RESIZE_HANDLE_SELECTED_BG : RESIZE_HANDLE_HOVER_BG,
+                        border: `1px solid ${isSelectedResizeHandle ? RESIZE_HANDLE_SELECTED_BORDER : RESIZE_HANDLE_HOVER_BORDER}`,
+                        boxShadow: RESIZE_HANDLE_SHADOW,
+                        pointerEvents: 'auto',
+                        cursor: 'ew-resize',
+                        zIndex: 95,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    };
+
                     return (
                         <React.Fragment key={`handles-${task.id}`}>
-                            <div
-                                className="dependency-handle"
-                                style={{ ...baseStyle, left: bounds.x - handleOffset - 5 }}
-                                onMouseDown={() => {
-                                    startDraft(task.id, bounds.x, centerY);
-                                }}
-                            />
-                            <div
-                                className="dependency-handle"
-                                style={{ ...baseStyle, left: bounds.x + bounds.width + handleOffset - 5 }}
-                                onMouseDown={() => {
-                                    startDraft(task.id, bounds.x + bounds.width, centerY);
-                                }}
-                            />
+                            {showResizeHandles && (
+                                <>
+                                    <div
+                                        className="task-resize-handle"
+                                        data-region="start"
+                                        data-testid={`task-resize-handle-start-${task.id}`}
+                                        style={{ ...resizeHandleBaseStyle, left: bounds.x - resizeHandleWidth / 2 }}
+                                    >
+                                        <div style={{ display: 'flex', gap: 2 }}>
+                                            <span style={{ width: 1, height: 10, background: RESIZE_HANDLE_GRIP }} />
+                                            <span style={{ width: 1, height: 10, background: RESIZE_HANDLE_GRIP }} />
+                                        </div>
+                                    </div>
+                                    <div
+                                        className="task-resize-handle"
+                                        data-region="end"
+                                        data-testid={`task-resize-handle-end-${task.id}`}
+                                        style={{ ...resizeHandleBaseStyle, left: bounds.x + bounds.width - resizeHandleWidth / 2 }}
+                                    >
+                                        <div style={{ display: 'flex', gap: 2 }}>
+                                            <span style={{ width: 1, height: 10, background: RESIZE_HANDLE_GRIP }} />
+                                            <span style={{ width: 1, height: 10, background: RESIZE_HANDLE_GRIP }} />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                            {showDependencyHandles && (
+                                <>
+                                    <div
+                                        className="dependency-handle"
+                                        style={{ ...baseStyle, left: bounds.x - handleOffset - 5 }}
+                                        onMouseDown={() => {
+                                            startDraft(task.id, bounds.x, centerY);
+                                        }}
+                                    />
+                                    <div
+                                        className="dependency-handle"
+                                        style={{ ...baseStyle, left: bounds.x + bounds.width + handleOffset - 5 }}
+                                        onMouseDown={() => {
+                                            startDraft(task.id, bounds.x + bounds.width, centerY);
+                                        }}
+                                    />
+                                </>
+                            )}
                         </React.Fragment>
                     );
                 })}

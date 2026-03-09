@@ -151,6 +151,96 @@ describe('HtmlOverlay', () => {
         });
     });
 
+    it('shows resize handles for a hovered editable leaf task', () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setHoveredTask('1');
+        });
+
+        render(<HtmlOverlay />);
+
+        const startHandle = screen.getByTestId('task-resize-handle-start-1');
+        expect(startHandle).toBeInTheDocument();
+        expect(screen.getByTestId('task-resize-handle-end-1')).toBeInTheDocument();
+        expect(startHandle.getAttribute('style')).toContain('background: rgba(26, 115, 232, 0.18)');
+        expect(startHandle.getAttribute('style')).toContain('border: 1px solid rgba(26, 115, 232, 0.68)');
+    });
+
+    it('keeps resize handles visible for a selected task even when not hovered', () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().selectTask('1');
+        });
+
+        render(<HtmlOverlay />);
+
+        const startHandle = screen.getByTestId('task-resize-handle-start-1');
+        expect(startHandle).toBeInTheDocument();
+        expect(screen.getByTestId('task-resize-handle-end-1')).toBeInTheDocument();
+        expect(startHandle.getAttribute('style')).toContain('background: rgba(26, 115, 232, 0.24)');
+        expect(startHandle.getAttribute('style')).toContain('border: 1px solid rgba(26, 115, 232, 0.82)');
+    });
+
+    it('hides resize handles while dragging a dependency and restores them on mouseup', () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().setHoveredTask('1');
+            useTaskStore.getState().selectTask('1');
+        });
+
+        const { container } = render(<HtmlOverlay />);
+        mockOverlayRect(container);
+
+        expect(screen.getByTestId('task-resize-handle-start-1')).toBeInTheDocument();
+        expect(screen.getByTestId('task-resize-handle-end-1')).toBeInTheDocument();
+
+        const handles = container.querySelectorAll('.dependency-handle');
+        fireEvent.mouseDown(handles[1]);
+
+        expect(screen.queryByTestId('task-resize-handle-start-1')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('task-resize-handle-end-1')).not.toBeInTheDocument();
+
+        fireEvent.mouseUp(window);
+
+        expect(screen.getByTestId('task-resize-handle-start-1')).toBeInTheDocument();
+        expect(screen.getByTestId('task-resize-handle-end-1')).toBeInTheDocument();
+    });
+
+    it('does not show resize handles for parent, read-only, or single-date tasks', () => {
+        const parentTask = { ...task1, id: 'parent', hasChildren: true };
+        const readonlyTask = { ...task2, id: 'readonly', editable: false, rowIndex: 1 };
+        const singleDateTask = { ...task2, id: 'single-date', rowIndex: 2, dueDate: Number.NaN };
+
+        act(() => {
+            useTaskStore.setState({
+                ...useTaskStore.getState(),
+                allTasks: [parentTask, readonlyTask, singleDateTask],
+                tasks: [parentTask, readonlyTask, singleDateTask],
+                layoutRows: [],
+                rowCount: 3,
+                hoveredTaskId: 'parent'
+            });
+        });
+
+        const { rerender } = render(<HtmlOverlay />);
+        expect(screen.queryByTestId('task-resize-handle-start-parent')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('task-resize-handle-end-parent')).not.toBeInTheDocument();
+
+        act(() => {
+            useTaskStore.setState({ ...useTaskStore.getState(), hoveredTaskId: 'readonly' });
+        });
+        rerender(<HtmlOverlay />);
+        expect(screen.queryByTestId('task-resize-handle-start-readonly')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('task-resize-handle-end-readonly')).not.toBeInTheDocument();
+
+        act(() => {
+            useTaskStore.setState({ ...useTaskStore.getState(), hoveredTaskId: 'single-date' });
+        });
+        rerender(<HtmlOverlay />);
+        expect(screen.queryByTestId('task-resize-handle-start-single-date')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('task-resize-handle-end-single-date')).not.toBeInTheDocument();
+    });
+
 
 
     it('creates relation immediately after dragging when auto apply is on', async () => {
