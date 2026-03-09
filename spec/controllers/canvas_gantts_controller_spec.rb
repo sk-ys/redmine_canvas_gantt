@@ -296,6 +296,7 @@ RSpec.describe CanvasGanttsController, type: :controller do
       allow(relation).to receive(:issue_from).and_return(issue_from)
       allow(relation).to receive(:issue_to).and_return(issue_to)
       allow(relation).to receive(:errors).and_return(double(full_messages: ['Save failed']))
+      allow(Setting).to receive(:non_working_week_days).and_return([0, 6])
 
       current_type = 'precedes'
       current_delay = 2
@@ -387,6 +388,86 @@ RSpec.describe CanvasGanttsController, type: :controller do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(JSON.parse(response.body)).to eq('errors' => ['Delay is not allowed for this relation type'])
+    end
+
+    it 'rejects delay when it does not match current task dates' do
+      allow(issue_from).to receive(:editable?).and_return(true)
+      allow(issue_from).to receive(:due_date).and_return(Date.new(2026, 1, 2))
+      allow(issue_to).to receive(:start_date).and_return(Date.new(2026, 1, 4))
+
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'precedes', delay: '3' } },
+            format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('errors' => ['Delay does not match the current task dates.'])
+    end
+
+    it 'allows delay when dependency dates are missing' do
+      allow(issue_from).to receive(:editable?).and_return(true)
+      allow(issue_from).to receive(:due_date).and_return(nil)
+
+      patch :update_relation,
+            params: { project_id: 'demo', id: '77', relation: { relation_type: 'precedes', delay: '3' } },
+            format: :json
+
+      expect(response).to have_http_status(:ok)
+    end
+  end
+
+  describe 'POST #create_relation' do
+    let(:issue_scope) { double('IssueScope') }
+    let(:issue_from) { instance_double(Issue, id: 10, project_id: 1, editable?: true, due_date: Date.new(2026, 1, 2), start_date: Date.new(2026, 1, 1)) }
+    let(:issue_to) { instance_double(Issue, id: 11, project_id: 1, editable?: true, due_date: Date.new(2026, 1, 5), start_date: Date.new(2026, 1, 4)) }
+    let(:relation) { instance_double(IssueRelation, id: 88, issue_from_id: 10, issue_to_id: 11, relation_type: 'precedes', delay: 2, save: true) }
+
+    before do
+      allow(controller).to receive(:set_permissions) do
+        controller.instance_variable_set(:@permissions, { editable: true, viewable: true })
+      end
+      allow(controller).to receive(:descendant_project_ids).and_return([1])
+      allow(Issue).to receive(:visible).and_return(issue_scope)
+      allow(issue_scope).to receive(:find).with('10').and_return(issue_from)
+      allow(issue_scope).to receive(:find).with('11').and_return(issue_to)
+      allow(IssueRelation).to receive(:new).and_return(relation)
+      allow(Setting).to receive(:non_working_week_days).and_return([0, 6])
+    end
+
+    it 'creates a relation when delay matches current task dates' do
+      post :create_relation,
+           params: { project_id: 'demo', relation: { issue_from_id: '10', issue_to_id: '11', relation_type: 'precedes', delay: '2' } },
+           format: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)).to eq(
+        'status' => 'ok',
+        'relation' => {
+          'id' => 88,
+          'from' => 10,
+          'to' => 11,
+          'type' => 'precedes',
+          'delay' => 2
+        }
+      )
+    end
+
+    it 'rejects relation creation when delay does not match current task dates' do
+      post :create_relation,
+           params: { project_id: 'demo', relation: { issue_from_id: '10', issue_to_id: '11', relation_type: 'precedes', delay: '3' } },
+           format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('errors' => ['Delay does not match the current task dates.'])
+    end
+
+    it 'allows relation creation when dependency dates are missing' do
+      allow(issue_from).to receive(:due_date).and_return(nil)
+
+      post :create_relation,
+           params: { project_id: 'demo', relation: { issue_from_id: '10', issue_to_id: '11', relation_type: 'precedes', delay: '3' } },
+           format: :json
+
+      expect(response).to have_http_status(:ok)
     end
   end
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RelationType } from '../types/constraints';
-import { calculateDelay, getRelationTypeLabel, toEditableRelationView, toRawRelationType } from './relationEditing';
+import { calculateDelay, getRelationTypeLabel, toEditableRelationView, toRawRelationType, validateRelationDelayConsistency } from './relationEditing';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -36,7 +36,25 @@ describe('calculateDelay', () => {
         }, {
             startDate: DAY_MS * 5,
             dueDate: DAY_MS * 7
-        })).toEqual({ delay: 3 });
+        })).toEqual({ delay: 1 });
+    });
+
+    it('computes delay using working days', () => {
+        const originalConfig = window.RedmineCanvasGantt;
+        window.RedmineCanvasGantt = {
+            ...(originalConfig || {}),
+            nonWorkingWeekDays: [0, 6]
+        } as Window['RedmineCanvasGantt'];
+
+        try {
+            expect(calculateDelay(RelationType.Precedes, {
+                dueDate: Date.UTC(2026, 0, 2)
+            }, {
+                startDate: Date.UTC(2026, 0, 5)
+            })).toEqual({ delay: 0 });
+        } finally {
+            window.RedmineCanvasGantt = originalConfig;
+        }
     });
 });
 
@@ -45,5 +63,26 @@ describe('getRelationTypeLabel', () => {
         expect(getRelationTypeLabel(RelationType.Precedes)).toBe('Precedes');
         expect(getRelationTypeLabel(RelationType.Relates)).toBe('Relates');
         expect(getRelationTypeLabel(RelationType.Blocks)).toBe('Blocks');
+    });
+});
+
+describe('validateRelationDelayConsistency', () => {
+    it('rejects delay that does not satisfy current task dates', () => {
+        expect(validateRelationDelayConsistency(RelationType.Precedes, 3, {
+            dueDate: DAY_MS
+        }, {
+            startDate: DAY_MS * 4
+        })).toEqual({
+            valid: false,
+            message: 'Delay does not match the current task dates.'
+        });
+    });
+
+    it('accepts missing dates without blocking save', () => {
+        expect(validateRelationDelayConsistency(RelationType.Precedes, 3, {
+            dueDate: DAY_MS
+        }, {
+            startDate: undefined
+        })).toEqual({ valid: true });
     });
 });
