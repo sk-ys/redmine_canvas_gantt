@@ -7,11 +7,10 @@ High-performance Canvas-based Gantt chart plugin for Redmine.
 Listed on Redmine Plugins Directory:
 https://www.redmine.org/plugins/redmine_canvas_gantt
 
-
-[![License](https://img.shields.io/github/license/tiohsa/redmine_canvas_gantt)](LICENSE.md)
+[![License](https://img.shields.io/github/license/tiohsa/redmine_canvas_gantt)](LICENSE)
 [![Redmine](https://img.shields.io/badge/Redmine-6.x-red)](#requirements)
 [![Ruby](https://img.shields.io/badge/Ruby-3.x-cc342d)](#requirements)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933)](#requirements)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933)](#requirements)
 
 [日本語 README](README_ja.md) · [Issues](https://github.com/tiohsa/redmine_canvas_gantt/issues)
 
@@ -21,16 +20,18 @@ https://www.redmine.org/plugins/redmine_canvas_gantt
 
 ## Overview
 
-Redmine Canvas Gantt delivers a fast, interactive Gantt experience by rendering the timeline on HTML5 Canvas and keeping the sidebar fully editable. It is designed for large projects where Redmine's default Gantt slows down or becomes hard to read.
+Redmine Canvas Gantt provides a fast, interactive Gantt chart for Redmine by rendering the timeline on HTML5 Canvas while keeping the left sidebar editable. It is intended for projects where the default Redmine Gantt becomes hard to read or slow to operate.
 
-### Highlights
+## Features
 
-- **High performance**: Canvas rendering keeps scrolling and zooming smooth even with large datasets.
-- **Interactive scheduling**: Drag tasks to move or resize; drag endpoints to create dependencies.
-- **Rich sidebar**: Inline editing for subject, status, priority, dates, tracker, project, version, and more.
-- **Smart grouping**: Correctly preserves cross-project parent/child relationships.
-- **Flexible layout**: Adjustable row height, persistent column widths, and configurable columns.
-- **Theme-friendly**: Blends into existing Redmine themes.
+- High-performance timeline rendering with smooth scrolling and zooming
+- Drag to move tasks, resize date ranges, and create dependencies from task endpoints
+- Dependency management with create, update, and remove operations
+- Inline quick edit for subject, assignee, status, progress, due date, and custom fields
+- Drag and drop to change parent-child relationships in the sidebar
+- Bulk subtask creation from multiple subject lines
+- Filters and grouping by project, assignee, status, version, and subject text
+- Version headers, progress line, row height presets, and persistent UI preferences
 
 ## Demo
 
@@ -38,90 +39,94 @@ Redmine Canvas Gantt delivers a fast, interactive Gantt experience by rendering 
 
 ![Canvas Gantt Demo](./docs/demo2.gif)
 
-### Security & Impact
-- DB migration: none
-- New permissions: `view_canvas_gantt`, `edit_canvas_gantt`
-- Uninstall: remove plugin directory and restart Redmine
-- Supported Redmine versions: 6.x
-
 ## Requirements
 
-- **Redmine**: 6.x
-- **Ruby**: 3.x
-- **Node.js**: 18+ (frontend build)
-- **pnpm**: required for frontend dependencies
+- Redmine 6.x
+- Ruby 3.x
+- Node.js 20+ for SPA build and frontend development
+- REST API enabled in Redmine
+
+### Security and impact
+
+- Database migration: none
+- Added permissions: `view_canvas_gantt`, `edit_canvas_gantt`
+- Uninstall: remove the plugin directory and restart Redmine
 
 ## Installation
 
-1. **Clone into Redmine plugins**
+1. Clone the plugin into Redmine's `plugins/` directory.
+
    ```bash
    cd /path/to/redmine/plugins
    git clone https://github.com/tiohsa/redmine_canvas_gantt.git
    ```
 
-2. **Restart Redmine**
-   Restart your app server (Puma, Passenger, etc.).
+2. Restart Redmine.
+
+   Restart your application server after placing the plugin.
 
 ## Usage
 
-1. **Enable REST web service**
-   - Log in as an administrator.
-   - Go to **Administration** → **Settings** → **API**.
-   - Check **Enable REST web service** and save.
+1. Enable the REST API.
+   Go to **Administration** -> **Settings** -> **API** and enable **Enable REST web service**.
 
-2. **Enable the module**
-   - Project **Settings** → **Modules** → enable **Canvas Gantt**.
+2. Enable the project module.
+   Open **Project** -> **Settings** -> **Modules** and enable **Canvas Gantt**.
 
-3. **Grant permissions**
-   - **Administration** → **Roles and permissions**.
-   - Enable **View canvas gantt** and **Edit canvas gantt** as needed.
+3. Grant permissions.
+   In **Administration** -> **Roles and permissions**, grant `view_canvas_gantt` and `edit_canvas_gantt` as needed.
 
-4. **Open the chart**
-   - Click **Canvas Gantt** in the project menu.
+4. Open the chart.
+   Click **Canvas Gantt** from the project menu.
 
-5. **Interact**
-- Zoom with Ctrl/Cmd + mouse wheel or toolbar buttons.
-- Drag tasks to move; drag edges to resize.
-- Drag a task row onto another task row in the sidebar to make it a child issue.
-- Drag from the endpoint dot to create dependencies.
+5. Interact with tasks.
+   - Zoom with Ctrl/Cmd + mouse wheel or toolbar controls.
+   - Drag tasks to move them on the timeline.
+   - Drag task edges to resize date ranges.
+   - Drag from endpoint dots to create dependencies.
+   - Open dependency editing to adjust relation type or delay, or remove the relation.
+   - Drag a sidebar row onto another task to make it a child issue.
+   - Use bulk subtask creation to add multiple child issues at once.
 
 ## Configuration
 
-- **Inline quick edit**: Toggle which fields are editable in **Administration → Plugins → Canvas Gantt → Configure**.
-- **Row height**: Set the default row height in the same settings page.
-- **Vite dev server**: Enable **Use Vite dev server** to load assets from `http://localhost:5173` during development.
-- **redmica_ui_extension compatibility**: If `redmica_ui_extension` applies Select2 and Canvas Gantt controls behave unexpectedly, go to **Administration → Plugins → Redmica UI Extension → Configure** and turn off **Enable searchable selectbox**.
+Configure the plugin from **Administration** -> **Plugins** -> **Canvas Gantt** -> **Configure**.
 
-## Docker Compose (Quick Start)
+- Inline edit toggles: `subject`, `assigned_to`, `status`, `done_ratio`, `due_date`, `custom_fields`
+- `row_height`: default row height
+- `use_vite_dev_server`: load frontend assets from `http://localhost:5173` during development
 
-A `docker-compose.yml` is included for quick testing with a full Redmine environment.
+### Compatibility note
 
-### Start the containers
+If `redmica_ui_extension` applies Select2 behavior that interferes with Canvas Gantt controls, open **Administration** -> **Plugins** -> **Redmica UI Extension** -> **Configure** and disable searchable select boxes.
 
-```bash
-cd plugins/redmine_canvas_gantt
-docker compose up -d
-```
+## Docker Quick Start
 
-Access Redmine at `http://localhost:3000`.
+This repository includes `docker-compose.yml` for running a local Redmine 6.0 + MariaDB environment.
 
-### Initial data setup (optional)
+### Start the stack
 
 ```bash
-# Load default Redmine data (trackers, statuses, priorities, etc.)
-docker compose exec -e REDMINE_LANG=en redmine bundle exec rake redmine:load_default_data
-
-# Load test fixtures (optional, for development)
-docker compose exec redmine bundle exec rake db:fixtures:load
+docker compose up -d --wait
 ```
 
-### Enable the plugin in your project
+Open Redmine at [http://localhost:3000](http://localhost:3000).
 
-1. Open your project's **Settings** → **Modules**.
-2. Check **Canvas Gantt** and save.
-3. The **Canvas Gantt** menu item will appear in the project menu.
+### Load initial data
 
-### Stop the containers
+```bash
+docker compose exec -T -e REDMINE_LANG=en redmine bundle exec rake redmine:load_default_data
+docker compose exec -T redmine bundle exec rake db:fixtures:load
+```
+
+### Enable Canvas Gantt in a project
+
+1. Open the target project.
+2. Go to **Settings** -> **Modules**.
+3. Enable **Canvas Gantt**.
+4. Ensure the active role has `view_canvas_gantt` and `edit_canvas_gantt` if editing is required.
+
+### Stop the stack
 
 ```bash
 docker compose down
@@ -129,33 +134,39 @@ docker compose down
 
 ## Development
 
-The frontend lives in `plugins/redmine_canvas_gantt/spa`.
-
-### Setup
+The SPA frontend lives in `spa/`.
 
 ```bash
-cd plugins/redmine_canvas_gantt/spa
-pnpm install
+cd spa
+npm ci
+npm run build
+npm run lint
+npm run test -- --run
 ```
 
-### Vite dev server (hot reload)
+For live frontend development:
 
-1. Start the dev server:
-   ```bash
-   pnpm run dev
-   ```
-2. In Redmine, enable **Use Vite dev server** in the plugin settings.
+```bash
+cd spa
+npm run dev
+```
 
-### Architecture at a glance
+Then enable `use_vite_dev_server` in the plugin settings.
 
-- **State**: Zustand stores (`TaskStore`, `UIStore`).
-- **Canvas rendering**: `TaskRenderer`, `OverlayRenderer`, `BackgroundRenderer`.
-- **Scheduling logic**: `TaskLogicService` for constraints and date propagation.
+### Redmine integration tests
 
-## Build Output and Assets
+Run Redmine-backed Playwright tests from `spa/`:
 
-`pnpm run build` outputs to `plugins/redmine_canvas_gantt/assets/build`. On boot, the plugin links this directory into `public/plugin_assets/redmine_canvas_gantt/build` so Redmine can serve the assets.
+```bash
+npx playwright test -c playwright.redmine.config.ts
+```
+
+## Build Output
+
+- `npm run build` outputs the SPA to `assets/build/`
+- On Redmine boot, the plugin links or copies those files into `public/plugin_assets/redmine_canvas_gantt/build`
+- The fallback asset route is also available through `/plugin_assets/redmine_canvas_gantt/build/*`
 
 ## License
 
-GNU General Public License v2.0 (GPL v2). See [LICENSE](LICENSE) for the full license text.
+GNU General Public License v2.0 (GPL v2). See [LICENSE](LICENSE).
