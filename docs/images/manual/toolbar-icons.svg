@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="700" viewBox="0 0 1280 700" role="img" aria-labelledby="title desc">
+  <title id="title">Toolbar icons</title>
+  <desc id="desc">Toolbar icons used in Redmine Canvas Gantt with labels.</desc>
+  <defs>
+    <style>
+      .bg { fill: #faf7f0; }
+      .card { fill: #ffffff; stroke: #202020; stroke-width: 2; }
+      .label { fill: #141414; font-family: Arial, sans-serif; font-size: 18px; font-weight: 700; }
+      .small { fill: #424242; font-family: Arial, sans-serif; font-size: 14px; }
+      .icon { stroke: #1f1f1f; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .dot { fill: #1a73e8; }
+      .zoom { fill: #f0f0f0; stroke: #202020; stroke-width: 1.5; rx: 8; }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1280" height="700" rx="24"/>
+
+  <g transform="translate(40 40)">
+    <g transform="translate(0 0)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <circle class="icon" cx="62" cy="54" r="18"/>
+      <line class="icon" x1="74" y1="66" x2="92" y2="84"/>
+      <text class="label" x="24" y="110">フィルタ</text>
+      <text class="small" x="24" y="128">題名検索</text>
+    </g>
+    <g transform="translate(200 0)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <rect class="icon" x="42" y="38" width="52" height="36" rx="4"/>
+      <line class="icon" x1="42" y1="50" x2="94" y2="50"/>
+      <line class="icon" x1="60" y1="38" x2="60" y2="74"/>
+      <text class="label" x="24" y="110">カラム</text>
+      <text class="small" x="24" y="128">表示列切替</text>
+    </g>
+    <g transform="translate(400 0)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <circle class="icon" cx="68" cy="44" r="12"/>
+      <path class="icon" d="M44 84c4-14 18-22 32-22s28 8 32 22"/>
+      <text class="label" x="24" y="110">担当者</text>
+      <text class="small" x="24" y="128">担当者フィルタ</text>
+    </g>
+    <g transform="translate(600 0)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <path class="icon" d="M68 26 36 42l32 16 32-16-32-16z"/>
+      <path class="icon" d="M36 60l32 16 32-16"/>
+      <path class="icon" d="M36 78l32 16 32-16"/>
+      <text class="label" x="24" y="110">プロジェクト</text>
+      <text class="small" x="24" y="128">PJ フィルタ</text>
+    </g>
+    <g transform="translate(800 0)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <path class="icon" d="M44 34h46l20 20-46 0-20-20z"/>
+      <circle class="icon" cx="56" cy="46" r="3"/>
+      <text class="label" x="24" y="110">バージョン</text>
+      <text class="small" x="24" y="128">Ver フィルタ</text>
+    </g>
+    <g transform="translate(1000 0)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <circle class="icon" cx="44" cy="40" r="6"/>
+      <circle class="icon" cx="44" cy="60" r="6"/>
+      <circle class="icon" cx="44" cy="80" r="6"/>
+      <line class="icon" x1="58" y1="40" x2="94" y2="40"/>
+      <line class="icon" x1="58" y1="60" x2="94" y2="60"/>
+      <line class="icon" x1="58" y1="80" x2="94" y2="80"/>
+      <text class="label" x="24" y="110">ステータス</text>
+      <text class="small" x="24" y="128">状態フィルタ</text>
+    </g>
+
+    <g transform="translate(0 170)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <polyline class="icon" points="28 72 48 72 62 34 82 96 96 60 116 60"/>
+      <circle class="dot" cx="126" cy="36" r="6"/>
+      <text class="label" x="24" y="110">進捗ライン</text>
+      <text class="small" x="24" y="128">今日線の強調</text>
+    </g>
+    <g transform="translate(200 170)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <path class="icon" d="M30 64h24"/>
+      <path class="icon" d="M82 64h24"/>
+      <circle class="icon" cx="66" cy="64" r="8"/>
+      <circle class="icon" cx="82" cy="64" r="8"/>
+      <circle class="dot" cx="126" cy="36" r="6"/>
+      <text class="label" x="24" y="110">依存設定</text>
+      <text class="small" x="24" y="128">種別 / delay</text>
+    </g>
+    <g transform="translate(400 170)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <rect class="icon" x="28" y="34" width="28" height="28"/>
+      <rect class="icon" x="76" y="62" width="28" height="28"/>
+      <line class="icon" x1="56" y1="48" x2="76" y2="70"/>
+      <line class="icon" x1="42" y1="76" x2="76" y2="42"/>
+      <circle class="dot" cx="126" cy="36" r="6"/>
+      <text class="label" x="24" y="110">依存整理</text>
+      <text class="small" x="24" y="128">並び替え支援</text>
+    </g>
+    <g transform="translate(600 170)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <path class="icon" d="M68 28l12 20h24l-20 16 8 24-24-16-24 16 8-24-20-16h24z"/>
+      <circle class="dot" cx="126" cy="36" r="6"/>
+      <text class="label" x="24" y="110">孤立日付点</text>
+      <text class="small" x="24" y="128">Pts 表示切替</text>
+    </g>
+    <g transform="translate(800 170)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <polyline class="icon" points="82 40 56 64 82 88"/>
+      <polyline class="icon" points="102 40 128 64 102 88"/>
+      <text class="label" x="24" y="110">前月 / 次月</text>
+      <text class="small" x="24" y="128">月単位移動</text>
+    </g>
+    <g transform="translate(1000 170)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <rect class="icon" x="34" y="30" width="68" height="58" rx="6"/>
+      <line class="icon" x1="46" y1="24" x2="46" y2="40"/>
+      <line class="icon" x1="90" y1="24" x2="90" y2="40"/>
+      <line class="icon" x1="34" y1="52" x2="102" y2="52"/>
+      <text class="label" x="24" y="110">今日</text>
+      <text class="small" x="24" y="128">現在日付へ移動</text>
+    </g>
+
+    <g transform="translate(0 340)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <rect class="zoom" x="28" y="38" width="38" height="28"/>
+      <rect class="zoom" x="72" y="38" width="38" height="28"/>
+      <rect class="zoom" x="116" y="38" width="38" height="28"/>
+      <text class="small" x="40" y="57">月</text>
+      <text class="small" x="84" y="57">週</text>
+      <text class="small" x="128" y="57">日</text>
+      <text class="label" x="24" y="110">ズーム</text>
+      <text class="small" x="24" y="128">表示粒度変更</text>
+    </g>
+    <g transform="translate(200 340)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <rect class="icon" x="30" y="36" width="80" height="34" rx="7"/>
+      <polyline class="icon" points="92 50 102 60 112 50"/>
+      <text class="small" x="42" y="58">標準</text>
+      <text class="label" x="24" y="110">行の高さ</text>
+      <text class="small" x="24" y="128">密度切替</text>
+    </g>
+    <g transform="translate(400 340)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <polyline class="icon" points="38 52 38 34 56 34"/>
+      <polyline class="icon" points="118 34 136 34 136 52"/>
+      <polyline class="icon" points="38 84 38 102 56 102"/>
+      <polyline class="icon" points="118 102 136 102 136 84"/>
+      <text class="label" x="24" y="110">全画面</text>
+      <text class="small" x="24" y="128">表示領域拡大</text>
+    </g>
+    <g transform="translate(600 340)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <line class="icon" x1="68" y1="92" x2="68" y2="36"/>
+      <polyline class="icon" points="46 56 68 34 90 56"/>
+      <line class="icon" x1="42" y1="34" x2="94" y2="34"/>
+      <text class="label" x="24" y="110">トップ</text>
+      <text class="small" x="24" y="128">先頭へ移動</text>
+    </g>
+    <g transform="translate(800 340)">
+      <rect class="card" width="180" height="130" rx="16"/>
+      <polygon class="icon" points="78 26 48 68 72 68 64 102 102 54 78 54"/>
+      <text class="label" x="24" y="110">自動保存</text>
+      <text class="small" x="24" y="128">ON / OFF</text>
+    </g>
+  </g>
+</svg>

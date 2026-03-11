@@ -16,6 +16,7 @@ type RawTask = {
   editable: boolean;
   display_order: number;
   parent_id?: number;
+  fixed_version_id?: number;
   has_children?: boolean;
 };
 
@@ -30,6 +31,7 @@ type MockData = {
 
 type SetupOptions = {
   mockData?: MockData;
+  preferences?: Record<string, unknown>;
   onPatchTask?: (payload: unknown) => void;
   onDeleteRelation?: (relationId: string) => void;
   failTaskPatch?: boolean;
@@ -172,18 +174,20 @@ const filterByStatusQuery = (route: Route, data: MockData): MockData => {
 
 export const setupMockApp = async (page: Page, options?: SetupOptions) => {
   const data = options?.mockData ?? defaultMockData;
+  const preferences = {
+    groupByProject: false,
+    visibleColumns: ['id', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'],
+    sidebarWidth: 420,
+    viewport: {
+      scrollX: 0,
+      scrollY: 0,
+    },
+    ...options?.preferences,
+  };
 
-  await page.addInitScript(() => {
+  await page.addInitScript((initialPreferences) => {
     localStorage.clear();
-    localStorage.setItem('canvasGantt:preferences', JSON.stringify({
-      groupByProject: false,
-      visibleColumns: ['id', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'],
-      sidebarWidth: 420,
-      viewport: {
-        scrollX: 0,
-        scrollY: 0,
-      },
-    }));
+    localStorage.setItem('canvasGantt:preferences', JSON.stringify(initialPreferences));
     (window as Window & { RedmineCanvasGantt?: unknown }).RedmineCanvasGantt = {
       projectId: 1,
       apiBase: '/projects/1/canvas_gantt',
@@ -204,7 +208,7 @@ export const setupMockApp = async (page: Page, options?: SetupOptions) => {
         inline_edit_start_date: '1',
       },
     };
-  });
+  }, preferences);
 
   await page.route('**/projects/1/canvas_gantt/data.json**', async (route) => {
     const payload = filterByStatusQuery(route, data);
