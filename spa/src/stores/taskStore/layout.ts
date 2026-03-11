@@ -175,20 +175,31 @@ export const buildLayout = (
         return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
     };
 
-    const sortTaskIds = (ids: string[]) => {
-        ids.sort((a, b) => {
-            const taskA = nodeMap.get(a)?.task;
-            const taskB = nodeMap.get(b)?.task;
-            if (!taskA || !taskB) return 0;
+    const compareTaskIds = (a: string, b: string): number => {
+        const taskA = nodeMap.get(a)?.task;
+        const taskB = nodeMap.get(b)?.task;
+        if (!taskA || !taskB) return 0;
 
-            if (sortConfig) {
-                const valA = getSortValue(taskA, sortConfig.key);
-                const valB = getSortValue(taskB, sortConfig.key);
-                const compare = compareSortValues(valA, valB);
+        if (sortConfig) {
+            const valA = getSortValue(taskA, sortConfig.key);
+            const valB = getSortValue(taskB, sortConfig.key);
+            const compare = compareSortValues(valA, valB);
+            if (compare !== 0) {
                 return sortConfig.direction === 'asc' ? compare : -compare;
             }
+        } else {
+            const displayOrderCompare = (taskA.displayOrder ?? 0) - (taskB.displayOrder ?? 0);
+            if (displayOrderCompare !== 0) {
+                return displayOrderCompare;
+            }
+        }
 
-            return (taskA.displayOrder ?? 0) - (taskB.displayOrder ?? 0);
+        return (taskA.displayOrder ?? 0) - (taskB.displayOrder ?? 0);
+    };
+
+    const sortTaskIds = (ids: string[]) => {
+        ids.sort((a, b) => {
+            return compareTaskIds(a, b);
         });
     };
 
@@ -222,19 +233,11 @@ export const buildLayout = (
                 const orderA = componentOrder.get(componentA) ?? 0;
                 const orderB = componentOrder.get(componentB) ?? 0;
                 if (orderA !== orderB) return orderA - orderB;
+                const taskCompare = compareTaskIds(a, b);
+                if (taskCompare !== 0) return taskCompare;
                 return (rootIndex.get(a) ?? 0) - (rootIndex.get(b) ?? 0);
             });
         });
-    }
-
-    if (groupingMode === 'none' && sortConfig) {
-        const allRoots: string[] = [];
-        groupRoots.forEach((roots) => {
-            allRoots.push(...roots);
-        });
-        sortTaskIds(allRoots);
-        groupRoots.clear();
-        groupRoots.set('_global', allRoots);
     }
 
     const orderedGroups = Array.from(groupRoots.keys()).sort((a, b) => (groupOrder.get(a) ?? 0) - (groupOrder.get(b) ?? 0));
@@ -299,7 +302,7 @@ export const buildLayout = (
         }
 
         const expanded = projectExpansion[groupId] ?? true;
-        const shouldShowVersions = showVersions;
+        const shouldShowVersions = showVersions && !organizeByDependency;
         const shouldGroupByGroup = groupingMode !== 'none';
 
         if (shouldGroupByGroup) {

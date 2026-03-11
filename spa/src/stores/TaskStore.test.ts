@@ -296,6 +296,84 @@ describe('TaskStore dependency grouping', () => {
         const orderedIds = useTaskStore.getState().tasks.map(task => task.id);
         expect(orderedIds).toEqual(['a', 'c', 'b']);
     });
+
+    it('sortConfig があっても依存関係の塊を優先して表示する', () => {
+        useTaskStore.setState({
+            groupByProject: false,
+            groupByAssignee: false,
+            showVersions: false,
+            sortConfig: { key: 'startDate', direction: 'asc' }
+        });
+
+        const tasks = [
+            buildTask({ id: 'a', subject: 'A', displayOrder: 0, startDate: 1 }),
+            buildTask({ id: 'b', subject: 'B', displayOrder: 1, startDate: 2 }),
+            buildTask({ id: 'c', subject: 'C', displayOrder: 2, startDate: 3 })
+        ];
+
+        const { setTasks, setRelations, setOrganizeByDependency } = useTaskStore.getState();
+        setTasks(tasks);
+        setRelations([{ id: 'r1', from: 'a', to: 'c', type: 'precedes' }]);
+
+        setOrganizeByDependency(true);
+
+        expect(useTaskStore.getState().tasks.map(task => task.id)).toEqual(['a', 'c', 'b']);
+    });
+
+    it('依存整理中は version を跨ぐ依存タスクを隣接表示し version 行を出さない', () => {
+        useTaskStore.setState({
+            groupByProject: true,
+            showVersions: true,
+            sortConfig: { key: 'startDate', direction: 'asc' }
+        });
+
+        const tasks = [
+            buildTask({ id: 'a', subject: 'A', projectId: 'p1', projectName: 'P1', fixedVersionId: 'v1', displayOrder: 0, startDate: 1 }),
+            buildTask({ id: 'b', subject: 'B', projectId: 'p1', projectName: 'P1', fixedVersionId: 'v1', displayOrder: 1, startDate: 2 }),
+            buildTask({ id: 'c', subject: 'C', projectId: 'p1', projectName: 'P1', fixedVersionId: 'v2', displayOrder: 2, startDate: 3 })
+        ];
+        const versions = [
+            { id: 'v1', name: 'Version 1', effectiveDate: 10, projectId: 'p1', status: 'open' },
+            { id: 'v2', name: 'Version 2', effectiveDate: 20, projectId: 'p1', status: 'open' }
+        ];
+
+        const { setTasks, setRelations, setVersions, setOrganizeByDependency } = useTaskStore.getState();
+        setTasks(tasks);
+        setVersions(versions);
+        setRelations([{ id: 'r1', from: 'a', to: 'c', type: 'precedes' }]);
+
+        setOrganizeByDependency(true);
+
+        expect(useTaskStore.getState().tasks.map(task => task.id)).toEqual(['a', 'c', 'b']);
+        expect(useTaskStore.getState().layoutRows.some(row => row.type === 'version')).toBe(false);
+        expect(useTaskStore.getState().layoutRows.filter(row => row.type === 'header')).toHaveLength(1);
+    });
+
+    it('依存整理を無効にすると sort と version grouping を維持する', () => {
+        useTaskStore.setState({
+            groupByProject: true,
+            showVersions: true,
+            sortConfig: { key: 'startDate', direction: 'asc' }
+        });
+
+        const tasks = [
+            buildTask({ id: 'a', subject: 'A', projectId: 'p1', projectName: 'P1', fixedVersionId: 'v1', displayOrder: 0, startDate: 1 }),
+            buildTask({ id: 'b', subject: 'B', projectId: 'p1', projectName: 'P1', fixedVersionId: 'v1', displayOrder: 1, startDate: 2 }),
+            buildTask({ id: 'c', subject: 'C', projectId: 'p1', projectName: 'P1', fixedVersionId: 'v2', displayOrder: 2, startDate: 3 })
+        ];
+        const versions = [
+            { id: 'v1', name: 'Version 1', effectiveDate: 10, projectId: 'p1', status: 'open' },
+            { id: 'v2', name: 'Version 2', effectiveDate: 20, projectId: 'p1', status: 'open' }
+        ];
+
+        const { setTasks, setRelations, setVersions } = useTaskStore.getState();
+        setTasks(tasks);
+        setVersions(versions);
+        setRelations([{ id: 'r1', from: 'a', to: 'c', type: 'precedes' }]);
+
+        expect(useTaskStore.getState().tasks.map(task => task.id)).toEqual(['a', 'b', 'c']);
+        expect(useTaskStore.getState().layoutRows.filter(row => row.type === 'version')).toHaveLength(2);
+    });
 });
 
 describe('TaskStore filter persistence', () => {

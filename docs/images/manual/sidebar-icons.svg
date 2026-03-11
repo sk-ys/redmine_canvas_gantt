@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="500" viewBox="0 0 1180 500" role="img" aria-labelledby="title desc">
+  <title id="title">Sidebar and row icons</title>
+  <desc id="desc">Sidebar and group icons used in Redmine Canvas Gantt.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8f5ee; }
+      .card { fill: #ffffff; stroke: #202020; stroke-width: 2; }
+      .label { fill: #151515; font-family: Arial, sans-serif; font-size: 18px; font-weight: 700; }
+      .small { fill: #444444; font-family: Arial, sans-serif; font-size: 14px; }
+      .icon { stroke: #202020; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .green { stroke: #188038; fill: rgba(24,128,56,0.12); }
+      .blue { stroke: #1a73e8; fill: rgba(26,115,232,0.12); }
+      .red { stroke: #d93025; fill: rgba(217,48,37,0.12); }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1180" height="500" rx="24"/>
+  <g transform="translate(40 40)">
+    <g transform="translate(0 0)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <polyline class="icon" points="58 42 86 70 58 98"/>
+      <polyline class="icon" points="134 58 106 86 78 58"/>
+      <text class="label" x="22" y="126">展開 / 折りたたみ</text>
+      <text class="small" x="22" y="144">親子・グループ操作</text>
+    </g>
+    <g transform="translate(220 0)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <path class="icon" d="M90 26 52 44l38 18 38-18-38-18z"/>
+      <path class="icon" d="M52 66l38 18 38-18"/>
+      <path class="icon" d="M52 88l38 18 38-18"/>
+      <text class="label" x="32" y="126">プロジェクト</text>
+      <text class="small" x="32" y="144">グループヘッダー</text>
+    </g>
+    <g transform="translate(440 0)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <circle class="icon" cx="90" cy="48" r="16"/>
+      <path class="icon" d="M58 98c4-18 20-28 32-28s28 10 32 28"/>
+      <text class="label" x="44" y="126">担当者</text>
+      <text class="small" x="44" y="144">担当者ヘッダー</text>
+    </g>
+    <g transform="translate(660 0)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <path class="icon" d="M72 30H48a10 10 0 0 0-10 10v60a10 10 0 0 0 10 10h56a10 10 0 0 0 10-10V54L90 30z"/>
+      <polyline class="icon" points="90 30 90 54 114 54"/>
+      <text class="label" x="54" y="126">通常タスク</text>
+      <text class="small" x="54" y="144">書類アイコン</text>
+    </g>
+    <g transform="translate(880 0)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <circle class="icon red" cx="90" cy="70" r="28"/>
+      <path class="icon" d="M90 34v10M90 96v10M54 70h10M116 70h10M62 44l7 7M112 94l7 7M62 96l7-7M112 46l7-7"/>
+      <text class="label" x="64" y="126">Bug</text>
+      <text class="small" x="64" y="144">不具合系トラッカー</text>
+    </g>
+
+    <g transform="translate(110 210)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <path class="icon green" d="M90 28 56 112l34-14 34 14 34-14-34-70z"/>
+      <text class="label" x="52" y="126">Feature</text>
+      <text class="small" x="52" y="144">機能追加系</text>
+    </g>
+    <g transform="translate(330 210)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <circle class="icon blue" cx="90" cy="72" r="28"/>
+      <path class="icon" d="M78 60a12 12 0 1 1 20 10c-6 6-8 8-8 14"/>
+      <circle class="icon" cx="90" cy="94" r="1"/>
+      <text class="label" x="54" y="126">Support</text>
+      <text class="small" x="54" y="144">問い合わせ系</text>
+    </g>
+    <g transform="translate(550 210)">
+      <rect class="card" width="180" height="150" rx="16"/>
+      <circle class="icon" cx="90" cy="72" r="28"/>
+      <path class="icon" d="M90 44 A28 28 0 0 1 118 72"/>
+      <text class="label" x="56" y="126">進捗表示</text>
+      <text class="small" x="56" y="144">円グラフセル</text>
+    </g>
+  </g>
+</svg>
