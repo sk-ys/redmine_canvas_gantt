@@ -118,8 +118,10 @@ describe('LayoutEngine', () => {
             hasChildren: false
         };
 
-        const expectedStart = snapToLocalDay(task.startDate);
-        const expectedDueInclusive = snapToLocalDay(task.dueDate) + 24 * 60 * 60 * 1000;
+        const startDate = task.startDate!;
+        const dueDate = task.dueDate!;
+        const expectedStart = snapToLocalDay(startDate);
+        const expectedDueInclusive = snapToLocalDay(dueDate) + 24 * 60 * 60 * 1000;
         const expectedX = LayoutEngine.dateToX(expectedStart, mockViewport);
         const expectedWidth = expectedDueInclusive - expectedStart;
 
