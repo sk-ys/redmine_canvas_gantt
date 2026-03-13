@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
 import { InteractionEngine } from '../engines/InteractionEngine';
@@ -17,14 +17,20 @@ import { computeContentSizes } from './gantt/contentSize';
 import { useSidebarResize } from './gantt/useSidebarResize';
 import { useInitialGanttData } from './gantt/useInitialGanttData';
 import { useScrollSync } from './gantt/useScrollSync';
+import { exportTasksAsCsv } from '../export/csv';
+import { exportSnapshotAsPng } from '../export/png';
+import type { GanttExportHandle, GanttExportSnapshot } from '../export/types';
+import type { TimelineHeaderHandle } from './TimelineHeader';
+import { i18n } from '../utils/i18n';
 
 import { ONE_DAY_MS, MAX_SCROLL_AREA_PX, BOTTOM_PADDING_PX, SIDEBAR_RESIZE_HANDLE_TOTAL_WIDTH, SIDEBAR_RESIZE_CURSOR } from '../constants';
 
-export const GanttContainer: React.FC = () => {
+export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollPaneRef = useRef<HTMLDivElement>(null);
     const viewportWrapperRef = useRef<HTMLDivElement>(null);
     const mainPaneRef = useRef<HTMLDivElement>(null);
+    const timelineHeaderRef = useRef<TimelineHeaderHandle>(null);
 
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const taskCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,7 +38,7 @@ export const GanttContainer: React.FC = () => {
 
     const isSyncingScroll = useRef(false);
 
-    const { viewport, tasks, relations, selectedTaskId, selectedRelationId, draftRelation, rowCount, zoomLevel, viewportFromStorage, layoutRows, showVersions, updateViewport, setTasks, setRelations, setVersions, setCustomFields } = useTaskStore();
+    const { viewport, tasks, relations, selectedTaskId, selectedRelationId, draftRelation, rowCount, zoomLevel, viewportFromStorage, layoutRows, showVersions, updateViewport, setTasks, setRelations, setVersions, setCustomFields, customFields } = useTaskStore();
     const {
         sidebarWidth,
         setSidebarWidth,
@@ -136,6 +142,41 @@ export const GanttContainer: React.FC = () => {
         if (engines.current.overlay) engines.current.overlay.render(viewport);
     }, [viewport, tasks, zoomLevel, showProgressLine, rowCount, relations, selectedTaskId, selectedRelationId, draftRelation, layoutRows, showVersions, showPointsOrphans]);
 
+    const captureSnapshot = useCallback((): GanttExportSnapshot => {
+        const headerCanvas = timelineHeaderRef.current?.getCanvas();
+        if (!rightPaneVisible || !headerCanvas || !bgCanvasRef.current || !taskCanvasRef.current || !overlayCanvasRef.current) {
+            throw new Error(i18n.t('label_export_unavailable') || 'Export is unavailable in the current layout');
+        }
+
+        return {
+            headerCanvas,
+            backgroundCanvas: bgCanvasRef.current,
+            taskCanvas: taskCanvasRef.current,
+            overlayCanvas: overlayCanvasRef.current,
+            viewport,
+            zoomLevel,
+            tasks,
+            relations,
+            rowCount,
+            layoutRows,
+            selectedTaskId,
+            selectedRelationId,
+            draftRelation,
+            showPointsOrphans,
+            showProgressLine,
+            customFields
+        };
+    }, [customFields, draftRelation, layoutRows, relations, rightPaneVisible, rowCount, selectedRelationId, selectedTaskId, showPointsOrphans, showProgressLine, tasks, viewport, zoomLevel]);
+
+    useImperativeHandle(ref, () => ({
+        exportPng: async () => {
+            await exportSnapshotAsPng(captureSnapshot());
+        },
+        exportCsv: async () => {
+            exportTasksAsCsv(tasks, relations, customFields);
+        }
+    }), [captureSnapshot, customFields, relations, tasks]);
+
     return (
         <>
             <div ref={containerRef} style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -177,7 +218,7 @@ export const GanttContainer: React.FC = () => {
                         minWidth: 0
                     }}
                 >
-                    <TimelineHeader />
+                    <TimelineHeader ref={timelineHeaderRef} />
                     <div ref={viewportWrapperRef} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                         <div
                             ref={scrollPaneRef}
@@ -213,4 +254,6 @@ export const GanttContainer: React.FC = () => {
             <HelpDialog />
         </>
     );
-};
+});
+
+GanttContainer.displayName = 'GanttContainer';

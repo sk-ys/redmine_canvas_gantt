@@ -8,10 +8,12 @@ import { i18n } from '../utils/i18n';
 import { getRelationTypeLabel } from '../utils/relationEditing';
 import { savePreferences } from '../utils/preferences';
 import { useToolbarMenuState } from './gantt/useToolbarMenuState';
+import type { GanttExportHandle } from '../export/types';
 
 interface GanttToolbarProps {
     zoomLevel: ZoomLevel;
     onZoomChange: (level: ZoomLevel) => void;
+    exportRef: React.RefObject<GanttExportHandle | null>;
 }
 
 const toggleSelectionValue = <T,>(selectedValues: T[], value: T): T[] =>
@@ -22,7 +24,7 @@ const toggleSelectionValue = <T,>(selectedValues: T[], value: T): T[] =>
 const toggleAllSelectionValues = <T,>(isAllSelected: boolean, allValues: T[]): T[] =>
     isAllSelected ? [] : allValues;
 
-export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomChange }) => {
+export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomChange, exportRef }) => {
     const {
         viewport, updateViewport, groupByProject, setGroupByProject, groupByAssignee, setGroupByAssignee, organizeByDependency, setOrganizeByDependency,
         filterText, setFilterText, allTasks, versions, selectedAssigneeIds, setSelectedAssigneeIds,
@@ -63,6 +65,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         statusMenuRef,
         rowHeightMenuRef,
         relationSettingsMenuRef,
+        exportMenuRef,
         isMenuOpen,
         toggleMenu,
         openMenuByKey,
@@ -81,6 +84,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     const showStatusMenu = isMenuOpen('status');
     const showRowHeightMenu = isMenuOpen('rowHeight');
     const showRelationSettingsMenu = isMenuOpen('relationSettings');
+    const showExportMenu = isMenuOpen('export');
 
     React.useEffect(() => {
         if (!showFilterMenu) return;
@@ -145,6 +149,23 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
             autoApplyDefaultRelation: undefined
         });
         closeMenu('relationSettings');
+    };
+
+    const handleExport = async (method: keyof GanttExportHandle) => {
+        try {
+            const handle = exportRef.current;
+            if (!handle || !rightPaneVisible) {
+                throw new Error(i18n.t('label_export_unavailable') || 'Export is unavailable in the current layout');
+            }
+
+            await handle[method]();
+            closeMenu('export');
+        } catch (error) {
+            useUIStore.getState().addNotification(
+                error instanceof Error ? error.message : (i18n.t('label_export_failed') || 'Export failed'),
+                'error'
+            );
+        }
     };
 
     const handleTodayClick = () => {
@@ -1257,6 +1278,64 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                     </label>
                                 );
                             })}
+                        </div>
+                    )}
+                </div>
+
+                <div ref={exportMenuRef} style={{ position: 'relative' }}>
+                    <button
+                        type="button"
+                        onClick={() => toggleMenu('export')}
+                        aria-label={i18n.t('label_export') || 'Export'}
+                        title={i18n.t('label_export') || 'Export'}
+                        data-testid="export-menu-button"
+                        disabled={!rightPaneVisible}
+                        style={{
+                            padding: '0',
+                            borderRadius: '6px',
+                            border: '1px solid #e0e0e0',
+                            backgroundColor: '#fff',
+                            color: rightPaneVisible ? '#333' : '#aaa',
+                            cursor: rightPaneVisible ? 'pointer' : 'not-allowed',
+                            height: '32px',
+                            width: '32px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                    </button>
+                    {showExportMenu && (
+                        <div
+                            data-testid="export-menu"
+                            style={{
+                                position: 'absolute',
+                                top: '100%',
+                                right: 0,
+                                marginTop: '4px',
+                                background: '#fff',
+                                border: '1px solid #e0e0e0',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                padding: '8px',
+                                zIndex: 20,
+                                minWidth: '180px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px'
+                            }}
+                        >
+                            <button type="button" onClick={() => void handleExport('exportPng')} style={{ border: 'none', background: '#fff', textAlign: 'left', padding: '8px', borderRadius: '6px', cursor: 'pointer' }}>
+                                {i18n.t('label_export_png') || 'Export PNG'}
+                            </button>
+                            <button type="button" onClick={() => void handleExport('exportCsv')} style={{ border: 'none', background: '#fff', textAlign: 'left', padding: '8px', borderRadius: '6px', cursor: 'pointer' }}>
+                                {i18n.t('label_export_csv') || 'Export CSV'}
+                            </button>
                         </div>
                     )}
                 </div>

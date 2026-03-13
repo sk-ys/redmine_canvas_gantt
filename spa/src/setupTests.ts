@@ -69,7 +69,13 @@ window.RedmineCanvasGantt = {
         label_relation_type_relates_info: 'Creates a reference link only. It does not apply any schedule constraint.',
         label_relation_type_blocks_info: 'The source task blocks the target task until the blocking work is finished.',
         label_relation_auto_calculate_delay: 'Auto calculate delay',
-        label_relation_auto_apply_default: 'Auto apply default relation'
+        label_relation_auto_apply_default: 'Auto apply default relation',
+        label_export: 'Export',
+        label_export_png: 'Export PNG',
+        label_export_csv: 'Export CSV',
+        label_export_unavailable: 'Export is unavailable in the current layout',
+        label_export_failed: 'Export failed',
+        help_desc_export: 'Export the current Gantt view as a PNG image, or download the visible task data as CSV including hierarchy and dependency columns.'
     },
     settings: {
         row_height: '32',
