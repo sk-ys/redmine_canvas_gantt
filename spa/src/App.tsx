@@ -3,6 +3,7 @@ import { useTaskStore } from './stores/TaskStore';
 import { GanttContainer } from './components/GanttContainer';
 import { GanttToolbar } from './components/GanttToolbar';
 import Toast from './components/Toast';
+import type { GanttExportHandle } from './export/types';
 
 import { useUIStore } from './stores/UIStore';
 import './App.css';
@@ -11,6 +12,7 @@ function App() {
   const { zoomLevel, setZoomLevel } = useTaskStore();
   const { isFullScreen, setFullScreen } = useUIStore();
   const previousOverflow = useRef<string | undefined>(undefined);
+  const exportRef = useRef<GanttExportHandle>(null);
 
   useEffect(() => {
     const bodyStyle = document.body.style;
@@ -43,9 +45,9 @@ function App() {
       className={`app-container ${isFullScreen ? 'is-fullscreen' : ''}`}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
     >
-      <GanttToolbar zoomLevel={zoomLevel} onZoomChange={setZoomLevel} />
+      <GanttToolbar zoomLevel={zoomLevel} onZoomChange={setZoomLevel} exportRef={exportRef} />
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-        <GanttContainer />
+        <GanttContainer ref={exportRef} />
       </div>
 
       <Toast />

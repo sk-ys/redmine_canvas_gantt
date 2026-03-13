@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GanttToolbar } from './GanttToolbar';
 import { RelationType } from '../types/constraints';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
+import type { GanttExportHandle } from '../export/types';
 import '../stores/preferencesWatcher';
 
 const getCanvasGanttConfig = (): NonNullable<Window['RedmineCanvasGantt']> => {
@@ -13,6 +15,13 @@ const getCanvasGanttConfig = (): NonNullable<Window['RedmineCanvasGantt']> => {
 };
 
 describe('GanttToolbar shortcuts', () => {
+    const exportRef: React.RefObject<GanttExportHandle | null> = {
+        current: {
+            exportPng: async () => undefined,
+            exportCsv: async () => undefined
+        }
+    };
+
     beforeEach(() => {
         window.localStorage.clear();
         window.RedmineCanvasGantt = {
@@ -54,7 +63,7 @@ describe('GanttToolbar shortcuts', () => {
             autoSave: true
         });
 
-        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
 
         fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
 
@@ -88,7 +97,7 @@ describe('GanttToolbar shortcuts', () => {
             autoSave: true
         });
 
-        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
 
         const leftMaxButton = screen.getByTestId('maximize-left-pane-button');
         const rightMaxButton = screen.getByTestId('maximize-right-pane-button');
@@ -121,7 +130,7 @@ describe('GanttToolbar shortcuts', () => {
             autoSave: true
         });
 
-        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
         expect(screen.getByTestId('relation-settings-menu-button')).toBeInTheDocument();
     });
 
@@ -143,7 +152,7 @@ describe('GanttToolbar shortcuts', () => {
             }
         });
 
-        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
 
         const rowHeightButton = screen.getByTestId('row-height-menu-button');
         expect(rowHeightButton).toHaveTextContent('M');
@@ -188,7 +197,7 @@ describe('GanttToolbar shortcuts', () => {
             autoSave: true
         });
 
-        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
         fireEvent.click(screen.getByTestId('relation-settings-menu-button'));
         fireEvent.change(screen.getByTestId('relation-default-type-select'), { target: { value: RelationType.Relates } });
         fireEvent.click(screen.getByTestId('relation-auto-calculate-toggle'));
@@ -217,7 +226,7 @@ describe('GanttToolbar shortcuts', () => {
             }
         };
 
-        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
         fireEvent.click(screen.getByTestId('relation-settings-menu-button'));
 
         expect(screen.getByRole('option', { name: '先行' })).toBeInTheDocument();
@@ -240,9 +249,28 @@ describe('GanttToolbar shortcuts', () => {
             }
         };
 
-        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} />);
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
 
         expect(screen.getByTitle('ヘルプ')).toBeInTheDocument();
+    });
+
+    it('opens export menu and invokes CSV export', async () => {
+        const csvExport = vi.fn().mockResolvedValue(undefined);
+        const localExportRef: React.RefObject<GanttExportHandle | null> = {
+            current: {
+                exportPng: async () => undefined,
+                exportCsv: csvExport
+            }
+        };
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={localExportRef} />);
+
+        fireEvent.click(screen.getByTestId('export-menu-button'));
+        fireEvent.click(screen.getByText('Export CSV'));
+
+        await waitFor(() => {
+            expect(csvExport).toHaveBeenCalledTimes(1);
+        });
     });
 
 });

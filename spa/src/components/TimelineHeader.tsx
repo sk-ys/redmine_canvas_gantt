@@ -1,8 +1,12 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import { useTaskStore } from '../stores/TaskStore';
 import { getGridScales } from '../utils/grid';
 
-export const TimelineHeader: React.FC = () => {
+export interface TimelineHeaderHandle {
+    getCanvas: () => HTMLCanvasElement | null;
+}
+
+export const TimelineHeader = React.forwardRef<TimelineHeaderHandle>((_, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const { viewport, zoomLevel } = useTaskStore();
 
@@ -177,9 +181,15 @@ export const TimelineHeader: React.FC = () => {
         renderHeader();
     }, [renderHeader, viewport.width]);
 
+    useImperativeHandle(ref, () => ({
+        getCanvas: () => canvasRef.current
+    }), []);
+
     return (
         <div style={{ height: 48, backgroundColor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', overflow: 'hidden' }}>
             <canvas ref={canvasRef} height={48} style={{ display: 'block' }} />
         </div>
     );
-};
+});
+
+TimelineHeader.displayName = 'TimelineHeader';

@@ -88,6 +88,11 @@ ja:
   placeholder_bulk_subtask_creation: "チケットの題名を1行に1件ずつ入力してください..."
   label_bulk_subtask_creation_success: "チケットを一括登録しました"
   label_bulk_subtask_creation_partial_fail: "一部のチケットの登録に失敗しました"
+  label_export: "エクスポート"
+  label_export_png: "PNG を出力"
+  label_export_csv: "CSV を出力"
+  label_export_unavailable: "現在のレイアウトでは出力できません"
+  label_export_failed: "出力に失敗しました"
   button_save: "保存"
   button_cancel: "キャンセル"
 

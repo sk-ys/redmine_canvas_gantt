@@ -86,6 +86,11 @@ en:
   placeholder_bulk_subtask_creation: "Enter one ticket subject per line..."
   label_bulk_subtask_creation_success: "Tickets created successfully"
   label_bulk_subtask_creation_partial_fail: "Failed to create some tickets"
+  label_export: "Export"
+  label_export_png: "Export PNG"
+  label_export_csv: "Export CSV"
+  label_export_unavailable: "Export is unavailable in the current layout"
+  label_export_failed: "Export failed"
   button_save: "Save"
   button_cancel: "Cancel"
 
