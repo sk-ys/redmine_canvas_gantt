@@ -89,4 +89,25 @@ describe('UIStore', () => {
         expect(useUIStore.getState().issueDialogUrl).toBeNull();
         expect(useUIStore.getState().isSidebarResizing).toBe(false);
     });
+
+    it('prefixes issue dialog URL with redmineBase for subdirectory deployments', () => {
+        window.RedmineCanvasGantt = {
+            ...(window.RedmineCanvasGantt ?? {
+                projectId: 1,
+                apiBase: '',
+                redmineBase: '',
+                authToken: '',
+                apiKey: '',
+                nonWorkingWeekDays: [],
+                i18n: {}
+            }),
+            redmineBase: '/redmine'
+        };
+
+        useUIStore.getState().openIssueDialog('/issues/10');
+        expect(useUIStore.getState().issueDialogUrl).toBe('/redmine/issues/10');
+
+        useUIStore.getState().openIssueDialog('/redmine/issues/20');
+        expect(useUIStore.getState().issueDialogUrl).toBe('/redmine/issues/20');
+    });
 });

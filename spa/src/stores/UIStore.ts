@@ -55,6 +55,34 @@ interface UIState {
 
 const DEFAULT_RELATION_TYPE = RelationType.Precedes;
 
+const normalizeRedmineBase = (base: string | undefined): string => {
+    if (!base) return '';
+    const normalized = base.trim().replace(/\/+$/, '');
+    if (!normalized) return '';
+    return normalized.startsWith('/') ? normalized : `/${normalized}`;
+};
+
+const toDialogUrl = (url: string): string => {
+    const raw = url.trim();
+    if (!raw) return raw;
+
+    // Keep full URLs and non-root-relative paths as-is.
+    if (/^[a-z][a-z\d+\-.]*:\/\//i.test(raw) || raw.startsWith('//') || !raw.startsWith('/')) {
+        return raw;
+    }
+
+    const redmineBase = normalizeRedmineBase(window.RedmineCanvasGantt?.redmineBase);
+    if (!redmineBase || redmineBase === '/') {
+        return raw;
+    }
+
+    if (raw === redmineBase || raw.startsWith(`${redmineBase}/`)) {
+        return raw;
+    }
+
+    return `${redmineBase}${raw}`;
+};
+
 export const useUIStore = create<UIState>((set) => ({
     notifications: [],
     showProgressLine: preferences.showProgressLine ?? false,
@@ -124,7 +152,7 @@ export const useUIStore = create<UIState>((set) => ({
     setActiveInlineEdit: (value) => set(() => ({ activeInlineEdit: value })),
     setFullScreen: (value) => set(() => ({ isFullScreen: value })),
     toggleFullScreen: () => set((state) => ({ isFullScreen: !state.isFullScreen })),
-    openIssueDialog: (url) => set(() => ({ issueDialogUrl: url })),
+    openIssueDialog: (url) => set(() => ({ issueDialogUrl: toDialogUrl(url) })),
     closeIssueDialog: () => set(() => ({ issueDialogUrl: null })),
     openHelpDialog: () => set(() => ({ isHelpDialogOpen: true })),
     closeHelpDialog: () => set(() => ({ isHelpDialogOpen: false })),
