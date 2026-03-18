@@ -78,6 +78,10 @@ RSpec.describe CanvasGanttsController, type: :controller do
         expect(i18n_payload['help_label_basic_operations']).to eq(I18n.t(:help_label_basic_operations))
         expect(i18n_payload['help_desc_maximize_left']).to eq(I18n.t(:help_desc_maximize_left))
         expect(i18n_payload['button_close']).to eq(I18n.t(:button_close))
+        expect(i18n_payload['label_auto_schedule_move_mode']).to eq(I18n.t(:label_auto_schedule_move_mode))
+        expect(i18n_payload['label_auto_schedule_move_mode_off']).to eq(I18n.t(:label_auto_schedule_move_mode_off))
+        expect(i18n_payload['label_auto_schedule_move_mode_constraint_push']).to eq(I18n.t(:label_auto_schedule_move_mode_constraint_push))
+        expect(i18n_payload['label_auto_schedule_move_mode_linked_shift']).to eq(I18n.t(:label_auto_schedule_move_mode_linked_shift))
       end
     end
 
@@ -91,6 +95,10 @@ RSpec.describe CanvasGanttsController, type: :controller do
         expect(i18n_payload['help_label_basic_operations']).to eq(I18n.t(:help_label_basic_operations))
         expect(i18n_payload['help_desc_maximize_left']).to eq(I18n.t(:help_desc_maximize_left))
         expect(i18n_payload['button_close']).to eq(I18n.t(:button_close))
+        expect(i18n_payload['label_auto_schedule_move_mode']).to eq(I18n.t(:label_auto_schedule_move_mode))
+        expect(i18n_payload['label_auto_schedule_move_mode_off']).to eq(I18n.t(:label_auto_schedule_move_mode_off))
+        expect(i18n_payload['label_auto_schedule_move_mode_constraint_push']).to eq(I18n.t(:label_auto_schedule_move_mode_constraint_push))
+        expect(i18n_payload['label_auto_schedule_move_mode_linked_shift']).to eq(I18n.t(:label_auto_schedule_move_mode_linked_shift))
       end
     end
   end

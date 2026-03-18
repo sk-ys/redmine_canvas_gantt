@@ -62,14 +62,14 @@ describe('Preferences storage', () => {
             defaultRelationType: 'blocks',
             autoCalculateDelay: false,
             autoApplyDefaultRelation: false,
-            autoScheduleMoveMode: 'linked_downstream_shift'
+            autoScheduleMoveMode: 'off'
         }, 1);
 
         const loaded = loadPreferences(1);
         expect(loaded.defaultRelationType).toBe('blocks');
         expect(loaded.autoCalculateDelay).toBe(false);
         expect(loaded.autoApplyDefaultRelation).toBe(false);
-        expect(loaded.autoScheduleMoveMode).toBe('linked_downstream_shift');
+        expect(loaded.autoScheduleMoveMode).toBe('off');
     });
 
 });

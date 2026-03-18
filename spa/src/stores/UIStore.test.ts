@@ -96,8 +96,8 @@ describe('UIStore', () => {
     });
 
     it('resets relation preferences including auto schedule move mode', () => {
-        useUIStore.getState().setAutoScheduleMoveMode('linked_downstream_shift');
-        expect(useUIStore.getState().autoScheduleMoveMode).toBe('linked_downstream_shift');
+        useUIStore.getState().setAutoScheduleMoveMode('off');
+        expect(useUIStore.getState().autoScheduleMoveMode).toBe('off');
 
         useUIStore.getState().resetRelationPreferences();
         expect(useUIStore.getState().autoScheduleMoveMode).toBe('constraint_push');

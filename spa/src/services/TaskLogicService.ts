@@ -123,6 +123,10 @@ export class TaskLogicService {
                 : task
         ));
 
+        if (moveMode === AutoScheduleMoveMode.Off) {
+            return { updates: new Map() };
+        }
+
         if (moveMode === AutoScheduleMoveMode.LinkedDownstreamShift) {
             return calculateLinkedDownstreamUpdates(
                 nextTasks,

@@ -21,6 +21,7 @@ export const DEFAULT_RELATION_TYPES = [
 export type DefaultRelationType = typeof DEFAULT_RELATION_TYPES[number];
 
 export const AutoScheduleMoveMode = {
+    Off: 'off',
     ConstraintPush: 'constraint_push',
     LinkedDownstreamShift: 'linked_downstream_shift'
 } as const;

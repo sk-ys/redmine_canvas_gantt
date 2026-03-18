@@ -1042,6 +1042,9 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                     onChange={(event) => setDraftAutoScheduleMoveMode(event.target.value as AutoScheduleMoveModeValue)}
                                     style={{ height: 30, borderRadius: 6, border: '1px solid #ddd' }}
                                 >
+                                    <option value={AutoScheduleMoveMode.Off}>
+                                        {i18n.t('label_auto_schedule_move_mode_off') || 'Off'}
+                                    </option>
                                     <option value={AutoScheduleMoveMode.ConstraintPush}>
                                         {i18n.t('label_auto_schedule_move_mode_constraint_push') || 'Constraint push'}
                                     </option>

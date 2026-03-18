@@ -107,6 +107,7 @@ ja:
   label_relation_auto_calculate_delay: "delay を自動計算"
   label_relation_auto_apply_default: "デフォルト依存関係を自動適用"
   label_auto_schedule_move_mode: "自動スケジュール移動モード"
+  label_auto_schedule_move_mode_off: "OFF"
   label_auto_schedule_move_mode_constraint_push: "制約押し出し"
   label_auto_schedule_move_mode_linked_shift: "連動タスク一括移動"
   label_auto_schedule_external_conflict: "連動タスクの移動が外部依存関係の制約に違反します"

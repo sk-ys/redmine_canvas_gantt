@@ -442,6 +442,25 @@ describe('TaskStore scheduling state and relation-driven recalculation', () => {
         expect(state.allTasks.find((task) => task.id === 'C')?.startDate).toBe(Date.UTC(2026, 0, 9));
     });
 
+    it('updateTask leaves downstream tasks untouched when auto scheduling is off', () => {
+        useUIStore.setState({ autoScheduleMoveMode: AutoScheduleMoveMode.Off });
+        const { setTasks, setRelations, updateTask } = useTaskStore.getState();
+        setTasks([
+            buildTask({ id: 'A', startDate: MONDAY, dueDate: TUESDAY }),
+            buildTask({ id: 'B', startDate: WEDNESDAY, dueDate: WEDNESDAY })
+        ]);
+        setRelations([
+            { id: 'r1', from: 'A', to: 'B', type: 'precedes' }
+        ]);
+
+        updateTask('A', { startDate: TUESDAY, dueDate: WEDNESDAY });
+
+        const state = useTaskStore.getState();
+        expect(state.allTasks.find((task) => task.id === 'B')?.startDate).toBe(WEDNESDAY);
+        expect(state.schedulingStates.A.state).toBe('conflicted');
+        expect(state.schedulingStates.B.state).toBe('conflicted');
+    });
+
     it('rejects linked shift when external dependency would be violated', () => {
         const addNotification = vi.fn();
         useUIStore.setState({

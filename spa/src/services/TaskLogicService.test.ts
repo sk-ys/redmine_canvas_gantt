@@ -264,6 +264,28 @@ describe('TaskLogicService.checkDependencies', () => {
     });
 
     describe('linked downstream shift mode', () => {
+        it('returns no downstream updates when auto scheduling is off', () => {
+            const tasks = [
+                buildTask({ id: 'A', startDate: MONDAY, dueDate: TUESDAY }),
+                buildTask({ id: 'B', startDate: WEDNESDAY, dueDate: THURSDAY })
+            ];
+            const relations: Relation[] = [
+                { id: 'r1', from: 'A', to: 'B', type: 'precedes' }
+            ];
+
+            const { updates, error } = TaskLogicService.checkDependencies(
+                tasks,
+                relations,
+                'A',
+                TUESDAY,
+                WEDNESDAY,
+                AutoScheduleMoveMode.Off
+            );
+
+            expect(error).toBeUndefined();
+            expect(updates.size).toBe(0);
+        });
+
         it('shifts all downstream successors by the same working-day delta', () => {
             const tasks = [
                 buildTask({ id: 'A', startDate: MONDAY, dueDate: TUESDAY }),
