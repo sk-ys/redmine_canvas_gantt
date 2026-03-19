@@ -3,7 +3,7 @@ import { AutoScheduleMoveMode, RelationType, type AutoScheduleMoveMode as AutoSc
 import { loadPreferences } from '../utils/preferences';
 import { buildRedmineUrl } from '../utils/redmineUrl';
 
-export const DEFAULT_COLUMNS = ['status', 'assignee', 'startDate', 'dueDate', 'ratioDone'];
+export const DEFAULT_COLUMNS = ['notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'];
 const preferences = loadPreferences();
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
@@ -69,6 +69,7 @@ export const useUIStore = create<UIState>((set) => ({
         : ['id', ...DEFAULT_COLUMNS],
     columnWidths: preferences.columnWidths ?? {
         id: 72,
+        notification: 44,
         subject: 280,
         status: 100,
         assignee: 80,

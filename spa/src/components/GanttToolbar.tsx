@@ -211,6 +211,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
 
     const baseColumnOptions = [
         { key: 'id', label: 'ID' },
+        { key: 'notification', label: i18n.t('label_notifications') || 'Notifications' },
         { key: 'project', label: i18n.t('field_project') || 'Project' },
         { key: 'tracker', label: i18n.t('field_tracker') || 'Tracker' },
         { key: 'status', label: i18n.t('field_status') || 'Status' },

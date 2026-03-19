@@ -364,4 +364,29 @@ describe('GanttToolbar shortcuts', () => {
         });
     });
 
+    it('shows notification column in the column menu and includes it in reset flow', () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'] });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+
+        expect(screen.getByLabelText('Notifications')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /reset/i }));
+        expect(useUIStore.getState().visibleColumns).toEqual(['notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone']);
+    });
+
 });

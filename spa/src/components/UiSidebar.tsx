@@ -15,6 +15,59 @@ import { customFieldEditField, customFieldIdFromEditField, formatCustomFieldCell
 import { useSidebarColumnSizing } from './sidebar/useSidebarColumnSizing';
 import { useSidebarDragAndDrop } from './sidebar/useSidebarDragAndDrop';
 import { useSidebarInlineEdit } from './sidebar/useSidebarInlineEdit';
+import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
+
+type TaskNotificationDescriptor = {
+    glyph: 'U' | '!';
+    color: string;
+    backgroundColor: string;
+    tooltip: string;
+    testIdSuffix: string;
+};
+
+const NOTIFICATION_COLUMN_KEY = 'notification';
+
+const getTaskNotification = (schedulingState?: SchedulingStateInfo): TaskNotificationDescriptor | null => {
+    if (!schedulingState || schedulingState.state === 'normal') return null;
+
+    if (schedulingState.state === 'invalid') {
+        return {
+            glyph: '!',
+            color: '#ea8600',
+            backgroundColor: '#fff7e0',
+            tooltip: schedulingState.message,
+            testIdSuffix: 'invalid'
+        };
+    }
+
+    if (schedulingState.state === 'cyclic') {
+        return {
+            glyph: '!',
+            color: '#d93025',
+            backgroundColor: '#fff7e0',
+            tooltip: schedulingState.message,
+            testIdSuffix: 'cyclic'
+        };
+    }
+
+    if (schedulingState.state === 'conflicted') {
+        return {
+            glyph: '!',
+            color: '#f9ab00',
+            backgroundColor: '#fff7e0',
+            tooltip: schedulingState.message,
+            testIdSuffix: 'conflicted'
+        };
+    }
+
+    return {
+        glyph: 'U',
+        color: '#5f6368',
+        backgroundColor: '#f1f3f4',
+        tooltip: schedulingState.message,
+        testIdSuffix: 'unscheduled'
+    };
+};
 
 const getAvatarColor = (name: string) => {
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
@@ -262,6 +315,38 @@ export const UiSidebar: React.FC = () => {
             )
         },
         {
+            key: NOTIFICATION_COLUMN_KEY,
+            title: i18n.t('label_notifications') || 'Notifications',
+            width: columnWidths[NOTIFICATION_COLUMN_KEY] ?? 44,
+            render: (t: Task) => {
+                const notification = getTaskNotification(schedulingStates[t.id]);
+                if (!notification) return null;
+
+                return (
+                    <span
+                        data-testid={`task-notification-badge-${notification.testIdSuffix}-${t.id}`}
+                        data-tooltip={notification.tooltip}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minWidth: 18,
+                            height: 18,
+                            borderRadius: 999,
+                            padding: '0 5px',
+                            backgroundColor: notification.backgroundColor,
+                            border: `1px solid ${notification.color}`,
+                            color: notification.color,
+                            fontSize: 10,
+                            fontWeight: 700
+                        }}
+                    >
+                        {notification.glyph}
+                    </span>
+                );
+            }
+        },
+        {
             key: 'subject',
             title: i18n.t('field_subject') || 'Task Name',
             width: columnWidths['subject'] ?? 280,
@@ -279,15 +364,6 @@ export const UiSidebar: React.FC = () => {
                 >
                     {(() => {
                         const isSelected = t.id === selectedTaskId;
-                        const schedulingState = schedulingStates[t.id];
-                        const schedulingBadgeColor =
-                            schedulingState?.state === 'cyclic'
-                                ? '#d93025'
-                                : schedulingState?.state === 'invalid'
-                                    ? '#ea8600'
-                                    : schedulingState?.state === 'conflicted'
-                                        ? '#f9ab00'
-                                        : '#5f6368';
                         return (
                             <>
                                 {/* Tree Lines */}
@@ -367,28 +443,6 @@ export const UiSidebar: React.FC = () => {
 
                                 <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                                     <TrackerIcon name={t.trackerName} />
-                                    {schedulingState && schedulingState.state !== 'normal' && (
-                                        <span
-                                            data-testid={`task-scheduling-badge-${t.id}`}
-                                            data-tooltip={schedulingState.message}
-                                            style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                minWidth: 18,
-                                                height: 18,
-                                                borderRadius: 999,
-                                                padding: '0 5px',
-                                                backgroundColor: schedulingState.state === 'unscheduled' ? '#f1f3f4' : '#fff7e0',
-                                                border: `1px solid ${schedulingBadgeColor}`,
-                                                color: schedulingBadgeColor,
-                                                fontSize: 10,
-                                                fontWeight: 700
-                                            }}
-                                        >
-                                            {schedulingState.state === 'unscheduled' ? 'U' : '!'}
-                                        </span>
-                                    )}
                                 </div>
                                 <a
                                     href={buildRedmineUrl(`/issues/${t.id}`)}

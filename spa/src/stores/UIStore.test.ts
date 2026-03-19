@@ -86,6 +86,7 @@ describe('UIStore', () => {
 
         expect(useUIStore.getState().visibleColumns).toEqual(['id', 'subject']);
         expect(useUIStore.getState().columnWidths.subject).toBe(360);
+        expect(useUIStore.getState().columnWidths.notification).toBe(44);
         expect(useUIStore.getState().issueDialogUrl).toBe('/redmine/issues/10');
         expect(useUIStore.getState().isSidebarResizing).toBe(true);
 
