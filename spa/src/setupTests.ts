@@ -54,6 +54,7 @@ window.RedmineCanvasGantt = {
         button_reset: 'Reset',
         button_cancel: 'Cancel',
         label_loading: 'Loading...',
+        label_notifications: 'Notifications',
         label_relation_title: 'Dependency',
         label_relation_updated: 'Dependency updated',
         label_relation_delay_invalid: 'Delay must be 0 or greater',

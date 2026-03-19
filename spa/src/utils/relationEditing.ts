@@ -26,7 +26,7 @@ const DEFAULT_EDITABLE_RELATION_CONFIG = {
     direction: 'forward'
 } as const satisfies Pick<EditableRelationView, 'uiType' | 'direction'>;
 
-const EDITABLE_RELATION_CONFIG = {
+const EDITABLE_RELATION_CONFIG: Readonly<Record<string, Pick<EditableRelationView, 'uiType' | 'direction'>>> = {
     [RelationType.Follows]: {
         uiType: RelationType.Precedes,
         direction: 'reverse'
@@ -44,7 +44,7 @@ const EDITABLE_RELATION_CONFIG = {
         direction: 'forward'
     },
     [RelationType.Precedes]: DEFAULT_EDITABLE_RELATION_CONFIG
-} as const satisfies Partial<Record<Relation['type'], Pick<EditableRelationView, 'uiType' | 'direction'>>>;
+};
 
 const RELATION_TYPE_LABEL_KEYS: Record<DefaultRelationType, string> = {
     [RelationType.Precedes]: 'label_relation_type_precedes',

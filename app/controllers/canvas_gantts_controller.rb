@@ -43,6 +43,7 @@ class CanvasGanttsController < ApplicationController
     label_week: :label_week,
     label_day: :label_day,
     label_loading: :label_loading,
+    label_notifications: :label_notifications,
     button_expand: :label_expand,
     button_collapse: :label_collapse,
     label_sort_by: :label_sort_by,

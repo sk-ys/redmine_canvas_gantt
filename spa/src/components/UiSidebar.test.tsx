@@ -309,6 +309,143 @@ describe('UiSidebar', () => {
         });
     });
 
+    it('renders notification column for unscheduled tasks when enabled in visibleColumns', () => {
+        useUIStore.setState({ visibleColumns: ['notification', 'subject'] });
+
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 32
+            },
+            groupByProject: false
+        });
+
+        const task: Task = {
+            id: '901',
+            subject: 'Unscheduled task',
+            ratioDone: 0,
+            statusId: 1,
+            lockVersion: 0,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+
+        useTaskStore.getState().setTasks([task]);
+        useTaskStore.setState({
+            schedulingStates: {
+                '901': {
+                    state: 'unscheduled',
+                    message: 'This task has no dates and is excluded from auto scheduling.'
+                }
+            }
+        });
+
+        render(<UiSidebar />);
+
+        expect(screen.getByTestId('sidebar-header-notification')).toBeInTheDocument();
+        expect(screen.getByTestId('task-notification-badge-unscheduled-901')).toHaveTextContent('U');
+        expect(screen.queryByTestId('task-scheduling-badge-901')).not.toBeInTheDocument();
+    });
+
+    it('hides notification column when it is not enabled in visibleColumns', () => {
+        useUIStore.setState({ visibleColumns: ['subject'] });
+
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 32
+            },
+            groupByProject: false
+        });
+
+        const task: Task = {
+            id: '902',
+            subject: 'Conflicted task',
+            startDate: 0,
+            dueDate: 1,
+            ratioDone: 0,
+            statusId: 1,
+            lockVersion: 0,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+
+        useTaskStore.getState().setTasks([task]);
+        useTaskStore.setState({
+            schedulingStates: {
+                '902': {
+                    state: 'conflicted',
+                    message: 'This task violates a scheduling dependency.'
+                }
+            }
+        });
+
+        render(<UiSidebar />);
+
+        expect(screen.queryByTestId('sidebar-header-notification')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('task-notification-badge-conflicted-902')).not.toBeInTheDocument();
+    });
+
+    it('shows conflicted scheduling warnings in the dedicated notification column when enabled', () => {
+        useUIStore.setState({ visibleColumns: ['notification', 'subject'] });
+
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 32
+            },
+            groupByProject: false
+        });
+
+        const task: Task = {
+            id: '903',
+            subject: 'Conflicted task visible',
+            startDate: 0,
+            dueDate: 1,
+            ratioDone: 0,
+            statusId: 1,
+            lockVersion: 0,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+
+        useTaskStore.getState().setTasks([task]);
+        useTaskStore.setState({
+            schedulingStates: {
+                '903': {
+                    state: 'conflicted',
+                    message: 'This task violates a scheduling dependency.'
+                }
+            }
+        });
+
+        render(<UiSidebar />);
+
+        expect(screen.getByTestId('task-notification-badge-conflicted-903')).toHaveTextContent('!');
+        expect(screen.getByTestId('task-notification-badge-conflicted-903')).toHaveAttribute(
+            'data-tooltip',
+            'This task violates a scheduling dependency.'
+        );
+    });
+
     it('allows inline edit for custom field when setting is enabled', async () => {
         const taskId = '201';
         const customFieldId = 10;

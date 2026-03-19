@@ -91,10 +91,11 @@ export const useSidebarColumnSizing = ({ tasks, customFields, setColumnWidth }: 
 
         const newWidths: Record<string, number> = {};
         newWidths.id = Math.ceil(idWidth);
+        newWidths.notification = 44;
 
         const getSubjectWidth = (t: Task) => {
             const indent = 8 + (t.indentLevel ?? 0) * 16;
-            const icons = 18 + 6 + 16;
+            const icons = 16 + 6;
             const text = measure(t.subject);
             const editIcon = 24;
             return indent + icons + text + editIcon + 12;
