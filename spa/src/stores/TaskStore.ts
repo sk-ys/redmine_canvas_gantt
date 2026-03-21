@@ -15,13 +15,30 @@ import { isDescendantTask, tailDisplayOrderForParent, tailDisplayOrderForRoot } 
 import { computeCenteredViewport } from './taskStore/viewport';
 import { buildMoveTaskResult, createTaskLayoutSnapshot, restoreTaskSnapshot, saveModifiedTasks } from './taskStore/taskPersistence';
 import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
+import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
 import { AutoScheduleMoveMode } from '../types/constraints';
+
+type DerivedSchedulingSummary = {
+    schedulingStates: Record<string, SchedulingStateInfo>;
+    criticalPathMetrics: Record<string, CriticalPathTaskMetrics>;
+    criticalPathProjectFinish?: number;
+};
+
+type DerivedTaskState = DerivedSchedulingSummary & {
+    tasks: Task[];
+    layoutRows: LayoutRow[];
+    rowCount: number;
+};
+
+type DerivedTaskStatePatch = Pick<TaskState, 'tasks' | 'layoutRows' | 'rowCount' | 'schedulingStates' | 'criticalPathMetrics' | 'criticalPathProjectFinish'>;
 
 interface TaskState {
     allTasks: Task[];
     tasks: Task[];
     relations: Relation[];
     schedulingStates: Record<string, SchedulingStateInfo>;
+    criticalPathMetrics: Record<string, CriticalPathTaskMetrics>;
+    criticalPathProjectFinish?: number;
     versions: Version[];
     taskStatuses: TaskStatus[];
     customFields: CustomFieldMeta[];
@@ -175,19 +192,66 @@ const buildLayoutFromState = (state: TaskState, overrides: Partial<LayoutState> 
     );
 };
 
+const buildDerivedSchedulingSummary = (tasks: Task[], relations: Relation[]): DerivedSchedulingSummary => {
+    const criticalPath = TaskLogicService.calculateCriticalPath(tasks, relations);
+
+    return {
+        schedulingStates: TaskLogicService.deriveSchedulingStates(tasks, relations),
+        criticalPathMetrics: criticalPath.metricsByTaskId,
+        criticalPathProjectFinish: criticalPath.projectFinish
+    };
+};
+
 const buildDerivedTaskState = (
     state: TaskState,
     overrides: Partial<LayoutState> & { allTasks?: Task[]; relations?: Relation[] } = {}
-) => {
+): DerivedTaskState => {
     const allTasks = overrides.allTasks ?? state.allTasks;
     const relations = overrides.relations ?? state.relations;
     const layout = buildLayoutFromState(state, { ...overrides, allTasks, relations });
+    const schedulingSummary = buildDerivedSchedulingSummary(allTasks, relations);
 
     return {
         tasks: layout.tasks,
         layoutRows: layout.layoutRows,
         rowCount: layout.rowCount,
-        schedulingStates: TaskLogicService.deriveSchedulingStates(allTasks, relations)
+        ...schedulingSummary
+    };
+};
+
+const toDerivedTaskStatePatch = (derived: DerivedTaskState): DerivedTaskStatePatch => ({
+    tasks: derived.tasks,
+    layoutRows: derived.layoutRows,
+    rowCount: derived.rowCount,
+    schedulingStates: derived.schedulingStates,
+    criticalPathMetrics: derived.criticalPathMetrics,
+    criticalPathProjectFinish: derived.criticalPathProjectFinish
+});
+
+const buildRelationChange = (state: TaskState, relation: Relation, nextRelations: Relation[]) => {
+    let nextTasks = state.allTasks;
+    const originTaskId = relation.type === 'follows' ? relation.to : relation.from;
+    const originTask = nextTasks.find((task) => task.id === originTaskId);
+    const dependentUpdates = TaskLogicService.checkDependencies(
+        nextTasks,
+        nextRelations,
+        originTaskId,
+        originTask?.startDate ?? Number.NaN,
+        originTask?.dueDate ?? Number.NaN,
+        AutoScheduleMoveMode.ConstraintPush
+    );
+
+    if (dependentUpdates.updates.size > 0) {
+        nextTasks = nextTasks.map((task) => dependentUpdates.updates.has(task.id) ? { ...task, ...dependentUpdates.updates.get(task.id) } : task);
+    }
+
+    const modifiedTaskIds = new Set(state.modifiedTaskIds);
+    dependentUpdates.updates.forEach((_, taskId) => modifiedTaskIds.add(taskId));
+
+    return {
+        nextTasks,
+        modifiedTaskIds,
+        derived: buildDerivedTaskState(state, { relations: nextRelations, allTasks: nextTasks })
     };
 };
 
@@ -197,6 +261,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     tasks: [],
     relations: [],
     schedulingStates: {},
+    criticalPathMetrics: {},
+    criticalPathProjectFinish: undefined,
     versions: [],
     taskStatuses: [],
     customFields: [],
@@ -257,10 +323,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
         return {
             allTasks: tasks,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates,
+            ...toDerivedTaskStatePatch(derived),
             projectExpansion,
             versionExpansion,
             taskExpansion
@@ -274,20 +337,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                 ? state.selectedRelationId
                 : null,
             draftRelation: null,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates
+            ...toDerivedTaskStatePatch(derived)
         };
     }),
     setVersions: (versions) => set((state) => {
         const derived = buildDerivedTaskState(state, { versions });
         return {
             versions,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates
+            ...toDerivedTaskStatePatch(derived)
         };
     }),
     setTaskStatuses: (statuses) => set(() => ({ taskStatuses: statuses })),
@@ -295,10 +352,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const derived = buildDerivedTaskState(state, { customFields });
         return {
             customFields,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates
+            ...toDerivedTaskStatePatch(derived)
         };
     }),
     setSelectedStatusFromServer: (ids) => {
@@ -319,33 +373,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const exists = state.relations.some(r => r.from === relation.from && r.to === relation.to && r.type === relation.type);
         if (exists) return state;
         const nextRelations = [...state.relations, relation];
-        let nextTasks = state.allTasks;
-        const originTaskId = relation.type === 'follows' ? relation.to : relation.from;
-        const originTask = nextTasks.find((task) => task.id === originTaskId);
-        const dependentUpdates = TaskLogicService.checkDependencies(
-            nextTasks,
-            nextRelations,
-            originTaskId,
-            originTask?.startDate ?? Number.NaN,
-            originTask?.dueDate ?? Number.NaN,
-            AutoScheduleMoveMode.ConstraintPush
-        );
-
-        if (dependentUpdates.updates.size > 0) {
-            nextTasks = nextTasks.map((task) => dependentUpdates.updates.has(task.id) ? { ...task, ...dependentUpdates.updates.get(task.id) } : task);
-        }
-
-        const derived = buildDerivedTaskState(state, { relations: nextRelations, allTasks: nextTasks });
-        const modifiedTaskIds = new Set(state.modifiedTaskIds);
-        dependentUpdates.updates.forEach((_, taskId) => modifiedTaskIds.add(taskId));
+        const { nextTasks, modifiedTaskIds, derived } = buildRelationChange(state, relation, nextRelations);
         return {
             allTasks: nextTasks,
             relations: nextRelations,
             draftRelation: null,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates,
+            ...toDerivedTaskStatePatch(derived),
             modifiedTaskIds
         };
     }),
@@ -355,33 +388,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             existingIndex === -1
                 ? [...state.relations, relation]
                 : state.relations.map((current) => current.id === relation.id ? relation : current);
-        let nextTasks = state.allTasks;
-        const originTaskId = relation.type === 'follows' ? relation.to : relation.from;
-        const originTask = nextTasks.find((task) => task.id === originTaskId);
-        const dependentUpdates = TaskLogicService.checkDependencies(
-            nextTasks,
-            nextRelations,
-            originTaskId,
-            originTask?.startDate ?? Number.NaN,
-            originTask?.dueDate ?? Number.NaN,
-            AutoScheduleMoveMode.ConstraintPush
-        );
-
-        if (dependentUpdates.updates.size > 0) {
-            nextTasks = nextTasks.map((task) => dependentUpdates.updates.has(task.id) ? { ...task, ...dependentUpdates.updates.get(task.id) } : task);
-        }
-
-        const derived = buildDerivedTaskState(state, { relations: nextRelations, allTasks: nextTasks });
-        const modifiedTaskIds = new Set(state.modifiedTaskIds);
-        dependentUpdates.updates.forEach((_, taskId) => modifiedTaskIds.add(taskId));
+        const { nextTasks, modifiedTaskIds, derived } = buildRelationChange(state, relation, nextRelations);
         return {
             allTasks: nextTasks,
             relations: nextRelations,
             draftRelation: null,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates,
+            ...toDerivedTaskStatePatch(derived),
             modifiedTaskIds
         };
     }),
@@ -391,10 +403,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         return {
             relations: nextRelations,
             selectedRelationId: state.selectedRelationId === relationId ? null : state.selectedRelationId,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates
+            ...toDerivedTaskStatePatch(derived)
         };
     }),
     selectTask: (id) => set({
@@ -674,7 +683,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         newModifiedIds.add(id);
         pendingUpdates.forEach((_, key) => newModifiedIds.add(key));
 
-        const nextSchedulingStates = TaskLogicService.deriveSchedulingStates(finalTasks, state.relations);
+        const nextSchedulingSummary = buildDerivedSchedulingSummary(finalTasks, state.relations);
 
         if (state.isSortingSuspended) {
             // Just update the view 'tasks' without re-layout (preserving order)
@@ -697,7 +706,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             return {
                 allTasks: finalTasks,
                 tasks: newViewTasks,
-                schedulingStates: nextSchedulingStates,
+                ...nextSchedulingSummary,
                 modifiedTaskIds: newModifiedIds // Add here for suspended case
             };
         }
@@ -706,10 +715,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
         return {
             allTasks: finalTasks,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates,
+            ...toDerivedTaskStatePatch(derived),
             modifiedTaskIds: newModifiedIds // Add here for normal case
         };
     }),
@@ -721,10 +727,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const derived = buildDerivedTaskState(state, { allTasks: finalTasks });
         return {
             allTasks: finalTasks,
-            tasks: derived.tasks,
-            layoutRows: derived.layoutRows,
-            rowCount: derived.rowCount,
-            schedulingStates: derived.schedulingStates
+            ...toDerivedTaskStatePatch(derived)
         };
     }),
 

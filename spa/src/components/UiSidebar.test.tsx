@@ -9,6 +9,17 @@ import { useEditMetaStore } from '../stores/EditMetaStore';
 import { SIDEBAR_RESIZE_CURSOR } from '../constants';
 
 describe('UiSidebar', () => {
+    const expectNotificationSprite = (testId: string) => {
+        const badge = screen.getByTestId(testId);
+        const svg = badge.querySelector('svg');
+
+        expect(svg).toBeInTheDocument();
+
+        const useElement = svg?.querySelector('use');
+        expect(useElement).toBeInTheDocument();
+        expect(useElement?.getAttribute('href') ?? useElement?.getAttribute('xlink:href')).toMatch(/^#/);
+    };
+
     beforeEach(() => {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
@@ -349,7 +360,7 @@ describe('UiSidebar', () => {
         render(<UiSidebar />);
 
         expect(screen.getByTestId('sidebar-header-notification')).toBeInTheDocument();
-        expect(screen.getByTestId('task-notification-badge-unscheduled-901')).toHaveTextContent('U');
+        expectNotificationSprite('task-notification-badge-unscheduled-901');
         expect(screen.queryByTestId('task-scheduling-badge-901')).not.toBeInTheDocument();
     });
 
@@ -439,10 +450,65 @@ describe('UiSidebar', () => {
 
         render(<UiSidebar />);
 
-        expect(screen.getByTestId('task-notification-badge-conflicted-903')).toHaveTextContent('!');
+        expectNotificationSprite('task-notification-badge-conflicted-903');
         expect(screen.getByTestId('task-notification-badge-conflicted-903')).toHaveAttribute(
             'data-tooltip',
             'This task violates a scheduling dependency.'
+        );
+    });
+
+    it('shows critical path badge in the notification column when there is no scheduling warning', () => {
+        useUIStore.setState({ visibleColumns: ['notification', 'subject'] });
+
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 32
+            },
+            groupByProject: false
+        });
+
+        const task: Task = {
+            id: '904',
+            subject: 'Critical path task',
+            startDate: 0,
+            dueDate: 1,
+            ratioDone: 0,
+            statusId: 1,
+            lockVersion: 0,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+
+        useTaskStore.getState().setTasks([task]);
+        useTaskStore.setState({
+            schedulingStates: {},
+            criticalPathMetrics: {
+                '904': {
+                    taskId: '904',
+                    durationDays: 1,
+                    es: 0,
+                    ef: 1,
+                    ls: 0,
+                    lf: 1,
+                    totalSlackDays: 0,
+                    critical: true
+                }
+            }
+        });
+
+        render(<UiSidebar />);
+
+        expectNotificationSprite('task-notification-badge-critical-904');
+        expect(screen.getByTestId('task-notification-badge-critical-904')).toHaveAttribute(
+            'data-tooltip',
+            'Critical path task. Total slack: 0 working day(s).'
         );
     });
 

@@ -16,25 +16,25 @@ import { useSidebarColumnSizing } from './sidebar/useSidebarColumnSizing';
 import { useSidebarDragAndDrop } from './sidebar/useSidebarDragAndDrop';
 import { useSidebarInlineEdit } from './sidebar/useSidebarInlineEdit';
 import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
+import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
+import { SvgIcon } from '../icons/SvgIcon';
 
 type TaskNotificationDescriptor = {
-    glyph: 'U' | '!';
+    iconName: 'rcg-icon-notification-unscheduled' | 'rcg-icon-notification-warning' | 'rcg-icon-notification-critical';
     color: string;
-    backgroundColor: string;
     tooltip: string;
     testIdSuffix: string;
 };
 
 const NOTIFICATION_COLUMN_KEY = 'notification';
 
-const getTaskNotification = (schedulingState?: SchedulingStateInfo): TaskNotificationDescriptor | null => {
+const getSchedulingNotification = (schedulingState?: SchedulingStateInfo): TaskNotificationDescriptor | null => {
     if (!schedulingState || schedulingState.state === 'normal') return null;
 
     if (schedulingState.state === 'invalid') {
         return {
-            glyph: '!',
+            iconName: 'rcg-icon-notification-warning',
             color: '#ea8600',
-            backgroundColor: '#fff7e0',
             tooltip: schedulingState.message,
             testIdSuffix: 'invalid'
         };
@@ -42,9 +42,8 @@ const getTaskNotification = (schedulingState?: SchedulingStateInfo): TaskNotific
 
     if (schedulingState.state === 'cyclic') {
         return {
-            glyph: '!',
+            iconName: 'rcg-icon-notification-warning',
             color: '#d93025',
-            backgroundColor: '#fff7e0',
             tooltip: schedulingState.message,
             testIdSuffix: 'cyclic'
         };
@@ -52,22 +51,38 @@ const getTaskNotification = (schedulingState?: SchedulingStateInfo): TaskNotific
 
     if (schedulingState.state === 'conflicted') {
         return {
-            glyph: '!',
+            iconName: 'rcg-icon-notification-warning',
             color: '#f9ab00',
-            backgroundColor: '#fff7e0',
             tooltip: schedulingState.message,
             testIdSuffix: 'conflicted'
         };
     }
 
     return {
-        glyph: 'U',
+        iconName: 'rcg-icon-notification-unscheduled',
         color: '#5f6368',
-        backgroundColor: '#f1f3f4',
         tooltip: schedulingState.message,
         testIdSuffix: 'unscheduled'
     };
 };
+
+const getCriticalPathNotification = (criticalPathMetrics?: CriticalPathTaskMetrics): TaskNotificationDescriptor | null => {
+    if (!criticalPathMetrics?.critical) return null;
+
+    return {
+        iconName: 'rcg-icon-notification-critical',
+        color: '#b42318',
+        tooltip: `Critical path task. Total slack: ${criticalPathMetrics.totalSlackDays} working day(s).`,
+        testIdSuffix: 'critical'
+    };
+};
+
+const getTaskNotification = (
+    schedulingState?: SchedulingStateInfo,
+    criticalPathMetrics?: CriticalPathTaskMetrics
+): TaskNotificationDescriptor | null => (
+    getSchedulingNotification(schedulingState) ?? getCriticalPathNotification(criticalPathMetrics)
+);
 
 const getAvatarColor = (name: string) => {
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
@@ -196,6 +211,7 @@ const CollapseAllIcon = () => (
 export const UiSidebar: React.FC = () => {
     const tasks = useTaskStore(state => state.tasks);
     const schedulingStates = useTaskStore(state => state.schedulingStates);
+    const criticalPathMetrics = useTaskStore(state => state.criticalPathMetrics);
     const layoutRows = useTaskStore(state => state.layoutRows);
     const rowCount = useTaskStore(state => state.rowCount);
     const viewport = useTaskStore(state => state.viewport);
@@ -319,7 +335,7 @@ export const UiSidebar: React.FC = () => {
             title: i18n.t('label_notifications') || 'Notifications',
             width: columnWidths[NOTIFICATION_COLUMN_KEY] ?? 44,
             render: (t: Task) => {
-                const notification = getTaskNotification(schedulingStates[t.id]);
+                const notification = getTaskNotification(schedulingStates[t.id], criticalPathMetrics[t.id]);
                 if (!notification) return null;
 
                 return (
@@ -330,18 +346,12 @@ export const UiSidebar: React.FC = () => {
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            minWidth: 18,
+                            width: 18,
                             height: 18,
-                            borderRadius: 999,
-                            padding: '0 5px',
-                            backgroundColor: notification.backgroundColor,
-                            border: `1px solid ${notification.color}`,
-                            color: notification.color,
-                            fontSize: 10,
-                            fontWeight: 700
+                            color: notification.color
                         }}
                     >
-                        {notification.glyph}
+                        <SvgIcon name={notification.iconName} size={18} />
                     </span>
                 );
             }
