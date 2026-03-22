@@ -360,7 +360,13 @@ describe('UiSidebar', () => {
         render(<UiSidebar />);
 
         expect(screen.getByTestId('sidebar-header-notification')).toBeInTheDocument();
+        expect(screen.getByTestId('sidebar-header-notification')).toHaveStyle({ justifyContent: 'center' });
         expectNotificationSprite('task-notification-badge-unscheduled-901');
+        expect(screen.getByTestId('cell-901-notification')).toHaveStyle({ justifyContent: 'center' });
+        expect(screen.getByTestId('task-notification-badge-unscheduled-901')).toHaveStyle({
+            width: '18px',
+            height: '18px'
+        });
         expect(screen.queryByTestId('task-scheduling-badge-901')).not.toBeInTheDocument();
     });
 

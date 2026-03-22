@@ -737,7 +737,7 @@ export const UiSidebar: React.FC = () => {
                                     position: 'relative',
                                     cursor: 'pointer',
                                     userSelect: 'none',
-                                    justifyContent: 'space-between'
+                                    justifyContent: col.key === NOTIFICATION_COLUMN_KEY ? 'center' : 'space-between'
                                 }}
                                 onClick={() => {
                                     const field = getSortField(col.key);
@@ -1020,12 +1020,19 @@ export const UiSidebar: React.FC = () => {
                                         borderRight: '1px solid #f9f9f9',
                                         display: 'flex',
                                         alignItems: 'center',
+                                        justifyContent: col.key === NOTIFICATION_COLUMN_KEY ? 'center' : 'flex-start',
                                         overflow: 'hidden',
                                         whiteSpace: 'nowrap'
                                     }}>
                                         <div
                                             data-testid={`cell-${task.id}-${col.key}`}
-                                            style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: col.key === NOTIFICATION_COLUMN_KEY ? 'center' : 'flex-start'
+                                            }}
                                             onDoubleClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
