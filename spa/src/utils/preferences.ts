@@ -28,6 +28,10 @@ export interface StoredPreferences {
     autoCalculateDelay?: boolean;
     autoApplyDefaultRelation?: boolean;
     autoScheduleMoveMode?: AutoScheduleMoveMode;
+    capacityThreshold?: number;
+    leafIssuesOnly?: boolean;
+    includeClosedIssues?: boolean;
+    todayOnwardOnly?: boolean;
 }
 
 const STORAGE_KEY = 'canvasGantt:preferences';

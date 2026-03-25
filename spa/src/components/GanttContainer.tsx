@@ -11,6 +11,9 @@ import { UiSidebar } from './UiSidebar';
 import { TimelineHeader } from './TimelineHeader';
 import { IssueIframeDialog } from './IssueIframeDialog';
 import { HelpDialog } from './HelpDialog';
+import { WorkloadSidebar } from './workload/WorkloadSidebar';
+import { WorkloadCanvasPanel } from './workload/WorkloadCanvasPanel';
+import { useWorkloadStore } from '../stores/WorkloadStore';
 import { getMaxFiniteDueDate } from '../utils/taskRange';
 import { GlobalTooltip } from './GlobalTooltip';
 import { computeContentSizes } from './gantt/contentSize';
@@ -49,6 +52,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         isSidebarResizing,
         setSidebarResizing
     } = useUIStore();
+    const { workloadPaneVisible } = useWorkloadStore();
     const isSplitView = leftPaneVisible && rightPaneVisible;
 
     const tasksMaxDue = useMemo(() => getMaxFiniteDueDate(tasks), [tasks]);
@@ -225,10 +229,17 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
                         <div
                             data-testid="left-pane"
                             style={isSplitView
-                                ? { width: sidebarWidth, flexShrink: 0, overflow: 'hidden', display: 'flex' }
-                                : { flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex' }}
+                                ? { width: sidebarWidth, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+                                : { flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
                         >
-                            <UiSidebar />
+                            <div style={{ flex: workloadPaneVisible ? '1 1 60%' : 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}>
+                                <UiSidebar />
+                            </div>
+                            {workloadPaneVisible && (
+                                <div style={{ flex: '0 0 40%', minHeight: 0, display: 'flex' }}>
+                                    <WorkloadSidebar />
+                                </div>
+                            )}
                         </div>
 
                         {isSplitView && (
@@ -258,35 +269,42 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
                         minWidth: 0
                     }}
                 >
-                    <TimelineHeader ref={timelineHeaderRef} />
-                    <div ref={viewportWrapperRef} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                        <div
-                            ref={scrollPaneRef}
-                            className="rcg-scroll rcg-gantt-scroll-pane"
-                            style={{ position: 'absolute', inset: 0, overflow: 'auto', display: 'grid' }}
-                        >
-                            <div style={{ gridArea: '1 / 1', width: scrollContentSize.width, height: scrollContentSize.height }} />
+                    <div style={{ flex: workloadPaneVisible ? '1 1 60%' : 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                        <TimelineHeader ref={timelineHeaderRef} />
+                        <div ref={viewportWrapperRef} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                             <div
-                                ref={mainPaneRef}
-                                className="rcg-gantt-viewport"
-                                style={{
-                                    gridArea: '1 / 1',
-                                    position: 'sticky',
-                                    top: 0,
-                                    left: 0,
-                                    width: viewport.width,
-                                    height: viewport.height,
-                                    overflow: 'hidden'
-                                }}
+                                ref={scrollPaneRef}
+                                className="rcg-scroll rcg-gantt-scroll-pane"
+                                style={{ position: 'absolute', inset: 0, overflow: 'auto', display: 'grid' }}
                             >
-                                <canvas ref={bgCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 1 }} />
-                                <canvas ref={taskCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 2 }} />
-                                <canvas ref={overlayCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 3 }} />
-                                <HtmlOverlay />
-                                <A11yLayer />
+                                <div style={{ gridArea: '1 / 1', width: scrollContentSize.width, height: scrollContentSize.height }} />
+                                <div
+                                    ref={mainPaneRef}
+                                    className="rcg-gantt-viewport"
+                                    style={{
+                                        gridArea: '1 / 1',
+                                        position: 'sticky',
+                                        top: 0,
+                                        left: 0,
+                                        width: viewport.width,
+                                        height: viewport.height,
+                                        overflow: 'hidden'
+                                    }}
+                                >
+                                    <canvas ref={bgCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 1 }} />
+                                    <canvas ref={taskCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 2 }} />
+                                    <canvas ref={overlayCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 3 }} />
+                                    <HtmlOverlay />
+                                    <A11yLayer />
+                                </div>
                             </div>
                         </div>
                     </div>
+                    {workloadPaneVisible && (
+                        <div style={{ flex: '0 0 40%', minHeight: 0, display: 'flex', width: '100%', overflow: 'hidden' }}>
+                            <WorkloadCanvasPanel />
+                        </div>
+                    )}
                 </div>
             </div>
             <IssueIframeDialog />

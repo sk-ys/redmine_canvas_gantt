@@ -9,6 +9,7 @@ import { getRelationTypeLabel } from '../utils/relationEditing';
 import { savePreferences } from '../utils/preferences';
 import { buildRedmineUrl } from '../utils/redmineUrl';
 import { useToolbarMenuState } from './gantt/useToolbarMenuState';
+import { useWorkloadStore } from '../stores/WorkloadStore';
 import type { GanttExportHandle } from '../export/types';
 
 interface GanttToolbarProps {
@@ -94,11 +95,25 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         rowHeightMenuRef,
         relationSettingsMenuRef,
         exportMenuRef,
+        workloadMenuRef,
         isMenuOpen,
         toggleMenu,
         openMenuByKey,
         closeMenu
     } = useToolbarMenuState();
+    const {
+        workloadPaneVisible,
+        toggleWorkloadPaneVisible,
+        capacityThreshold,
+        setCapacityThreshold,
+        leafIssuesOnly,
+        setLeafIssuesOnly,
+        includeClosedIssues,
+        setIncludeClosedIssues,
+        todayOnwardOnly,
+        setTodayOnwardOnly
+    } = useWorkloadStore();
+
     const [draftRelationType, setDraftRelationType] = React.useState<DefaultRelationType>(defaultRelationType);
     const [draftAutoCalculateDelay, setDraftAutoCalculateDelay] = React.useState<boolean>(autoCalculateDelay);
     const [draftAutoApplyDefaultRelation, setDraftAutoApplyDefaultRelation] = React.useState<boolean>(autoApplyDefaultRelation);
@@ -117,6 +132,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     const showRowHeightMenu = isMenuOpen('rowHeight');
     const showRelationSettingsMenu = isMenuOpen('relationSettings');
     const showExportMenu = isMenuOpen('export');
+    const showWorkloadMenu = isMenuOpen('workload');
 
     React.useEffect(() => {
         if (!showFilterMenu) return;
@@ -622,6 +638,108 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             >
                                 {i18n.t('button_reset') || 'Reset'}
                             </button>
+                        </div>
+                    )}
+                </div>
+
+                <div ref={workloadMenuRef} style={{ position: 'relative' }}>
+                    <button
+                        onClick={() => toggleMenu('workload')}
+                        title={i18n.t('label_workload') || 'Workload'}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0',
+                            borderRadius: '6px',
+                            border: '1px solid #e0e0e0',
+                            backgroundColor: workloadPaneVisible ? '#e8f0fe' : '#fff',
+                            color: workloadPaneVisible ? '#1a73e8' : '#333',
+                            cursor: 'pointer',
+                            height: '32px',
+                            width: '32px',
+                            position: 'relative'
+                        }}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10" />
+                            <line x1="12" y1="20" x2="12" y2="4" />
+                            <line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                        {workloadPaneVisible && (
+                            <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, backgroundColor: '#1a73e8', borderRadius: '50%' }} />
+                        )}
+                    </button>
+
+                    {showWorkloadMenu && (
+                        <div
+                            style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                marginTop: '4px',
+                                background: '#fff',
+                                border: '1px solid #e0e0e0',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                padding: '12px',
+                                zIndex: 20,
+                                minWidth: '220px',
+                                maxHeight: '350px',
+                                overflowY: 'auto'
+                            }}
+                        >
+                            <div style={{ fontWeight: 600, marginBottom: '8px', color: '#333' }}>{i18n.t('label_workload') || 'Workload'}</div>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', color: '#333', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', marginBottom: '8px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={workloadPaneVisible}
+                                    onChange={toggleWorkloadPaneVisible}
+                                />
+                                <span style={{ fontWeight: 500 }}>{i18n.t('label_show_workload') || 'Show Workload Pane'}</span>
+                            </label>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', opacity: workloadPaneVisible ? 1 : 0.5, pointerEvents: workloadPaneVisible ? 'auto' : 'none' }}>
+                                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: '#444' }}>
+                                    <span>{i18n.t('label_capacity_threshold') || 'Capacity Threshold (hours/day)'}</span>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="24"
+                                        step="0.5"
+                                        value={capacityThreshold}
+                                        onChange={(e) => setCapacityThreshold(Number(e.target.value))}
+                                        style={{ padding: '4px 8px', width: '80px', border: '1px solid #d0d0d0', borderRadius: '4px' }}
+                                    />
+                                </label>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#444', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={leafIssuesOnly}
+                                        onChange={(e) => setLeafIssuesOnly(e.target.checked)}
+                                    />
+                                    {i18n.t('label_leaf_issues_only') || 'Leaf Issues Only'}
+                                </label>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#444', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={includeClosedIssues}
+                                        onChange={(e) => setIncludeClosedIssues(e.target.checked)}
+                                    />
+                                    {i18n.t('label_include_closed_issues') || 'Include Closed Issues'}
+                                </label>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#444', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={todayOnwardOnly}
+                                        onChange={(e) => setTodayOnwardOnly(e.target.checked)}
+                                    />
+                                    {i18n.t('label_today_onward_only') || 'Today Onward Only'}
+                                </label>
+                            </div>
                         </div>
                     )}
                 </div>
