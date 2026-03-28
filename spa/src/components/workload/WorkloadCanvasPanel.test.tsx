@@ -147,6 +147,78 @@ describe('WorkloadCanvasPanel', () => {
         expect(viewport.scrollY).toBe(60);
     });
 
+    it('keeps panning across multiple mouse moves during a single drag', () => {
+        render(<WorkloadCanvasPanel />);
+
+        const viewportElement = screen.getByTestId('workload-canvas-viewport');
+
+        fireEvent.mouseDown(viewportElement, { button: 0, clientX: 100, clientY: 120 });
+        fireEvent.mouseMove(window, { clientX: 120, clientY: 150 });
+        fireEvent.mouseMove(window, { clientX: 140, clientY: 160 });
+        fireEvent.mouseUp(window);
+
+        const { viewport } = useTaskStore.getState();
+        expect(viewport.scrollX).toBe(10);
+        expect(viewport.scrollY).toBe(60);
+    });
+
+    it('starts horizontal panning immediately when dragging empty histogram space', () => {
+        render(<WorkloadCanvasPanel />);
+
+        const viewportElement = screen.getByTestId('workload-canvas-viewport');
+
+        fireEvent.mouseDown(viewportElement, { button: 0, clientX: 100, clientY: 120 });
+        fireEvent.mouseMove(window, { clientX: 101, clientY: 120 });
+        fireEvent.mouseUp(window);
+
+        const { viewport } = useTaskStore.getState();
+        expect(viewport.scrollX).toBe(49);
+        expect(viewport.scrollY).toBe(60);
+    });
+
+    it('preserves histogram bar clicks when there is no pointer movement', () => {
+        const tasks = [
+            buildTask({ id: 'task-1', subject: 'Task 1', projectId: 'p1', startDate: ONE_DAY * 3, dueDate: ONE_DAY * 3, estimatedHours: 4 })
+        ];
+        useTaskStore.getState().setTasks(tasks);
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildWorkloadData(tasks)
+        });
+
+        render(<WorkloadCanvasPanel />);
+
+        const viewportElement = screen.getByTestId('workload-canvas-viewport');
+        fireEvent.mouseDown(viewportElement, { button: 0, clientX: 15, clientY: 70 });
+        fireEvent.mouseUp(window, { clientX: 15, clientY: 70 });
+
+        const { viewport, selectedTaskId } = useTaskStore.getState();
+        expect(viewport.startDate).toBe(0);
+        expect(selectedTaskId).toBe('task-1');
+    });
+
+    it('starts panning immediately when dragging from a histogram bar', () => {
+        const tasks = [
+            buildTask({ id: 'task-1', subject: 'Task 1', projectId: 'p1', startDate: ONE_DAY * 3, dueDate: ONE_DAY * 3, estimatedHours: 4 })
+        ];
+        useTaskStore.getState().setTasks(tasks);
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildWorkloadData(tasks)
+        });
+
+        render(<WorkloadCanvasPanel />);
+
+        const viewportElement = screen.getByTestId('workload-canvas-viewport');
+        fireEvent.mouseDown(viewportElement, { button: 0, clientX: 15, clientY: 70 });
+        fireEvent.mouseMove(window, { clientX: 17, clientY: 71 });
+        fireEvent.mouseUp(window, { clientX: 17, clientY: 71 });
+
+        const { viewport, selectedTaskId } = useTaskStore.getState();
+        expect(viewport.scrollX).toBe(48);
+        expect(selectedTaskId).toBeNull();
+    });
+
     it('keeps the default cursor before and after dragging the histogram area', () => {
         render(<WorkloadCanvasPanel />);
 

@@ -10,33 +10,74 @@ interface WorkloadCanvasPanelProps {
     onScroll?: (scrollTop: number) => void;
 }
 
+interface HistogramBarHit {
+    assigneeId: number;
+    dateStr: string;
+}
+
+interface DragState {
+    active: boolean;
+    dragging: boolean;
+    startX: number;
+    startY: number;
+    requiresThreshold: boolean;
+    pressedBarHit: HistogramBarHit | null;
+}
+
 export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     scrollTop = 0,
     onScroll
 }) => {
     const HEADER_HEIGHT = 40;
-    const DRAG_THRESHOLD_PX = 4;
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
     const renderEngine = useRef<WorkloadRenderer | null>(null);
-    const dragStateRef = useRef<{ active: boolean; dragging: boolean; startX: number; startY: number }>({
-        active: false,
-        dragging: false,
-        startX: 0,
-        startY: 0
-    });
-    const [isHistogramBarHovered, setIsHistogramBarHovered] = useState(false);
-    const [isPointerSuppressed, setIsPointerSuppressed] = useState(false);
-    
     const { workloadData, capacityThreshold } = useWorkloadStore();
     const { viewport, zoomLevel } = useTaskStore();
     const isSidebarResizing = useUIStore((state) => state.isSidebarResizing);
+    const dragStateRef = useRef<DragState>({
+        active: false,
+        dragging: false,
+        startX: 0,
+        startY: 0,
+        requiresThreshold: false,
+        pressedBarHit: null
+    });
+    const interactionStateRef = useRef({
+        viewport,
+        zoomLevel,
+        workloadData,
+        capacityThreshold,
+        scrollTop
+    });
+    const histogramBarHoveredRef = useRef(false);
+    const pointerSuppressedRef = useRef(false);
+    const [isHistogramBarHovered, setIsHistogramBarHovered] = useState(false);
+    const [isPointerSuppressed, setIsPointerSuppressed] = useState(false);
     const rowHeight = viewport.rowHeight * 2;
     const workloadAssigneeCount = workloadData?.assignees.size ?? 0;
     const hasAssignees = workloadAssigneeCount > 0;
     const contentHeight = hasAssignees ? workloadAssigneeCount * rowHeight : 0;
     const cursor = isHistogramBarHovered && !isPointerSuppressed && !isSidebarResizing ? 'pointer' : 'default';
+
+    interactionStateRef.current = {
+        viewport,
+        zoomLevel,
+        workloadData,
+        capacityThreshold,
+        scrollTop
+    };
+
+    const setHistogramBarHoveredState = useCallback((next: boolean) => {
+        histogramBarHoveredRef.current = next;
+        setIsHistogramBarHovered((prev) => (prev === next ? prev : next));
+    }, []);
+
+    const setPointerSuppressedState = useCallback((next: boolean) => {
+        pointerSuppressedRef.current = next;
+        setIsPointerSuppressed((prev) => (prev === next ? prev : next));
+    }, []);
 
     const updateCanvasSize = useCallback(() => {
         if (!canvasRef.current) return;
@@ -108,51 +149,81 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         }
     }, [scrollTop]);
 
+    const isScrollInteractionLocked = useCallback(() => useUIStore.getState().isSidebarResizing, []);
+
+    const hitTestDailyBarAtClientPoint = useCallback((clientX: number, clientY: number): HistogramBarHit | null => {
+        const viewportElement = viewportRef.current;
+        const renderer = renderEngine.current;
+        if (!viewportElement || !renderer) {
+            return null;
+        }
+
+        const viewportRect = viewportElement.getBoundingClientRect();
+        const interactionState = interactionStateRef.current;
+
+        return renderer.hitTestDailyBar({
+            pointerX: clientX - viewportRect.left,
+            pointerY: clientY - viewportRect.top,
+            viewport: interactionState.viewport,
+            zoomLevel: interactionState.zoomLevel,
+            workloadData: interactionState.workloadData,
+            capacityThreshold: interactionState.capacityThreshold,
+            verticalScroll: interactionState.scrollTop
+        });
+    }, []);
+
+    const updateHoverState = useCallback((clientX: number, clientY: number) => {
+        if (isScrollInteractionLocked() || dragStateRef.current.active) {
+            if (histogramBarHoveredRef.current) {
+                setHistogramBarHoveredState(false);
+            }
+            return;
+        }
+
+        const hit = hitTestDailyBarAtClientPoint(clientX, clientY);
+        setHistogramBarHoveredState(Boolean(hit));
+    }, [hitTestDailyBarAtClientPoint, isScrollInteractionLocked, setHistogramBarHoveredState]);
+
+    const finishDrag = useCallback(() => {
+        if (!dragStateRef.current.active) return;
+        dragStateRef.current = {
+            active: false,
+            dragging: false,
+            startX: 0,
+            startY: 0,
+            requiresThreshold: false,
+            pressedBarHit: null
+        };
+        if (pointerSuppressedRef.current) {
+            setPointerSuppressedState(false);
+        }
+    }, [setPointerSuppressedState]);
+
+    useEffect(() => {
+        if (isSidebarResizing && histogramBarHoveredRef.current) {
+            setHistogramBarHoveredState(false);
+        }
+    }, [isSidebarResizing, setHistogramBarHoveredState]);
+
     useEffect(() => {
         const viewportElement = viewportRef.current;
         if (!viewportElement) return;
 
-        const updateHoverState = (clientX: number, clientY: number) => {
-            if (isSidebarResizing) {
-                if (isHistogramBarHovered) {
-                    setIsHistogramBarHovered(false);
-                }
-                return;
-            }
-
-            const viewportRect = viewportElement.getBoundingClientRect();
-            const hit = renderEngine.current?.hitTestDailyBar({
-                pointerX: clientX - viewportRect.left,
-                pointerY: clientY - viewportRect.top,
-                viewport,
-                zoomLevel,
-                workloadData,
-                capacityThreshold,
-                verticalScroll: scrollTop
-            });
-            setIsHistogramBarHovered(Boolean(hit));
-        };
-
-        const finishDrag = () => {
-            if (!dragStateRef.current.active) return;
-            dragStateRef.current = {
-                active: false,
-                dragging: false,
-                startX: 0,
-                startY: 0
-            };
-            setIsPointerSuppressed(false);
-        };
-
         const handleMouseDown = (event: MouseEvent) => {
-            if (event.button !== 0 || isSidebarResizing) return;
+            if (event.button !== 0 || isScrollInteractionLocked()) return;
+
+            const pressedBarHit = hitTestDailyBarAtClientPoint(event.clientX, event.clientY);
             dragStateRef.current = {
                 active: true,
                 dragging: false,
                 startX: event.clientX,
-                startY: event.clientY
+                startY: event.clientY,
+                requiresThreshold: Boolean(pressedBarHit),
+                pressedBarHit
             };
-            setIsPointerSuppressed(true);
+            if (pressedBarHit) {
+                setPointerSuppressedState(true);
+            }
             event.preventDefault();
         };
 
@@ -161,67 +232,63 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         };
 
         const handleViewportMouseLeave = () => {
-            setIsHistogramBarHovered(false);
+            if (histogramBarHoveredRef.current) {
+                setHistogramBarHoveredState(false);
+            }
         };
 
         const handleMouseMove = (event: MouseEvent) => {
-            if (!dragStateRef.current.active) return;
-            if (isSidebarResizing) {
-                setIsHistogramBarHovered(false);
+            const dragState = dragStateRef.current;
+            if (!dragState.active) return;
+
+            if (isScrollInteractionLocked()) {
+                if (histogramBarHoveredRef.current) {
+                    setHistogramBarHoveredState(false);
+                }
                 finishDrag();
                 return;
             }
 
-            const deltaFromStartX = event.clientX - dragStateRef.current.startX;
-            const deltaFromStartY = event.clientY - dragStateRef.current.startY;
-            if (!dragStateRef.current.dragging) {
-                const pointerDistance = Math.hypot(deltaFromStartX, deltaFromStartY);
-                if (pointerDistance < DRAG_THRESHOLD_PX) {
-                    return;
-                }
+            const deltaX = event.clientX - dragState.startX;
+            if (deltaX === 0) {
+                return;
             }
 
-            const deltaX = event.clientX - dragStateRef.current.startX;
             panViewportByPixels(deltaX, 0);
             dragStateRef.current = {
+                ...dragState,
                 active: true,
                 dragging: true,
                 startX: event.clientX,
                 startY: event.clientY
             };
-            if (isHistogramBarHovered) {
-                setIsHistogramBarHovered(false);
+            if (histogramBarHoveredRef.current) {
+                setHistogramBarHoveredState(false);
             }
         };
 
         const handleMouseUp = (event: MouseEvent) => {
-            if (!dragStateRef.current.active) return;
-
             const pointerState = dragStateRef.current;
+            if (!pointerState.active) return;
+
             finishDrag();
 
-            if (pointerState.dragging || isSidebarResizing) {
+            if (pointerState.dragging || isScrollInteractionLocked() || !pointerState.pressedBarHit) {
+                updateHoverState(event.clientX, event.clientY);
                 return;
             }
 
-            const viewportRect = viewportElement.getBoundingClientRect();
-            const x = event.clientX - viewportRect.left;
-            const y = event.clientY - viewportRect.top;
-            const hit = renderEngine.current?.hitTestDailyBar({
-                pointerX: x,
-                pointerY: y,
-                viewport,
-                zoomLevel,
-                workloadData,
-                capacityThreshold,
-                verticalScroll: scrollTop
-            });
-            if (!hit) {
+            const releasedHit = hitTestDailyBarAtClientPoint(event.clientX, event.clientY);
+            if (!releasedHit ||
+                releasedHit.assigneeId !== pointerState.pressedBarHit.assigneeId ||
+                releasedHit.dateStr !== pointerState.pressedBarHit.dateStr) {
+                updateHoverState(event.clientX, event.clientY);
                 return;
             }
 
-            const { taskId } = useWorkloadStore.getState().resolveNextHistogramTask(hit.assigneeId, hit.dateStr);
+            const { taskId } = useWorkloadStore.getState().resolveNextHistogramTask(releasedHit.assigneeId, releasedHit.dateStr);
             if (!taskId) {
+                updateHoverState(event.clientX, event.clientY);
                 return;
             }
 
@@ -247,7 +314,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
             window.removeEventListener('mouseup', handleMouseUp);
             finishDrag();
         };
-    }, [capacityThreshold, isHistogramBarHovered, isSidebarResizing, scrollTop, viewport, workloadData, zoomLevel]);
+    }, [finishDrag, hitTestDailyBarAtClientPoint, isScrollInteractionLocked, setHistogramBarHoveredState, setPointerSuppressedState, updateHoverState]);
 
     return (
         <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', borderTop: '1px solid #e0e0e0', backgroundColor: '#ffffff' }}>
