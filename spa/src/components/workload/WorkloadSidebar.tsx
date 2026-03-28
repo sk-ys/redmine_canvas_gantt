@@ -13,11 +13,14 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
     scrollTop = 0,
     onScroll
 }) => {
+    const OVERLOAD_ACTION_WIDTH = 132;
+    const OVERLOAD_COUNT_WIDTH = 32;
     const {
         workloadData,
         resolveNextOverloadBar,
         resetHistogramSelectionCycle,
-        resolveNextHistogramTask
+        resolveNextHistogramTask,
+        getOverloadCycleInfo
     } = useWorkloadStore();
     const { viewport } = useTaskStore();
     const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -67,6 +70,7 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
                     <div style={{ minHeight: `${assignees.length * rowHeight}px` }}>
                         {assignees.map((assignee) => {
                             const hasOverload = Array.from(assignee.dailyWorkloads.values()).some(d => d.isOverload);
+                            const overloadCycleInfo = getOverloadCycleInfo(assignee.assigneeId);
                             return (
                                 <div
                                     key={assignee.assigneeId}
@@ -85,35 +89,60 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
                                             {assignee.assigneeName}
                                         </div>
                                         {hasOverload && (
-                                            <button
-                                                type="button"
-                                                aria-label={`Focus overload histogram for ${assignee.assigneeName}`}
-                                                onClick={() => {
-                                                    const selectedBar = resolveNextOverloadBar(assignee.assigneeId);
-                                                    if (!selectedBar) return;
-
-                                                    resetHistogramSelectionCycle();
-                                                    const { taskId } = resolveNextHistogramTask(selectedBar.assigneeId, selectedBar.dateStr);
-                                                    if (!taskId) return;
-
-                                                    const result = useTaskStore.getState().focusTask(taskId);
-                                                    if (result.status === 'filtered_out') {
-                                                        useUIStore.getState().addNotification('Selected task is hidden by the current filters.', 'warning');
-                                                    }
-                                                }}
+                                            <div
+                                                data-testid={`overload-action-area-${assignee.assigneeId}`}
                                                 style={{
-                                                    backgroundColor: '#fce8e6',
-                                                    color: '#d93025',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    fontSize: '11px',
-                                                    fontWeight: 600,
-                                                    border: 'none',
-                                                    cursor: 'pointer'
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'flex-end',
+                                                    gap: '6px',
+                                                    width: `${OVERLOAD_ACTION_WIDTH}px`,
+                                                    flexShrink: 0
                                                 }}
                                             >
-                                                OVERLOAD
-                                            </button>
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Focus overload histogram for ${assignee.assigneeName}`}
+                                                    onClick={() => {
+                                                        const selectedBar = resolveNextOverloadBar(assignee.assigneeId);
+                                                        if (!selectedBar) return;
+
+                                                        resetHistogramSelectionCycle();
+                                                        const { taskId } = resolveNextHistogramTask(selectedBar.assigneeId, selectedBar.dateStr);
+                                                        if (!taskId) return;
+
+                                                        const result = useTaskStore.getState().focusTask(taskId);
+                                                        if (result.status === 'filtered_out') {
+                                                            useUIStore.getState().addNotification('Selected task is hidden by the current filters.', 'warning');
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        backgroundColor: '#fce8e6',
+                                                        color: '#d93025',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '11px',
+                                                        fontWeight: 600,
+                                                        border: 'none',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    OVERLOAD
+                                                </button>
+                                                <span
+                                                    data-testid={`overload-cycle-count-${assignee.assigneeId}`}
+                                                    style={{
+                                                        width: `${OVERLOAD_COUNT_WIDTH}px`,
+                                                        fontSize: '11px',
+                                                        fontWeight: 600,
+                                                        color: '#666',
+                                                        textAlign: 'right',
+                                                        visibility: overloadCycleInfo ? 'visible' : 'hidden'
+                                                    }}
+                                                >
+                                                    {overloadCycleInfo ? `${overloadCycleInfo.current}/${overloadCycleInfo.total}` : '0/0'}
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
                                     <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>

@@ -384,11 +384,13 @@ describe('WorkloadCanvasPanel', () => {
         fireEvent.mouseUp(window, { clientX: 15, clientY: 70 });
         expect(useTaskStore.getState().selectedTaskId).toBe('task-1');
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
+        expect(screen.getByTestId('histogram-cycle-count')).toHaveTextContent('1/2');
 
         fireEvent.mouseDown(viewportElement, { button: 0, clientX: 65, clientY: 70 });
         fireEvent.mouseUp(window, { clientX: 65, clientY: 70 });
         expect(useTaskStore.getState().selectedTaskId).toBe('task-2');
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
+        expect(screen.getByTestId('histogram-cycle-count')).toHaveTextContent('2/2');
     });
 
     it('shows a warning when the clicked task is hidden by filters', () => {
@@ -436,5 +438,23 @@ describe('WorkloadCanvasPanel', () => {
         render(<WorkloadCanvasPanel />);
 
         expect(useTaskStore.getState().viewport.scrollX).toBeGreaterThan(50);
+    });
+
+    it('does not show histogram cycle count when only one task contributes to the selected bar', () => {
+        const tasks = [
+            buildTask({ id: 'task-1', subject: 'Task 1', projectId: 'p1', startDate: ONE_DAY * 3, dueDate: ONE_DAY * 3, estimatedHours: 4 })
+        ];
+        useTaskStore.getState().setTasks(tasks);
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildWorkloadData(tasks)
+        });
+
+        render(<WorkloadCanvasPanel />);
+
+        fireEvent.mouseDown(screen.getByTestId('workload-canvas-viewport'), { button: 0, clientX: 15, clientY: 70 });
+        fireEvent.mouseUp(window, { clientX: 15, clientY: 70 });
+
+        expect(screen.queryByTestId('histogram-cycle-count')).not.toBeInTheDocument();
     });
 });

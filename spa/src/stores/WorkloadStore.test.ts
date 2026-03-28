@@ -226,4 +226,46 @@ describe('WorkloadStore histogram selection', () => {
         useWorkloadStore.getState().setFocusedHistogramBar({ assigneeId: 2, dateStr: '2026-01-03' });
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 2, dateStr: '2026-01-03' });
     });
+
+    it('returns overload cycle info only when multiple overload days are active', () => {
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildOverloadWorkloadData()
+        });
+
+        expect(useWorkloadStore.getState().getOverloadCycleInfo(1)).toEqual({ current: 1, total: 3 });
+
+        useWorkloadStore.getState().resolveNextOverloadBar(1);
+        expect(useWorkloadStore.getState().getOverloadCycleInfo(1)).toEqual({ current: 1, total: 3 });
+
+        useWorkloadStore.getState().resolveNextOverloadBar(1);
+        expect(useWorkloadStore.getState().getOverloadCycleInfo(1)).toEqual({ current: 2, total: 3 });
+    });
+
+    it('returns histogram task cycle info only when multiple tasks are active for the selected bar', () => {
+        const tasks = [
+            buildTask({ id: 'high', estimatedHours: 8, assignedToId: 1, assignedToName: 'Alice' }),
+            buildTask({ id: 'low', estimatedHours: 2, assignedToId: 1, assignedToName: 'Alice' })
+        ];
+
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildWorkloadData([
+                {
+                    assigneeId: 1,
+                    assigneeName: 'Alice',
+                    dateStr: '2026-01-05',
+                    tasks
+                }
+            ])
+        });
+
+        expect(useWorkloadStore.getState().getHistogramTaskCycleInfo(1, '2026-01-05')).toBeNull();
+
+        useWorkloadStore.getState().resolveNextHistogramTask(1, '2026-01-05');
+        expect(useWorkloadStore.getState().getHistogramTaskCycleInfo(1, '2026-01-05')).toEqual({ current: 1, total: 2 });
+
+        useWorkloadStore.getState().resolveNextHistogramTask(1, '2026-01-05');
+        expect(useWorkloadStore.getState().getHistogramTaskCycleInfo(1, '2026-01-05')).toEqual({ current: 2, total: 2 });
+    });
 });

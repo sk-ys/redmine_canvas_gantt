@@ -19,6 +19,11 @@ type FocusedHistogramBar = {
     dateStr: string;
 } | null;
 
+type CycleInfo = {
+    current: number;
+    total: number;
+} | null;
+
 const HISTOGRAM_SELECTION_RESET: HistogramSelectionCycle = {
     activeKey: null,
     nextIndex: 0
@@ -85,9 +90,11 @@ interface WorkloadState {
     setTodayOnwardOnly: (todayOnward: boolean) => void;
     resetHistogramSelectionCycle: () => void;
     resolveNextHistogramTask: (assigneeId: number, dateStr: string) => { taskId: string | null };
+    getHistogramTaskCycleInfo: (assigneeId: number, dateStr: string) => CycleInfo;
     setFocusedHistogramBar: (bar: FocusedHistogramBar) => void;
     resetOverloadFocus: () => void;
     resolveNextOverloadBar: (assigneeId: number) => FocusedHistogramBar;
+    getOverloadCycleInfo: (assigneeId: number) => CycleInfo;
     calculateWorkloadData: () => void;
 }
 
@@ -189,6 +196,22 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
         return { taskId: nextTask.id };
     },
 
+    getHistogramTaskCycleInfo: (assigneeId, dateStr) => {
+        const { workloadData, histogramSelectionCycle } = get();
+        if (!workloadData) return null;
+
+        const total = workloadData.assignees.get(assigneeId)?.dailyWorkloads.get(dateStr)?.contributingTasks.length ?? 0;
+        if (total <= 1) return null;
+
+        const currentKey = `${assigneeId}:${dateStr}`;
+        if (histogramSelectionCycle.activeKey !== currentKey) return null;
+
+        return {
+            current: histogramSelectionCycle.nextIndex === 0 ? total : histogramSelectionCycle.nextIndex,
+            total
+        };
+    },
+
     resetOverloadFocus: () => {
         set({
             overloadFocusCycle: OVERLOAD_FOCUS_RESET,
@@ -229,6 +252,28 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
         });
 
         return focusedHistogramBar;
+    },
+
+    getOverloadCycleInfo: (assigneeId) => {
+        const { workloadData, overloadFocusCycle } = get();
+        if (!workloadData) return null;
+
+        const assignee = workloadData.assignees.get(assigneeId);
+        if (!assignee) return null;
+
+        const total = Array.from(assignee.dailyWorkloads.values()).filter((daily) => daily.isOverload).length;
+        if (total <= 1) return null;
+        if (overloadFocusCycle.activeAssigneeId !== assigneeId) {
+            return {
+                current: 1,
+                total
+            };
+        }
+
+        return {
+            current: overloadFocusCycle.nextIndex === 0 ? total : overloadFocusCycle.nextIndex,
+            total
+        };
     },
 
     calculateWorkloadData: () => {

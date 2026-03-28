@@ -34,7 +34,13 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
     const renderEngine = useRef<WorkloadRenderer | null>(null);
-    const { workloadData, capacityThreshold, focusedHistogramBar, setFocusedHistogramBar } = useWorkloadStore();
+    const {
+        workloadData,
+        capacityThreshold,
+        focusedHistogramBar,
+        setFocusedHistogramBar,
+        getHistogramTaskCycleInfo
+    } = useWorkloadStore();
     const { viewport, zoomLevel } = useTaskStore();
     const isSidebarResizing = useUIStore((state) => state.isSidebarResizing);
     const dragStateRef = useRef<DragState>({
@@ -61,6 +67,9 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     const hasAssignees = workloadAssigneeCount > 0;
     const contentHeight = hasAssignees ? workloadAssigneeCount * rowHeight : 0;
     const cursor = isHistogramBarHovered && !isPointerSuppressed && !isSidebarResizing ? 'pointer' : 'default';
+    const histogramTaskCycleInfo = focusedHistogramBar
+        ? getHistogramTaskCycleInfo(focusedHistogramBar.assigneeId, focusedHistogramBar.dateStr)
+        : null;
 
     interactionStateRef.current = {
         viewport,
@@ -363,6 +372,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 borderBottom: '1px solid #e0e0e0',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 padding: '0 16px',
                 fontWeight: 600,
                 fontSize: '12px',
@@ -371,7 +381,12 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 letterSpacing: '0.5px',
                 backgroundColor: '#fafafa'
             }}>
-                HISTOGRAM (DAILY WORKLOAD)
+                <span>HISTOGRAM (DAILY WORKLOAD)</span>
+                {histogramTaskCycleInfo && (
+                    <span data-testid="histogram-cycle-count" style={{ fontSize: '11px', color: '#666' }}>
+                        {histogramTaskCycleInfo.current}/{histogramTaskCycleInfo.total}
+                    </span>
+                )}
             </div>
             <div
                 ref={viewportRef}

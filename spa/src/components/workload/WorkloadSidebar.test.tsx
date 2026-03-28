@@ -239,15 +239,19 @@ describe('WorkloadSidebar', () => {
         render(<WorkloadSidebar />);
 
         const overloadControl = screen.getByRole('button', { name: 'Focus overload histogram for Alice' });
+        expect(screen.getByTestId('overload-action-area-1')).toHaveStyle({ width: '132px', justifyContent: 'flex-end' });
+        expect(screen.getByTestId('overload-cycle-count-1')).toHaveTextContent('1/2');
         fireEvent.click(overloadControl);
 
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-02' });
         expect(useTaskStore.getState().selectedTaskId).toBe('task-early');
+        expect(screen.getByTestId('overload-cycle-count-1')).toHaveTextContent('1/2');
 
         fireEvent.click(overloadControl);
 
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-05' });
         expect(useTaskStore.getState().selectedTaskId).toBe('task-late');
+        expect(screen.getByTestId('overload-cycle-count-1')).toHaveTextContent('2/2');
     });
 
     it('shows a warning when overload click targets a task hidden by filters', () => {
@@ -276,5 +280,38 @@ describe('WorkloadSidebar', () => {
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-02' });
         expect(useTaskStore.getState().selectedTaskId).toBeNull();
         expect(useUIStore.getState().notifications.at(-1)?.message).toBe('Selected task is hidden by the current filters.');
+        expect(screen.getByTestId('overload-cycle-count-1')).toHaveTextContent('1/2');
+    });
+
+    it('does not show overload cycle count when only one overload day exists', () => {
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: {
+                assignees: new Map([
+                    [1, {
+                        assigneeId: 1,
+                        assigneeName: 'Alice',
+                        totalLoad: 8,
+                        peakLoad: 8,
+                        dailyWorkloads: new Map([
+                            ['2026-01-02', {
+                                dateStr: '2026-01-02',
+                                timestamp: ONE_DAY,
+                                totalLoad: 11,
+                                isOverload: true,
+                                contributingTasks: []
+                            }]
+                        ])
+                    }]
+                ]),
+                overloadedAssigneeCount: 1,
+                overloadedDayCount: 1
+            }
+        });
+
+        render(<WorkloadSidebar />);
+
+        expect(screen.getByTestId('overload-action-area-1')).toHaveStyle({ width: '132px', justifyContent: 'flex-end' });
+        expect(screen.getByTestId('overload-cycle-count-1')).toHaveStyle({ visibility: 'hidden', width: '32px' });
     });
 });
