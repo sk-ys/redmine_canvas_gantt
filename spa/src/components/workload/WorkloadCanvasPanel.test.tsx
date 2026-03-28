@@ -115,13 +115,20 @@ beforeEach(() => {
 });
 
 describe('WorkloadCanvasPanel', () => {
-    it('sizes the canvas to the viewport area below the header', () => {
-        render(<WorkloadCanvasPanel />);
-
+    const getViewportAndCanvas = () => {
         const viewportElement = screen.getByTestId('workload-canvas-viewport');
         const canvas = viewportElement.querySelector('canvas') as HTMLCanvasElement | null;
 
         expect(canvas).not.toBeNull();
+
+        return { viewportElement, canvas: canvas as HTMLCanvasElement };
+    };
+
+    it('sizes the canvas to the viewport area below the header', () => {
+        render(<WorkloadCanvasPanel />);
+
+        const { canvas } = getViewportAndCanvas();
+
         expect(canvas?.width).toBe(640);
         expect(canvas?.height).toBe(220);
     });
@@ -143,10 +150,8 @@ describe('WorkloadCanvasPanel', () => {
     it('keeps the default cursor before and after dragging the histogram area', () => {
         render(<WorkloadCanvasPanel />);
 
-        const viewportElement = screen.getByTestId('workload-canvas-viewport');
-        const canvas = viewportElement.querySelector('canvas');
+        const { viewportElement, canvas } = getViewportAndCanvas();
 
-        expect(canvas).not.toBeNull();
         expect(viewportElement).toHaveStyle({ cursor: 'default' });
         expect(canvas).toHaveStyle({ cursor: 'default' });
         expect(document.body.style.cursor).toBe('');
@@ -157,6 +162,46 @@ describe('WorkloadCanvasPanel', () => {
         expect(document.body.style.cursor).toBe('');
 
         fireEvent.mouseUp(window);
+        expect(viewportElement).toHaveStyle({ cursor: 'default' });
+        expect(canvas).toHaveStyle({ cursor: 'default' });
+        expect(document.body.style.cursor).toBe('');
+    });
+
+    it('shows a pointer cursor when hovering a histogram bar', () => {
+        render(<WorkloadCanvasPanel />);
+
+        const { viewportElement, canvas } = getViewportAndCanvas();
+
+        fireEvent.mouseMove(viewportElement, { clientX: 15, clientY: 70 });
+
+        expect(viewportElement).toHaveStyle({ cursor: 'pointer' });
+        expect(canvas).toHaveStyle({ cursor: 'pointer' });
+        expect(document.body.style.cursor).toBe('');
+    });
+
+    it('keeps the default cursor when hovering off a histogram bar', () => {
+        render(<WorkloadCanvasPanel />);
+
+        const { viewportElement, canvas } = getViewportAndCanvas();
+
+        fireEvent.mouseMove(viewportElement, { clientX: 100, clientY: 70 });
+
+        expect(viewportElement).toHaveStyle({ cursor: 'default' });
+        expect(canvas).toHaveStyle({ cursor: 'default' });
+        expect(document.body.style.cursor).toBe('');
+    });
+
+    it('resets the cursor to default on mouse leave', () => {
+        render(<WorkloadCanvasPanel />);
+
+        const { viewportElement, canvas } = getViewportAndCanvas();
+
+        fireEvent.mouseMove(viewportElement, { clientX: 15, clientY: 70 });
+        expect(viewportElement).toHaveStyle({ cursor: 'pointer' });
+        expect(canvas).toHaveStyle({ cursor: 'pointer' });
+
+        fireEvent.mouseLeave(viewportElement);
+
         expect(viewportElement).toHaveStyle({ cursor: 'default' });
         expect(canvas).toHaveStyle({ cursor: 'default' });
         expect(document.body.style.cursor).toBe('');

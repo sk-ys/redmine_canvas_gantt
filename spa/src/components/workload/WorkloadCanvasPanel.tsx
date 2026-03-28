@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import React, { useEffect, useRef, useCallback, useLayoutEffect, useState } from 'react';
 import { useWorkloadStore } from '../../stores/WorkloadStore';
 import { useTaskStore } from '../../stores/TaskStore';
 import { useUIStore } from '../../stores/UIStore';
@@ -26,6 +26,8 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         startX: 0,
         startY: 0
     });
+    const [isHistogramBarHovered, setIsHistogramBarHovered] = useState(false);
+    const [isPointerSuppressed, setIsPointerSuppressed] = useState(false);
     
     const { workloadData, capacityThreshold } = useWorkloadStore();
     const { viewport, zoomLevel } = useTaskStore();
@@ -34,6 +36,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     const workloadAssigneeCount = workloadData?.assignees.size ?? 0;
     const hasAssignees = workloadAssigneeCount > 0;
     const contentHeight = hasAssignees ? workloadAssigneeCount * rowHeight : 0;
+    const cursor = isHistogramBarHovered && !isPointerSuppressed && !isSidebarResizing ? 'pointer' : 'default';
 
     const updateCanvasSize = useCallback(() => {
         if (!canvasRef.current) return;
@@ -109,6 +112,27 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         const viewportElement = viewportRef.current;
         if (!viewportElement) return;
 
+        const updateHoverState = (clientX: number, clientY: number) => {
+            if (isSidebarResizing) {
+                if (isHistogramBarHovered) {
+                    setIsHistogramBarHovered(false);
+                }
+                return;
+            }
+
+            const viewportRect = viewportElement.getBoundingClientRect();
+            const hit = renderEngine.current?.hitTestDailyBar({
+                pointerX: clientX - viewportRect.left,
+                pointerY: clientY - viewportRect.top,
+                viewport,
+                zoomLevel,
+                workloadData,
+                capacityThreshold,
+                verticalScroll: scrollTop
+            });
+            setIsHistogramBarHovered(Boolean(hit));
+        };
+
         const finishDrag = () => {
             if (!dragStateRef.current.active) return;
             dragStateRef.current = {
@@ -117,6 +141,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 startX: 0,
                 startY: 0
             };
+            setIsPointerSuppressed(false);
         };
 
         const handleMouseDown = (event: MouseEvent) => {
@@ -127,12 +152,22 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 startX: event.clientX,
                 startY: event.clientY
             };
+            setIsPointerSuppressed(true);
             event.preventDefault();
+        };
+
+        const handleViewportMouseMove = (event: MouseEvent) => {
+            updateHoverState(event.clientX, event.clientY);
+        };
+
+        const handleViewportMouseLeave = () => {
+            setIsHistogramBarHovered(false);
         };
 
         const handleMouseMove = (event: MouseEvent) => {
             if (!dragStateRef.current.active) return;
             if (isSidebarResizing) {
+                setIsHistogramBarHovered(false);
                 finishDrag();
                 return;
             }
@@ -154,6 +189,9 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 startX: event.clientX,
                 startY: event.clientY
             };
+            if (isHistogramBarHovered) {
+                setIsHistogramBarHovered(false);
+            }
         };
 
         const handleMouseUp = (event: MouseEvent) => {
@@ -191,19 +229,25 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
             if (result.status === 'filtered_out') {
                 useUIStore.getState().addNotification('Selected task is hidden by the current filters.', 'warning');
             }
+
+            updateHoverState(event.clientX, event.clientY);
         };
 
         viewportElement.addEventListener('mousedown', handleMouseDown);
+        viewportElement.addEventListener('mousemove', handleViewportMouseMove);
+        viewportElement.addEventListener('mouseleave', handleViewportMouseLeave);
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
 
         return () => {
             viewportElement.removeEventListener('mousedown', handleMouseDown);
+            viewportElement.removeEventListener('mousemove', handleViewportMouseMove);
+            viewportElement.removeEventListener('mouseleave', handleViewportMouseLeave);
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
             finishDrag();
         };
-    }, [capacityThreshold, isSidebarResizing, scrollTop, viewport, workloadData, zoomLevel]);
+    }, [capacityThreshold, isHistogramBarHovered, isSidebarResizing, scrollTop, viewport, workloadData, zoomLevel]);
 
     return (
         <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', borderTop: '1px solid #e0e0e0', backgroundColor: '#ffffff' }}>
@@ -234,11 +278,11 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                     bottom: 0,
                     overflowX: 'hidden',
                     overflowY: hasAssignees ? 'auto' : 'hidden',
-                    cursor: 'default'
+                    cursor
                 }}
             >
                 <div style={{ position: 'relative', minHeight: '100%', height: hasAssignees ? `${contentHeight}px` : '100%' }}>
-                    <canvas ref={canvasRef} style={{ position: 'sticky', top: 0, display: 'block', cursor: 'default' }} />
+                    <canvas ref={canvasRef} style={{ position: 'sticky', top: 0, display: 'block', cursor }} />
                 </div>
                 {!hasAssignees && (
                     <div style={{
