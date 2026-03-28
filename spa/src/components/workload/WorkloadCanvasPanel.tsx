@@ -67,13 +67,15 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     const contentHeight = hasAssignees ? workloadAssigneeCount * rowHeight : 0;
     const cursor = isHistogramBarHovered && !isPointerSuppressed && !isSidebarResizing ? 'pointer' : 'default';
 
-    interactionStateRef.current = {
-        viewport,
-        zoomLevel,
-        workloadData,
-        capacityThreshold,
-        scrollTop
-    };
+    useEffect(() => {
+        interactionStateRef.current = {
+            viewport,
+            zoomLevel,
+            workloadData,
+            capacityThreshold,
+            scrollTop
+        };
+    }, [capacityThreshold, scrollTop, viewport, workloadData, zoomLevel]);
 
     const setHistogramBarHoveredState = useCallback((next: boolean) => {
         histogramBarHoveredRef.current = next;
@@ -246,7 +248,10 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
 
     useEffect(() => {
         if (isSidebarResizing && histogramBarHoveredRef.current) {
-            setHistogramBarHoveredState(false);
+            const frameId = window.requestAnimationFrame(() => {
+                setHistogramBarHoveredState(false);
+            });
+            return () => window.cancelAnimationFrame(frameId);
         }
     }, [isSidebarResizing, setHistogramBarHoveredState]);
 

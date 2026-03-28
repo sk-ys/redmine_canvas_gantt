@@ -6,7 +6,7 @@ import { getStatusColor, getPriorityColor } from '../utils/styles';
 import { useUIStore } from '../stores/UIStore';
 import { SIDEBAR_RESIZE_CURSOR } from '../constants';
 
-import { CustomFieldEditor, DoneRatioEditor, DueDateEditor, SelectEditor, SubjectEditor } from './InlineEditors';
+import { CustomFieldEditor, DoneRatioEditor, DueDateEditor, EstimatedHoursEditor, SelectEditor, SubjectEditor } from './InlineEditors';
 import { useEditMetaStore } from '../stores/EditMetaStore';
 import type { InlineEditSettings } from '../types/editMeta';
 import { i18n } from '../utils/i18n';
@@ -1292,7 +1292,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'estimatedHours') {
                                                     return (
-                                                        <DoneRatioEditor
+                                                        <EstimatedHoursEditor
                                                             initialValue={task.estimatedHours || 0}
                                                             controlHeight={inlineControlHeight}
                                                             onCancel={close}

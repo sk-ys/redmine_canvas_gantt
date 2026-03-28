@@ -253,6 +253,74 @@ export const DoneRatioEditor: React.FC<{
     );
 };
 
+export const EstimatedHoursEditor: React.FC<{
+    initialValue: number;
+    onCommit: (value: number) => Promise<void>;
+    onCancel: () => void;
+    controlHeight?: number;
+}> = ({ initialValue, onCommit, onCancel, controlHeight }) => {
+    const [value, setValue] = React.useState(String(initialValue));
+    const [saving, setSaving] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+
+    const commit = async () => {
+        const numVal = Number(value);
+        if (Number.isNaN(numVal) || numVal < 0) {
+            setError(i18n.t('label_must_be_positive_number') || 'Must be 0 or greater');
+            return;
+        }
+
+        if (numVal === initialValue) {
+            onCancel();
+            return;
+        }
+        setSaving(true);
+        setError(null);
+        try {
+            await onCommit(numVal);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : (i18n.t('label_failed_to_save') || 'Failed to save'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={value}
+                    disabled={saving}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') onCancel();
+                        if (e.key === 'Enter') void commit();
+                    }}
+                    onBlur={() => {
+                        const numVal = Number(value);
+                        if (Number.isNaN(numVal) || numVal < 0 || numVal === initialValue) {
+                            onCancel();
+                        } else {
+                            void commit();
+                        }
+                    }}
+                    style={buildControlStyle({
+                        controlHeight,
+                        width: '72px',
+                        border: error ? '1px solid #d32f2f' : '1px solid #ccc'
+                    })}
+                />
+                <span style={{ fontSize: 12, color: '#444' }}>h</span>
+                {saving ? <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || '...'}</span> : null}
+            </div>
+            {error ? <div style={{ fontSize: 12, color: '#d32f2f' }}>{error}</div> : null}
+        </div>
+    );
+};
+
 export const DueDateEditor: React.FC<{
     initialValue: string;
     onCommit: (value: string) => Promise<void> | void;

@@ -363,7 +363,7 @@ describe('WorkloadRenderer', () => {
             hoveredDateStr: null,
             focusedAssigneeId: null,
             focusedDateStr: null,
-            getBarLabelInfo: (_assigneeId, _dateStr) => ({ current: 1, total: 3 })
+            getBarLabelInfo: () => ({ current: 1, total: 3 })
         });
 
         expect(vi.mocked(ctx.fillText)).toHaveBeenCalledWith('1/3', expect.any(Number), expect.any(Number));
