@@ -363,9 +363,10 @@ describe('WorkloadCanvasPanel', () => {
         fireEvent.mouseUp(window, { clientX: 15, clientY: 70 });
 
         expect(useTaskStore.getState().selectedTaskId).toBe('task-1');
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
     });
 
-    it('cycles through matching tasks on repeated clicks of the same bar', () => {
+    it('keeps the histogram bar selected while cycling through matching tasks on repeated clicks', () => {
         const tasks = [
             buildTask({ id: 'task-1', subject: 'Task 1', projectId: 'p1', startDate: ONE_DAY, dueDate: ONE_DAY, estimatedHours: 8 }),
             buildTask({ id: 'task-2', subject: 'Task 2', projectId: 'p1', startDate: ONE_DAY * 2, dueDate: ONE_DAY * 2, estimatedHours: 4 })
@@ -382,10 +383,12 @@ describe('WorkloadCanvasPanel', () => {
         fireEvent.mouseDown(viewportElement, { button: 0, clientX: 15, clientY: 70 });
         fireEvent.mouseUp(window, { clientX: 15, clientY: 70 });
         expect(useTaskStore.getState().selectedTaskId).toBe('task-1');
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
 
         fireEvent.mouseDown(viewportElement, { button: 0, clientX: 65, clientY: 70 });
         fireEvent.mouseUp(window, { clientX: 65, clientY: 70 });
         expect(useTaskStore.getState().selectedTaskId).toBe('task-2');
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
     });
 
     it('shows a warning when the clicked task is hidden by filters', () => {
@@ -407,6 +410,7 @@ describe('WorkloadCanvasPanel', () => {
 
         expect(useTaskStore.getState().selectedTaskId).toBeNull();
         expect(useUIStore.getState().notifications.at(-1)?.message).toBe('Selected task is hidden by the current filters.');
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
     });
 
     it('scrolls the workload pane to the focused overload assignee row', () => {

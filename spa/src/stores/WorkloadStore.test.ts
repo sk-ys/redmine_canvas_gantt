@@ -218,4 +218,12 @@ describe('WorkloadStore histogram selection', () => {
 
         expect(useWorkloadStore.getState().focusedHistogramBar).toBeNull();
     });
+
+    it('allows direct histogram clicks to replace the selected histogram bar', () => {
+        useWorkloadStore.getState().setFocusedHistogramBar({ assigneeId: 1, dateStr: '2026-01-02' });
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-02' });
+
+        useWorkloadStore.getState().setFocusedHistogramBar({ assigneeId: 2, dateStr: '2026-01-03' });
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 2, dateStr: '2026-01-03' });
+    });
 });

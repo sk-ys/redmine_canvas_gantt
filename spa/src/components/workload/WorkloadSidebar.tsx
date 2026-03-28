@@ -1,6 +1,7 @@
 import React from 'react';
 import { useWorkloadStore } from '../../stores/WorkloadStore';
 import { useTaskStore } from '../../stores/TaskStore';
+import { useUIStore } from '../../stores/UIStore';
 import { i18n } from '../../utils/i18n';
 
 interface WorkloadSidebarProps {
@@ -12,7 +13,12 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
     scrollTop = 0,
     onScroll
 }) => {
-    const { workloadData, focusedHistogramBar, resolveNextOverloadBar } = useWorkloadStore();
+    const {
+        workloadData,
+        resolveNextOverloadBar,
+        resetHistogramSelectionCycle,
+        resolveNextHistogramTask
+    } = useWorkloadStore();
     const { viewport } = useTaskStore();
     const scrollRef = React.useRef<HTMLDivElement>(null);
     const rowHeight = viewport.rowHeight * 2;
@@ -61,7 +67,6 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
                     <div style={{ minHeight: `${assignees.length * rowHeight}px` }}>
                         {assignees.map((assignee) => {
                             const hasOverload = Array.from(assignee.dailyWorkloads.values()).some(d => d.isOverload);
-                            const isFocusedAssignee = focusedHistogramBar?.assigneeId === assignee.assigneeId;
                             return (
                                 <div
                                     key={assignee.assigneeId}
@@ -84,11 +89,21 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
                                                 type="button"
                                                 aria-label={`Focus overload histogram for ${assignee.assigneeName}`}
                                                 onClick={() => {
-                                                    resolveNextOverloadBar(assignee.assigneeId);
+                                                    const selectedBar = resolveNextOverloadBar(assignee.assigneeId);
+                                                    if (!selectedBar) return;
+
+                                                    resetHistogramSelectionCycle();
+                                                    const { taskId } = resolveNextHistogramTask(selectedBar.assigneeId, selectedBar.dateStr);
+                                                    if (!taskId) return;
+
+                                                    const result = useTaskStore.getState().focusTask(taskId);
+                                                    if (result.status === 'filtered_out') {
+                                                        useUIStore.getState().addNotification('Selected task is hidden by the current filters.', 'warning');
+                                                    }
                                                 }}
                                                 style={{
-                                                    backgroundColor: isFocusedAssignee ? '#d93025' : '#fce8e6',
-                                                    color: isFocusedAssignee ? '#fff' : '#d93025',
+                                                    backgroundColor: '#fce8e6',
+                                                    color: '#d93025',
                                                     padding: '2px 6px',
                                                     borderRadius: '4px',
                                                     fontSize: '11px',

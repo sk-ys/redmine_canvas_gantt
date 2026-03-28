@@ -229,13 +229,11 @@ export class WorkloadRenderer {
                     ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
 
                     if (focusedAssigneeId === assignee.assigneeId && focusedDateStr === daily.dateStr) {
-                        ctx.save();
-                        ctx.strokeStyle = '#202124';
+                        ctx.strokeStyle = '#ff9800';
                         ctx.lineWidth = 2;
-                        ctx.strokeRect(rect.x - 1, rect.y - 1, rect.width + 2, rect.height + 2);
-                        ctx.fillStyle = 'rgba(255, 193, 7, 0.22)';
-                        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-                        ctx.restore();
+                        ctx.setLineDash([4, 2]);
+                        ctx.strokeRect(rect.x - 2, rect.y - 2, rect.width + 4, rect.height + 4);
+                        ctx.setLineDash([]);
                     }
                 }
             });

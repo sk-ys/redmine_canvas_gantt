@@ -34,7 +34,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
     const renderEngine = useRef<WorkloadRenderer | null>(null);
-    const { workloadData, capacityThreshold, focusedHistogramBar } = useWorkloadStore();
+    const { workloadData, capacityThreshold, focusedHistogramBar, setFocusedHistogramBar } = useWorkloadStore();
     const { viewport, zoomLevel } = useTaskStore();
     const isSidebarResizing = useUIStore((state) => state.isSidebarResizing);
     const dragStateRef = useRef<DragState>({
@@ -324,6 +324,8 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 return;
             }
 
+            setFocusedHistogramBar(releasedHit);
+
             const { taskId } = useWorkloadStore.getState().resolveNextHistogramTask(releasedHit.assigneeId, releasedHit.dateStr);
             if (!taskId) {
                 updateHoverState(event.clientX, event.clientY);
@@ -352,7 +354,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
             window.removeEventListener('mouseup', handleMouseUp);
             finishDrag();
         };
-    }, [finishDrag, hitTestDailyBarAtClientPoint, isScrollInteractionLocked, setHistogramBarHoveredState, setPointerSuppressedState, updateHoverState]);
+    }, [finishDrag, hitTestDailyBarAtClientPoint, isScrollInteractionLocked, setFocusedHistogramBar, setHistogramBarHoveredState, setPointerSuppressedState, updateHoverState]);
 
     return (
         <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', borderTop: '1px solid #e0e0e0', backgroundColor: '#ffffff' }}>

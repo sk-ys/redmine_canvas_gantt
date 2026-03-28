@@ -85,6 +85,7 @@ interface WorkloadState {
     setTodayOnwardOnly: (todayOnward: boolean) => void;
     resetHistogramSelectionCycle: () => void;
     resolveNextHistogramTask: (assigneeId: number, dateStr: string) => { taskId: string | null };
+    setFocusedHistogramBar: (bar: FocusedHistogramBar) => void;
     resetOverloadFocus: () => void;
     resolveNextOverloadBar: (assigneeId: number) => FocusedHistogramBar;
     calculateWorkloadData: () => void;
@@ -154,6 +155,10 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
 
     resetHistogramSelectionCycle: () => {
         set({ histogramSelectionCycle: HISTOGRAM_SELECTION_RESET });
+    },
+
+    setFocusedHistogramBar: (bar) => {
+        set({ focusedHistogramBar: bar });
     },
 
     resolveNextHistogramTask: (assigneeId, dateStr) => {

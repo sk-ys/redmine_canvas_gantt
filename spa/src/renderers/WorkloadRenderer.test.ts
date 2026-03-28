@@ -291,7 +291,7 @@ describe('WorkloadRenderer', () => {
         expect(hit).toEqual({ assigneeId: 2, dateStr: '2026-01-01' });
     });
 
-    it('draws an outline for the focused histogram bar', () => {
+    it('draws the same dotted selection outline as the gantt selection without changing bar fill', () => {
         const ctx = createMockContext();
         const canvas = {
             width: 800,
@@ -299,19 +299,35 @@ describe('WorkloadRenderer', () => {
             getContext: vi.fn(() => ctx)
         } as unknown as HTMLCanvasElement;
         const renderer = new WorkloadRenderer(canvas);
-
-        renderer.render({
+        const state = {
             viewport: buildViewport({ scale: 10 / ONE_DAY }),
-            zoomLevel: 2,
+            zoomLevel: 2 as const,
             workloadData: buildWorkloadData(0),
             capacityThreshold: 8,
             verticalScroll: 0,
             hoveredAssigneeId: null,
-            hoveredDateStr: null,
+            hoveredDateStr: null
+        };
+
+        renderer.render({
+            ...state,
+            focusedAssigneeId: null,
+            focusedDateStr: null
+        });
+
+        const baselineFillRectCount = vi.mocked(ctx.fillRect).mock.calls.length;
+        vi.mocked(ctx.fillRect).mockClear();
+        vi.mocked(ctx.strokeRect).mockClear();
+        vi.mocked(ctx.setLineDash).mockClear();
+
+        renderer.render({
+            ...state,
             focusedAssigneeId: 1,
             focusedDateStr: '2026-01-01'
         });
 
         expect(vi.mocked(ctx.strokeRect)).toHaveBeenCalled();
+        expect(vi.mocked(ctx.setLineDash)).toHaveBeenCalledWith([4, 2]);
+        expect(vi.mocked(ctx.fillRect).mock.calls.length).toBe(baselineFillRectCount);
     });
 });
