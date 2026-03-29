@@ -32,6 +32,8 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
     const WORKLOAD_DEFAULT_RATIO = 0.4;
     const WORKLOAD_MIN_PANE_PX = 160;
     const WORKLOAD_SPLIT_HANDLE_HEIGHT = 8;
+    const WORKLOAD_SPLIT_CURSOR = 's-resize';
+    const WORKLOAD_RESIZE_OVERLAY_Z_INDEX = 1000;
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollPaneRef = useRef<HTMLDivElement>(null);
     const viewportWrapperRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
     const isSplitView = leftPaneVisible && rightPaneVisible;
     const [workloadPaneRatio, setWorkloadPaneRatio] = useState(WORKLOAD_DEFAULT_RATIO);
     const [workloadScrollTop, setWorkloadScrollTop] = useState(0);
+    const [isWorkloadResizing, setIsWorkloadResizing] = useState(false);
 
     const tasksMaxDue = useMemo(() => getMaxFiniteDueDate(tasks), [tasks]);
     const workloadTopWeight = Math.max(1, Math.round((1 - workloadPaneRatio) * 100));
@@ -129,7 +132,8 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
             previousUserSelect: document.body.style.userSelect
         };
 
-        document.body.style.cursor = 'row-resize';
+        setIsWorkloadResizing(true);
+        document.body.style.cursor = WORKLOAD_SPLIT_CURSOR;
         document.body.style.userSelect = 'none';
         updateWorkloadRatio(event.clientY);
         event.preventDefault();
@@ -144,6 +148,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         const handleMouseUp = () => {
             const resizeState = workloadResizeStateRef.current;
             if (!resizeState) return;
+            setIsWorkloadResizing(false);
             document.body.style.cursor = resizeState.previousCursor;
             document.body.style.userSelect = resizeState.previousUserSelect;
             workloadResizeStateRef.current = null;
@@ -155,6 +160,12 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
+            setIsWorkloadResizing(false);
+            if (workloadResizeStateRef.current) {
+                document.body.style.cursor = workloadResizeStateRef.current.previousCursor;
+                document.body.style.userSelect = workloadResizeStateRef.current.previousUserSelect;
+                workloadResizeStateRef.current = null;
+            }
         };
     }, [updateWorkloadRatio]);
 
@@ -316,7 +327,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
                                     data-testid="workload-split-handle-left"
                                     onMouseDown={workloadPaneVisible ? startWorkloadResize : undefined}
                                     style={{
-                                        cursor: workloadPaneVisible ? 'row-resize' : 'default',
+                                        cursor: workloadPaneVisible ? WORKLOAD_SPLIT_CURSOR : 'default',
                                         backgroundColor: '#f0f0f0',
                                         borderTop: workloadPaneVisible ? '1px solid #e0e0e0' : 'none',
                                         borderBottom: workloadPaneVisible ? '1px solid #e0e0e0' : 'none',
@@ -409,7 +420,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
                             data-testid="workload-split-handle-right"
                             onMouseDown={workloadPaneVisible ? startWorkloadResize : undefined}
                             style={{
-                                cursor: workloadPaneVisible ? 'row-resize' : 'default',
+                                cursor: workloadPaneVisible ? WORKLOAD_SPLIT_CURSOR : 'default',
                                 backgroundColor: '#f0f0f0',
                                 borderTop: workloadPaneVisible ? '1px solid #e0e0e0' : 'none',
                                 borderBottom: workloadPaneVisible ? '1px solid #e0e0e0' : 'none',
@@ -431,6 +442,18 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
                     </div>
                 </div>
             </div>
+            {isWorkloadResizing && (
+                <div
+                    data-testid="workload-resize-overlay"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        cursor: WORKLOAD_SPLIT_CURSOR,
+                        background: 'transparent',
+                        zIndex: WORKLOAD_RESIZE_OVERLAY_Z_INDEX
+                    }}
+                />
+            )}
             <IssueIframeDialog />
             <GlobalTooltip />
             <HelpDialog />

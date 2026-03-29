@@ -305,6 +305,49 @@ describe('GanttContainer Resize', () => {
         expect(document.body.style.userSelect).toBe('');
     });
 
+    it('keeps s-resize active with a drag overlay during workload split resize', () => {
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadPaneVisible: true,
+            workloadData: {
+                assignees: new Map(),
+                overloadedAssigneeCount: 0,
+                overloadedDayCount: 0
+            }
+        });
+
+        render(<GanttContainer />);
+
+        const layout = screen.getByTestId('workload-split-layout-left');
+        const handle = screen.getByTestId('workload-split-handle-left');
+
+        expect(handle).toHaveStyle({ cursor: 's-resize' });
+        expect(screen.queryByTestId('workload-resize-overlay')).not.toBeInTheDocument();
+
+        vi.spyOn(layout, 'getBoundingClientRect').mockReturnValue({
+            left: 0,
+            top: 0,
+            width: 300,
+            height: 600,
+            bottom: 600,
+            right: 300,
+            x: 0,
+            y: 0,
+            toJSON: () => { },
+        });
+
+        fireEvent.mouseDown(handle, { clientY: 360 });
+        expect(document.body.style.cursor).toBe('s-resize');
+        expect(screen.getByTestId('workload-resize-overlay')).toHaveStyle({
+            cursor: 's-resize',
+            position: 'fixed'
+        });
+
+        fireEvent.mouseUp(window);
+        expect(document.body.style.cursor).toBe('');
+        expect(screen.queryByTestId('workload-resize-overlay')).not.toBeInTheDocument();
+    });
+
     it('keeps the gantt viewport DOM stable when toggling the workload pane', () => {
         const { container } = render(<GanttContainer />);
 
