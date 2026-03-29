@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useLayoutEffect, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { useWorkloadStore } from '../../stores/WorkloadStore';
 import { useTaskStore } from '../../stores/TaskStore';
 import { useUIStore } from '../../stores/UIStore';
@@ -59,6 +59,9 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     });
     const histogramBarHoveredRef = useRef(false);
     const pointerSuppressedRef = useRef(false);
+    const suppressFocusedBarScrollKeyRef = useRef<string | null>(null);
+    const histogramScrollXOverrideRef = useRef<number | null>(null);
+    const [histogramScrollXOverride, setHistogramScrollXOverride] = useState<number | null>(null);
     const [isHistogramBarHovered, setIsHistogramBarHovered] = useState(false);
     const [isPointerSuppressed, setIsPointerSuppressed] = useState(false);
     const rowHeight = viewport.rowHeight * 2;
@@ -66,16 +69,26 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     const hasAssignees = workloadAssigneeCount > 0;
     const contentHeight = hasAssignees ? workloadAssigneeCount * rowHeight : 0;
     const cursor = isHistogramBarHovered && !isPointerSuppressed && !isSidebarResizing ? 'pointer' : 'default';
+    const histogramViewport = useMemo(() => ({
+        ...viewport,
+        scrollX: histogramScrollXOverride ?? viewport.scrollX
+    }), [histogramScrollXOverride, viewport]);
+    const histogramViewportRef = useRef(histogramViewport);
 
     useEffect(() => {
+        histogramViewportRef.current = histogramViewport;
         interactionStateRef.current = {
-            viewport,
+            viewport: histogramViewport,
             zoomLevel,
             workloadData,
             capacityThreshold,
             scrollTop
         };
-    }, [capacityThreshold, scrollTop, viewport, workloadData, zoomLevel]);
+    }, [capacityThreshold, histogramViewport, scrollTop, workloadData, zoomLevel]);
+
+    useEffect(() => {
+        histogramScrollXOverrideRef.current = histogramScrollXOverride;
+    }, [histogramScrollXOverride]);
 
     const setHistogramBarHoveredState = useCallback((next: boolean) => {
         histogramBarHoveredRef.current = next;
@@ -111,7 +124,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
             // Trigger render on resize
             if (renderEngine.current) {
                renderEngine.current.render({
-                   viewport,
+                   viewport: histogramViewport,
                    zoomLevel,
                    workloadData,
                    capacityThreshold,
@@ -121,7 +134,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                    focusedAssigneeId: focusedHistogramBar?.assigneeId ?? null,
                    focusedDateStr: focusedHistogramBar?.dateStr ?? null,
                    getBarLabelInfo: useWorkloadStore.getState().getHistogramBarLabelInfo
-               });
+                });
             }
         });
         
@@ -133,7 +146,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         }
         
         return () => resizeObserver.disconnect();
-    }, [capacityThreshold, focusedHistogramBar, scrollTop, updateCanvasSize, viewport, zoomLevel, workloadData]);
+    }, [capacityThreshold, focusedHistogramBar, histogramViewport, scrollTop, updateCanvasSize, zoomLevel, workloadData]);
 
     useLayoutEffect(() => {
         updateCanvasSize();
@@ -142,7 +155,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     useEffect(() => {
         if (renderEngine.current && canvasRef.current) {
             renderEngine.current.render({
-                viewport,
+                viewport: histogramViewport,
                 zoomLevel,
                 workloadData,
                 capacityThreshold,
@@ -154,7 +167,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 getBarLabelInfo: useWorkloadStore.getState().getHistogramBarLabelInfo
             });
         }
-    }, [capacityThreshold, focusedHistogramBar, scrollTop, viewport, zoomLevel, workloadData]);
+    }, [capacityThreshold, focusedHistogramBar, histogramViewport, scrollTop, zoomLevel, workloadData]);
 
     useEffect(() => {
         if (!viewportRef.current) return;
@@ -165,6 +178,11 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
 
     useEffect(() => {
         if (!focusedHistogramBar || !workloadData || !viewportRef.current) return;
+
+        const focusedBarKey = `${focusedHistogramBar.assigneeId}:${focusedHistogramBar.dateStr}`;
+        if (suppressFocusedBarScrollKeyRef.current === focusedBarKey) {
+            return;
+        }
 
         const assignees = Array.from(workloadData.assignees.values()).sort((a, b) => a.assigneeName.localeCompare(b.assigneeName));
         const assigneeIndex = assignees.findIndex((assignee) => assignee.assigneeId === focusedHistogramBar.assigneeId);
@@ -177,13 +195,25 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         if (Math.abs(viewportRef.current.scrollTop - nextScrollTop) > 1) {
             viewportRef.current.scrollTop = nextScrollTop;
         }
+    }, [focusedHistogramBar, rowHeight, workloadData]);
 
-        const barStartX = (daily.timestamp - viewport.startDate) * viewport.scale;
-        const barEndX = (daily.timestamp + 24 * 60 * 60 * 1000 - viewport.startDate) * viewport.scale;
+    useEffect(() => {
+        if (!focusedHistogramBar || !workloadData || !viewportRef.current) return;
+
+        const daily = workloadData.assignees.get(focusedHistogramBar.assigneeId)?.dailyWorkloads.get(focusedHistogramBar.dateStr);
+        if (!daily) return;
+
+        const focusedBarKey = `${focusedHistogramBar.assigneeId}:${focusedHistogramBar.dateStr}`;
+        if (suppressFocusedBarScrollKeyRef.current === focusedBarKey) {
+            return;
+        }
+
+        const barStartX = (daily.timestamp - histogramViewport.startDate) * histogramViewport.scale;
+        const barEndX = (daily.timestamp + 24 * 60 * 60 * 1000 - histogramViewport.startDate) * histogramViewport.scale;
         const viewportWidth = viewportRef.current.clientWidth;
-        const visibleStartX = viewport.scrollX;
-        const visibleEndX = viewport.scrollX + viewportWidth;
-        let nextScrollX = viewport.scrollX;
+        const visibleStartX = histogramViewport.scrollX;
+        const visibleEndX = histogramViewport.scrollX + viewportWidth;
+        let nextScrollX = histogramViewport.scrollX;
 
         if (barStartX < visibleStartX + FOCUS_PADDING_X) {
             nextScrollX = Math.max(0, barStartX - FOCUS_PADDING_X);
@@ -191,10 +221,10 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
             nextScrollX = Math.max(0, barEndX - viewportWidth + FOCUS_PADDING_X);
         }
 
-        if (Math.abs(nextScrollX - viewport.scrollX) > 1) {
+        if (Math.abs(nextScrollX - histogramViewport.scrollX) > 1) {
             useTaskStore.getState().updateViewport({ scrollX: nextScrollX });
         }
-    }, [focusedHistogramBar, rowHeight, viewport, workloadData]);
+    }, [focusedHistogramBar, histogramViewport, workloadData]);
 
     const isScrollInteractionLocked = useCallback(() => useUIStore.getState().isSidebarResizing, []);
 
@@ -304,6 +334,9 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 return;
             }
 
+            if (histogramScrollXOverrideRef.current !== null) {
+                setHistogramScrollXOverride(null);
+            }
             panViewportByPixels(deltaX, 0);
             dragStateRef.current = {
                 ...dragState,
@@ -336,6 +369,8 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
                 return;
             }
 
+            setHistogramScrollXOverride(histogramViewportRef.current.scrollX);
+            suppressFocusedBarScrollKeyRef.current = `${releasedHit.assigneeId}:${releasedHit.dateStr}`;
             setFocusedHistogramBar(releasedHit);
 
             const { taskId } = useWorkloadStore.getState().resolveNextHistogramTask(releasedHit.assigneeId, releasedHit.dateStr);

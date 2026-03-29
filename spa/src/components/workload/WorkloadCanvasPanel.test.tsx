@@ -105,6 +105,49 @@ const buildFocusedOverloadWorkloadData = (): WorkloadData => ({
     overloadedDayCount: 2
 });
 
+const buildTwoAssigneeWorkloadData = (aliceTasks: Task[] = [], bobTasks: Task[] = []): WorkloadData => ({
+    assignees: new Map([
+        [1, {
+            assigneeId: 1,
+            assigneeName: 'Alice',
+            totalLoad: 4,
+            peakLoad: 4,
+            dailyWorkloads: new Map([
+                ['2026-01-01', {
+                    dateStr: '2026-01-01',
+                    timestamp: ONE_DAY * 3,
+                    totalLoad: 4,
+                    isOverload: false,
+                    contributingTasks: aliceTasks.map((task) => ({
+                        task,
+                        dailyLoad: 1
+                    }))
+                }]
+            ])
+        }],
+        [2, {
+            assigneeId: 2,
+            assigneeName: 'Bob',
+            totalLoad: 6,
+            peakLoad: 6,
+            dailyWorkloads: new Map([
+                ['2026-01-02', {
+                    dateStr: '2026-01-02',
+                    timestamp: ONE_DAY * 4,
+                    totalLoad: 6,
+                    isOverload: false,
+                    contributingTasks: bobTasks.map((task) => ({
+                        task,
+                        dailyLoad: 1
+                    }))
+                }]
+            ])
+        }]
+    ]),
+    overloadedAssigneeCount: 0,
+    overloadedDayCount: 0
+});
+
 beforeEach(() => {
     vi.clearAllMocks();
 
@@ -159,6 +202,8 @@ beforeEach(() => {
 });
 
 describe('WorkloadCanvasPanel', () => {
+    const getLastBarDrawCall = () => vi.mocked(mockContext.fillRect).mock.calls.filter(([, , width]) => width === 18).at(-1);
+
     const getViewportAndCanvas = () => {
         const viewportElement = screen.getByTestId('workload-canvas-viewport');
         const canvas = viewportElement.querySelector('canvas') as HTMLCanvasElement | null;
@@ -370,6 +415,54 @@ describe('WorkloadCanvasPanel', () => {
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
     });
 
+    it('keeps the workload scroll position fixed when focusing a task from a clicked histogram bar', () => {
+        const tasks = [
+            buildTask({ id: 'task-alice', subject: 'Task Alice', assignedToId: 1, assignedToName: 'Alice', projectId: 'p1', startDate: ONE_DAY, dueDate: ONE_DAY, estimatedHours: 4 }),
+            buildTask({ id: 'task-bob', subject: 'Task Bob', assignedToId: 2, assignedToName: 'Bob', projectId: 'p1', startDate: ONE_DAY * 2, dueDate: ONE_DAY * 2, estimatedHours: 6 })
+        ];
+        useTaskStore.getState().setTasks(tasks);
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildTwoAssigneeWorkloadData([tasks[0]], [tasks[1]])
+        });
+
+        render(<WorkloadCanvasPanel scrollTop={48} />);
+
+        const viewportElement = screen.getByTestId('workload-canvas-viewport');
+        expect(viewportElement.scrollTop).toBe(48);
+
+        fireEvent.mouseDown(viewportElement, { button: 0, clientX: 35, clientY: 100 });
+        fireEvent.mouseUp(window, { clientX: 35, clientY: 100 });
+
+        expect(useTaskStore.getState().selectedTaskId).toBe('task-bob');
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 2, dateStr: '2026-01-02' });
+        expect(viewportElement.scrollTop).toBe(48);
+    });
+
+    it('keeps the histogram horizontal position fixed when gantt focus updates shared scrollX', () => {
+        const tasks = [
+            buildTask({ id: 'task-1', subject: 'Task 1', projectId: 'p1', startDate: ONE_DAY, dueDate: ONE_DAY, estimatedHours: 4 }),
+            buildTask({ id: 'task-2', subject: 'Task 2', projectId: 'p1', startDate: ONE_DAY * 2, dueDate: ONE_DAY * 2, estimatedHours: 2 })
+        ];
+        useTaskStore.getState().setTasks(tasks);
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildWorkloadData(tasks)
+        });
+
+        render(<WorkloadCanvasPanel />);
+
+        vi.mocked(mockContext.fillRect).mockClear();
+
+        const viewportElement = screen.getByTestId('workload-canvas-viewport');
+        fireEvent.mouseDown(viewportElement, { button: 0, clientX: 15, clientY: 70 });
+        fireEvent.mouseUp(window, { clientX: 15, clientY: 70 });
+
+        expect(useTaskStore.getState().selectedTaskId).toBe('task-1');
+        expect(useTaskStore.getState().viewport.scrollX).toBe(0);
+        expect(getLastBarDrawCall()?.[0]).toBe(11);
+    });
+
     it('keeps the histogram bar selected while cycling through matching tasks on repeated clicks', () => {
         const tasks = [
             buildTask({ id: 'task-1', subject: 'Task 1', projectId: 'p1', startDate: ONE_DAY, dueDate: ONE_DAY, estimatedHours: 8 }),
@@ -397,10 +490,8 @@ describe('WorkloadCanvasPanel', () => {
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
         expect(vi.mocked(mockContext.fillText)).toHaveBeenCalledWith('1/2', expect.any(Number), expect.any(Number));
 
-        const currentViewport = useTaskStore.getState().viewport;
-        const secondClickX = (ONE_DAY * 3 - currentViewport.startDate) * currentViewport.scale - currentViewport.scrollX + 10;
-        fireEvent.mouseDown(viewportElement, { button: 0, clientX: secondClickX, clientY: 70 });
-        fireEvent.mouseUp(window, { clientX: secondClickX, clientY: 70 });
+        fireEvent.mouseDown(viewportElement, { button: 0, clientX: 80, clientY: 70 });
+        fireEvent.mouseUp(window, { clientX: 80, clientY: 70 });
         expect(useTaskStore.getState().selectedTaskId).toBe('task-2');
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-01' });
         expect(vi.mocked(mockContext.fillText)).toHaveBeenCalledWith('2/2', expect.any(Number), expect.any(Number));

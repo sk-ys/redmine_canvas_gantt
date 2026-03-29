@@ -5,6 +5,7 @@ export interface InlineEditSettings {
     inline_edit_done_ratio?: string;
     inline_edit_due_date?: string;
     inline_edit_start_date?: string;
+    inline_edit_estimated_hours?: string;
     inline_edit_custom_fields?: string;
     default_relation_type?: 'precedes' | 'relates' | 'blocks';
     auto_calculate_delay?: string;

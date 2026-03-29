@@ -295,4 +295,126 @@ describe('WorkloadStore histogram selection', () => {
         useWorkloadStore.getState().resolveNextHistogramTask(1, '2026-01-05');
         expect(useWorkloadStore.getState().getHistogramBarLabelInfo(1, '2026-01-05')).toEqual({ current: 2, total: 2 });
     });
+
+    it('syncs focused histogram bar from selectedTaskId using the first matching workload day', () => {
+        const task = buildTask({ id: 'multi-day', estimatedHours: 8, assignedToId: 1, assignedToName: 'Alice' });
+
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: {
+                assignees: new Map([
+                    [1, {
+                        assigneeId: 1,
+                        assigneeName: 'Alice',
+                        totalLoad: 2,
+                        peakLoad: 1,
+                        dailyWorkloads: new Map([
+                            ['2026-01-06', {
+                                dateStr: '2026-01-06',
+                                timestamp: START + 24 * 60 * 60 * 1000,
+                                totalLoad: 1,
+                                isOverload: false,
+                                contributingTasks: [{ task, dailyLoad: 1 }]
+                            }],
+                            ['2026-01-05', {
+                                dateStr: '2026-01-05',
+                                timestamp: START,
+                                totalLoad: 1,
+                                isOverload: false,
+                                contributingTasks: [{ task, dailyLoad: 1 }]
+                            }]
+                        ])
+                    }]
+                ]),
+                overloadedAssigneeCount: 0,
+                overloadedDayCount: 0
+            }
+        });
+
+        useTaskStore.getState().selectTask('multi-day');
+
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-05' });
+    });
+
+    it('keeps the current focused histogram bar when it already contains the selected task', () => {
+        const task = buildTask({ id: 'task-a', estimatedHours: 8, assignedToId: 1, assignedToName: 'Alice' });
+
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: {
+                assignees: new Map([
+                    [1, {
+                        assigneeId: 1,
+                        assigneeName: 'Alice',
+                        totalLoad: 2,
+                        peakLoad: 1,
+                        dailyWorkloads: new Map([
+                            ['2026-01-05', {
+                                dateStr: '2026-01-05',
+                                timestamp: START,
+                                totalLoad: 1,
+                                isOverload: false,
+                                contributingTasks: [{ task, dailyLoad: 1 }]
+                            }],
+                            ['2026-01-06', {
+                                dateStr: '2026-01-06',
+                                timestamp: START + 24 * 60 * 60 * 1000,
+                                totalLoad: 1,
+                                isOverload: false,
+                                contributingTasks: [{ task, dailyLoad: 1 }]
+                            }]
+                        ])
+                    }]
+                ]),
+                overloadedAssigneeCount: 0,
+                overloadedDayCount: 0
+            },
+            focusedHistogramBar: { assigneeId: 1, dateStr: '2026-01-06' }
+        });
+
+        useTaskStore.getState().selectTask('task-a');
+
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-06' });
+    });
+
+    it('clears the focused histogram bar when the selected task has no matching workload entry', () => {
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildWorkloadData([
+                {
+                    assigneeId: 1,
+                    assigneeName: 'Alice',
+                    dateStr: '2026-01-05',
+                    tasks: [buildTask({ id: 'visible', estimatedHours: 4, assignedToId: 1, assignedToName: 'Alice' })]
+                }
+            ]),
+            focusedHistogramBar: { assigneeId: 1, dateStr: '2026-01-05' }
+        });
+
+        useTaskStore.getState().selectTask('missing');
+
+        expect(useWorkloadStore.getState().focusedHistogramBar).toBeNull();
+    });
+
+    it('restores focused histogram bar from selectedTaskId when workload data is recalculated', () => {
+        const task = buildTask({
+            id: 'selected',
+            estimatedHours: 8,
+            assignedToId: 1,
+            assignedToName: 'Alice',
+            startDate: START,
+            dueDate: START
+        });
+
+        useTaskStore.getState().setTasks([task]);
+        useTaskStore.getState().selectTask('selected');
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadPaneVisible: true
+        });
+
+        useWorkloadStore.getState().calculateWorkloadData();
+
+        expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-05' });
+    });
 });

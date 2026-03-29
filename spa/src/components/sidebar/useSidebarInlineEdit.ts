@@ -93,6 +93,7 @@ export const useSidebarInlineEdit = ({
         if (field === 'ratioDone') return isInlineEditEnabled('inline_edit_done_ratio', true);
         if (field === 'dueDate') return isInlineEditEnabled('inline_edit_due_date', true);
         if (field === 'startDate') return isInlineEditEnabled('inline_edit_start_date', true);
+        if (field === 'estimatedHours') return isInlineEditEnabled('inline_edit_estimated_hours', true);
 
         const meta = providedMeta || editMetaByTaskId[task.id];
         if (meta?.editable) {

@@ -24,6 +24,45 @@ type CycleInfo = {
     total: number;
 } | null;
 
+const barContainsTask = (workloadData: WorkloadData, bar: FocusedHistogramBar, taskId: string): boolean => {
+    if (!bar) return false;
+
+    const daily = workloadData.assignees.get(bar.assigneeId)?.dailyWorkloads.get(bar.dateStr);
+    if (!daily) return false;
+
+    return daily.contributingTasks.some(({ task }) => task.id === taskId);
+};
+
+const findFocusedHistogramBarForTask = (
+    workloadData: WorkloadData | null,
+    taskId: string | null,
+    currentFocusedHistogramBar: FocusedHistogramBar
+): FocusedHistogramBar => {
+    if (!workloadData || !taskId) return null;
+
+    if (barContainsTask(workloadData, currentFocusedHistogramBar, taskId)) {
+        return currentFocusedHistogramBar;
+    }
+
+    for (const assignee of workloadData.assignees.values()) {
+        const sortedDailyWorkloads = Array.from(assignee.dailyWorkloads.values())
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+        const match = sortedDailyWorkloads.find((daily) => (
+            daily.contributingTasks.some(({ task }) => task.id === taskId)
+        ));
+
+        if (match) {
+            return {
+                assigneeId: assignee.assigneeId,
+                dateStr: match.dateStr
+            };
+        }
+    }
+
+    return null;
+};
+
 const HISTOGRAM_SELECTION_RESET: HistogramSelectionCycle = {
     activeKey: null,
     nextIndex: 0
@@ -302,7 +341,7 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
         const { capacityThreshold, leafIssuesOnly, includeClosedIssues, todayOnwardOnly } = get();
         
         const taskStore = useTaskStore.getState();
-        const { allTasks, taskStatuses } = taskStore;
+        const { allTasks, taskStatuses, selectedTaskId } = taskStore;
 
         const closedStatusIds = new Set(
             taskStatuses.filter(s => s.isClosed).map(s => s.id)
@@ -316,17 +355,38 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
         };
 
         const data = WorkloadLogicService.calculateWorkload(allTasks, closedStatusIds, options);
+        const focusedHistogramBar = findFocusedHistogramBarForTask(
+            data,
+            selectedTaskId,
+            get().focusedHistogramBar
+        );
         set({
             workloadData: data,
             histogramSelectionCycle: HISTOGRAM_SELECTION_RESET,
             overloadFocusCycle: OVERLOAD_FOCUS_RESET,
-            focusedHistogramBar: null
+            focusedHistogramBar
         });
     }
 }));
 
 // Subscribe to task store changes so workload updates automatically
 useTaskStore.subscribe((state, prevState) => {
+    if (state.selectedTaskId !== prevState.selectedTaskId) {
+        const workloadState = useWorkloadStore.getState();
+        const nextFocusedHistogramBar = findFocusedHistogramBarForTask(
+            workloadState.workloadData,
+            state.selectedTaskId,
+            workloadState.focusedHistogramBar
+        );
+
+        if (
+            workloadState.focusedHistogramBar?.assigneeId !== nextFocusedHistogramBar?.assigneeId ||
+            workloadState.focusedHistogramBar?.dateStr !== nextFocusedHistogramBar?.dateStr
+        ) {
+            useWorkloadStore.setState({ focusedHistogramBar: nextFocusedHistogramBar });
+        }
+    }
+
     // Basic optimization: Only recalculate if task list or statuses change,
     // and only if workload pane is visible
     if (!useWorkloadStore.getState().workloadPaneVisible) return;
