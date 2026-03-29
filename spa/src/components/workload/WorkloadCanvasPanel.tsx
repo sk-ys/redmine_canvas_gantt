@@ -24,6 +24,11 @@ interface DragState {
     pressedBarHit: HistogramBarHit | null;
 }
 
+interface HistogramScrollXOverride {
+    key: string;
+    scrollX: number;
+}
+
 export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     scrollTop = 0,
     onScroll
@@ -62,10 +67,9 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     const histogramBarHoveredRef = useRef(false);
     const pointerSuppressedRef = useRef(false);
     const suppressFocusedBarScrollKeyRef = useRef<string | null>(null);
-    const histogramScrollXOverrideRef = useRef<number | null>(null);
-    const histogramScrollXOverrideKeyRef = useRef<string | null>(null);
+    const histogramScrollXOverrideRef = useRef<HistogramScrollXOverride | null>(null);
     const lastAutoRevealRef = useRef<{ key: string; scrollX: number } | null>(null);
-    const [histogramScrollXOverride, setHistogramScrollXOverride] = useState<number | null>(null);
+    const [histogramScrollXOverride, setHistogramScrollXOverride] = useState<HistogramScrollXOverride | null>(null);
     const [isHistogramBarHovered, setIsHistogramBarHovered] = useState(false);
     const [isPointerSuppressed, setIsPointerSuppressed] = useState(false);
     const rowHeight = viewport.rowHeight * 2;
@@ -78,11 +82,13 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         : null;
     const isHistogramScrollXOverrideActive = (
         histogramScrollXOverride !== null &&
-        histogramScrollXOverrideKeyRef.current === focusedHistogramBarKey
+        histogramScrollXOverride.key === focusedHistogramBarKey
     );
     const histogramViewport = useMemo(() => ({
         ...viewport,
-        scrollX: isHistogramScrollXOverrideActive ? histogramScrollXOverride : viewport.scrollX
+        scrollX: isHistogramScrollXOverrideActive
+            ? histogramScrollXOverride.scrollX
+            : viewport.scrollX
     }), [histogramScrollXOverride, isHistogramScrollXOverrideActive, viewport]);
     const histogramViewportRef = useRef(histogramViewport);
 
@@ -102,14 +108,6 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
     }, [histogramScrollXOverride]);
 
     useEffect(() => {
-        if (
-            histogramScrollXOverrideRef.current !== null &&
-            histogramScrollXOverrideKeyRef.current !== focusedHistogramBarKey
-        ) {
-            histogramScrollXOverrideKeyRef.current = null;
-            setHistogramScrollXOverride(null);
-        }
-
         if (!focusedHistogramBarKey) {
             suppressFocusedBarScrollKeyRef.current = null;
             lastAutoRevealRef.current = null;
@@ -401,7 +399,6 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
             }
 
             if (histogramScrollXOverrideRef.current !== null) {
-                histogramScrollXOverrideKeyRef.current = null;
                 setHistogramScrollXOverride(null);
             }
             panViewportByPixels(deltaX, 0);
@@ -437,8 +434,10 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
             }
 
             const releasedHitKey = `${releasedHit.assigneeId}:${releasedHit.dateStr}`;
-            histogramScrollXOverrideKeyRef.current = releasedHitKey;
-            setHistogramScrollXOverride(histogramViewportRef.current.scrollX);
+            setHistogramScrollXOverride({
+                key: releasedHitKey,
+                scrollX: histogramViewportRef.current.scrollX
+            });
             suppressFocusedBarScrollKeyRef.current = releasedHitKey;
             setFocusedHistogramBar(releasedHit);
 
