@@ -11,6 +11,7 @@ import {
     shouldRenderRelationsAtZoom
 } from '../renderers/relationGeometry';
 import { snapToUtcDay } from '../utils/time';
+import { panViewportByPixels } from './viewportPan';
 
 type DragMode = 'none' | 'pan' | 'task-move' | 'task-resize-start' | 'task-resize-end';
 const TASK_MOVE_CURSOR = 'move';
@@ -51,25 +52,6 @@ export class InteractionEngine {
 
     private isScrollInteractionLocked(): boolean {
         return useUIStore.getState().isSidebarResizing;
-    }
-
-    private panViewportByPixels(deltaX: number, deltaY: number) {
-        const { viewport, updateViewport } = useTaskStore.getState();
-        const scale = viewport.scale || 0.00000001;
-
-        // Horizontal: keep scrollX >= 0 by shifting startDate when overscrolling to the past.
-        let nextScrollX = viewport.scrollX - deltaX;
-        let nextStartDate = viewport.startDate;
-        if (nextScrollX < 0) {
-            nextStartDate = viewport.startDate + (nextScrollX / scale);
-            nextScrollX = 0;
-        }
-
-        updateViewport({
-            startDate: nextStartDate,
-            scrollX: nextScrollX,
-            scrollY: Math.max(0, viewport.scrollY - deltaY)
-        });
     }
 
     private scrollViewportByWheel(deltaX: number, deltaY: number) {
@@ -390,7 +372,7 @@ export class InteractionEngine {
         const dy = e.clientY - this.drag.startY;
 
         if (this.drag.mode === 'pan') {
-            this.panViewportByPixels(dx, dy);
+            panViewportByPixels(dx, dy);
             this.drag.startX = e.clientX;
             this.drag.startY = e.clientY;
         } else if (this.drag.mode === 'task-move' && this.drag.taskId) {

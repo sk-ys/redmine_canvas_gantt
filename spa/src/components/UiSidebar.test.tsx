@@ -360,7 +360,13 @@ describe('UiSidebar', () => {
         render(<UiSidebar />);
 
         expect(screen.getByTestId('sidebar-header-notification')).toBeInTheDocument();
+        expect(screen.getByTestId('sidebar-header-notification')).toHaveStyle({ justifyContent: 'center' });
         expectNotificationSprite('task-notification-badge-unscheduled-901');
+        expect(screen.getByTestId('cell-901-notification')).toHaveStyle({ justifyContent: 'center' });
+        expect(screen.getByTestId('task-notification-badge-unscheduled-901')).toHaveStyle({
+            width: '18px',
+            height: '18px'
+        });
         expect(screen.queryByTestId('task-scheduling-badge-901')).not.toBeInTheDocument();
     });
 
@@ -778,5 +784,114 @@ describe('UiSidebar', () => {
 
         const select = await screen.findByRole('combobox');
         expect(select).toHaveStyle({ height: '20px', padding: '0 24px 0 8px' });
+    });
+
+    it('uses 0.5-step numeric input for estimated hours inline edit', async () => {
+        const taskId = '302';
+
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key',
+            i18n: {
+                button_edit: 'Edit',
+                field_estimated_hours: 'Estimated Time'
+            },
+            settings: { inline_edit_estimated_hours: '1' }
+        };
+
+        useUIStore.setState({ visibleColumns: ['id', 'estimatedHours'], activeInlineEdit: null });
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 24
+            },
+            groupByProject: false,
+            selectedTaskId: null,
+            customFields: []
+        });
+        useEditMetaStore.setState({
+            metaByTaskId: {
+                [taskId]: {
+                    task: {
+                        id: taskId,
+                        subject: 'Estimated hours task',
+                        assignedToId: null,
+                        statusId: 1,
+                        doneRatio: 0,
+                        dueDate: '2025-01-01',
+                        startDate: '2025-01-01',
+                        priorityId: 1,
+                        categoryId: null,
+                        estimatedHours: 1.5,
+                        projectId: 1,
+                        trackerId: 1,
+                        fixedVersionId: null,
+                        lockVersion: 1
+                    },
+                    editable: {
+                        subject: true,
+                        assignedToId: true,
+                        statusId: true,
+                        doneRatio: true,
+                        dueDate: true,
+                        startDate: true,
+                        priorityId: true,
+                        categoryId: true,
+                        estimatedHours: true,
+                        projectId: true,
+                        trackerId: true,
+                        fixedVersionId: true,
+                        customFieldValues: true
+                    },
+                    options: {
+                        statuses: [],
+                        assignees: [],
+                        priorities: [],
+                        categories: [],
+                        projects: [],
+                        trackers: [],
+                        versions: [],
+                        customFields: []
+                    },
+                    customFieldValues: {}
+                }
+            },
+            loadingTaskId: null,
+            error: null
+        });
+
+        const task: Task = {
+            id: taskId,
+            subject: 'Estimated hours task',
+            startDate: new Date('2025-01-01').getTime(),
+            dueDate: new Date('2025-01-05').getTime(),
+            ratioDone: 0,
+            statusId: 1,
+            estimatedHours: 1.5,
+            lockVersion: 1,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+        useTaskStore.getState().setTasks([task]);
+
+        render(<UiSidebar />);
+
+        const cell = await screen.findByTestId(`cell-${taskId}-estimatedHours`);
+        fireEvent.doubleClick(cell);
+
+        const input = await screen.findByRole('spinbutton');
+        expect(input).toHaveAttribute('step', '0.5');
+        expect(input).toHaveAttribute('min', '0');
+        expect(screen.getByText('h')).toBeInTheDocument();
+        expect(screen.queryByText('%')).not.toBeInTheDocument();
     });
 });

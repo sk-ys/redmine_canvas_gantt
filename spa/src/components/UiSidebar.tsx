@@ -6,7 +6,7 @@ import { getStatusColor, getPriorityColor } from '../utils/styles';
 import { useUIStore } from '../stores/UIStore';
 import { SIDEBAR_RESIZE_CURSOR } from '../constants';
 
-import { CustomFieldEditor, DoneRatioEditor, DueDateEditor, SelectEditor, SubjectEditor } from './InlineEditors';
+import { CustomFieldEditor, DoneRatioEditor, DueDateEditor, EstimatedHoursEditor, SelectEditor, SubjectEditor } from './InlineEditors';
 import { useEditMetaStore } from '../stores/EditMetaStore';
 import type { InlineEditSettings } from '../types/editMeta';
 import { i18n } from '../utils/i18n';
@@ -15,76 +15,10 @@ import { customFieldEditField, customFieldIdFromEditField, formatCustomFieldCell
 import { useSidebarColumnSizing } from './sidebar/useSidebarColumnSizing';
 import { useSidebarDragAndDrop } from './sidebar/useSidebarDragAndDrop';
 import { useSidebarInlineEdit } from './sidebar/useSidebarInlineEdit';
-import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
-import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
 import { SvgIcon } from '../icons/SvgIcon';
-
-type TaskNotificationDescriptor = {
-    iconName: 'rcg-icon-notification-unscheduled' | 'rcg-icon-notification-warning' | 'rcg-icon-notification-critical';
-    color: string;
-    tooltip: string;
-    testIdSuffix: string;
-};
+import { getTaskNotification } from './sidebar/sidebarNotifications';
 
 const NOTIFICATION_COLUMN_KEY = 'notification';
-
-const getSchedulingNotification = (schedulingState?: SchedulingStateInfo): TaskNotificationDescriptor | null => {
-    if (!schedulingState || schedulingState.state === 'normal') return null;
-
-    if (schedulingState.state === 'invalid') {
-        return {
-            iconName: 'rcg-icon-notification-warning',
-            color: '#ea8600',
-            tooltip: schedulingState.message,
-            testIdSuffix: 'invalid'
-        };
-    }
-
-    if (schedulingState.state === 'cyclic') {
-        return {
-            iconName: 'rcg-icon-notification-warning',
-            color: '#d93025',
-            tooltip: schedulingState.message,
-            testIdSuffix: 'cyclic'
-        };
-    }
-
-    if (schedulingState.state === 'conflicted') {
-        return {
-            iconName: 'rcg-icon-notification-warning',
-            color: '#f9ab00',
-            tooltip: schedulingState.message,
-            testIdSuffix: 'conflicted'
-        };
-    }
-
-    return {
-        iconName: 'rcg-icon-notification-unscheduled',
-        color: '#5f6368',
-        tooltip: schedulingState.message,
-        testIdSuffix: 'unscheduled'
-    };
-};
-
-const getCriticalPathNotification = (criticalPathMetrics?: CriticalPathTaskMetrics): TaskNotificationDescriptor | null => {
-    if (!criticalPathMetrics?.critical) return null;
-
-    const days = criticalPathMetrics.totalSlackDays;
-    return {
-        iconName: 'rcg-icon-notification-critical',
-        color: '#b42318',
-        tooltip: i18n.t('label_critical_path_total_slack', { days }) || `Critical path task. Total slack: ${days} working day(s).`,
-        testIdSuffix: 'critical'
-    };
-};
-
-
-const getTaskNotification = (
-    schedulingState?: SchedulingStateInfo,
-    criticalPathMetrics?: CriticalPathTaskMetrics
-): TaskNotificationDescriptor | null => (
-    getSchedulingNotification(schedulingState) ?? getCriticalPathNotification(criticalPathMetrics)
-);
 
 const getAvatarColor = (name: string) => {
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
@@ -737,7 +671,7 @@ export const UiSidebar: React.FC = () => {
                                     position: 'relative',
                                     cursor: 'pointer',
                                     userSelect: 'none',
-                                    justifyContent: 'space-between'
+                                    justifyContent: col.key === NOTIFICATION_COLUMN_KEY ? 'center' : 'space-between'
                                 }}
                                 onClick={() => {
                                     const field = getSortField(col.key);
@@ -1020,12 +954,19 @@ export const UiSidebar: React.FC = () => {
                                         borderRight: '1px solid #f9f9f9',
                                         display: 'flex',
                                         alignItems: 'center',
+                                        justifyContent: col.key === NOTIFICATION_COLUMN_KEY ? 'center' : 'flex-start',
                                         overflow: 'hidden',
                                         whiteSpace: 'nowrap'
                                     }}>
                                         <div
                                             data-testid={`cell-${task.id}-${col.key}`}
-                                            style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: col.key === NOTIFICATION_COLUMN_KEY ? 'center' : 'flex-start'
+                                            }}
                                             onDoubleClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
@@ -1285,7 +1226,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'estimatedHours') {
                                                     return (
-                                                        <DoneRatioEditor
+                                                        <EstimatedHoursEditor
                                                             initialValue={task.estimatedHours || 0}
                                                             controlHeight={inlineControlHeight}
                                                             onCancel={close}

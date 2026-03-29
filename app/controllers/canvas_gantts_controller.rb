@@ -44,6 +44,14 @@ class CanvasGanttsController < ApplicationController
     label_day: :label_day,
     label_loading: :label_loading,
     label_notifications: :label_notifications,
+    label_peak: :label_peak,
+    label_total: :label_total,
+    label_workload: :label_workload,
+    label_show_workload: :label_show_workload,
+    label_capacity_threshold: :label_capacity_threshold,
+    label_leaf_issues_only: :label_leaf_issues_only,
+    label_include_closed_issues: :label_include_closed_issues,
+    label_today_onward_only: :label_today_onward_only,
     label_critical_path_total_slack: :label_critical_path_total_slack,
 
     button_expand: :label_expand,
@@ -216,6 +224,10 @@ class CanvasGanttsController < ApplicationController
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'data_payload_builder').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'constraint_graph').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'relation_params_normalizer').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'edit_meta_payload_builder').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'relation_change_validator').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'bulk_subtask_creator').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'parent_issue_resolver').to_s
 
   helper RedmineCanvasGantt::ViteAssetHelper
   accept_api_auth :data, :edit_meta, :update, :bulk_create_subtasks, :create_relation, :update_relation, :destroy_relation
@@ -271,40 +283,18 @@ class CanvasGanttsController < ApplicationController
 
     editable = @permissions[:editable] && issue.editable?
     field_editable = build_field_editable(issue, editable)
+    custom_fields, custom_field_values = custom_field_extractor.extract_custom_fields(
+      issue,
+      inline_custom_fields_enabled? && field_editable[:custom_field_values]
+    )
 
-    statuses = issue.new_statuses_allowed_to(User.current).to_a
-    statuses << issue.status if issue.status && !statuses.include?(issue.status)
-    statuses = statuses.uniq.sort_by(&:position)
-
-    assignables = issue.assignable_users.to_a
-    assignables = assignables.sort_by { |u| u.name.to_s.downcase }
-
-    custom_fields, custom_field_values = custom_field_extractor.extract_custom_fields(issue, field_editable[:custom_field_values])
-
-    render json: {
-      task: {
-        id: issue.id,
-        subject: issue.subject,
-        assigned_to_id: issue.assigned_to_id,
-        status_id: issue.status_id,
-        done_ratio: issue.done_ratio,
-        due_date: issue.due_date,
-        lock_version: issue.lock_version
-      },
+    render json: edit_meta_payload_builder.build(
+      issue: issue,
       editable: field_editable,
-      options: {
-        statuses: statuses.map { |s| { id: s.id, name: s.name } },
-        assignees: assignables.map { |u| { id: u.id, name: u.name } },
-        priorities: IssuePriority.active.map { |p| { id: p.id, name: p.name } },
-        categories: issue.project.issue_categories.map { |c| { id: c.id, name: c.name } },
-        projects: Project.allowed_to(:add_issues).active.map { |p| { id: p.id, name: p.name } },
-        trackers: issue.project.trackers.map { |t| { id: t.id, name: t.name } },
-        versions: Version.visible.where(project_id: issue.project_id).map { |v| { id: v.id, name: v.name } },
-        custom_fields: custom_fields
-      },
+      custom_fields: custom_fields,
       custom_field_values: custom_field_values,
       permissions: @permissions
-    }
+    )
   rescue ActiveRecord::RecordNotFound
     render json: { error: l(:error_canvas_gantt_task_not_found) }, status: :not_found
   rescue => e
@@ -350,7 +340,7 @@ class CanvasGanttsController < ApplicationController
     parent_issue = Issue.visible.find(params[:parent_issue_id])
     return unless ensure_issue_in_scope(parent_issue)
 
-    unless allowed_to_bulk_create_subtasks?(parent_issue)
+    unless bulk_subtask_creator.allowed?(parent_issue)
       render json: { error: l(:error_canvas_gantt_permission_denied) }, status: :forbidden
       return
     end
@@ -361,17 +351,7 @@ class CanvasGanttsController < ApplicationController
       return
     end
 
-    inherited_attrs = build_inherited_subtask_attributes(parent_issue)
-    results = subjects.map { |raw_subject| create_subtask_from_subject(raw_subject, parent_issue, inherited_attrs) }
-    success_count = results.count { |result| result[:status] == 'ok' }
-    fail_count = results.length - success_count
-
-    render json: {
-      status: 'ok',
-      success_count: success_count,
-      fail_count: fail_count,
-      results: results
-    }
+    render json: bulk_subtask_creator.call(parent_issue: parent_issue, subjects: subjects)
   rescue ActiveRecord::RecordNotFound
     render json: { error: l(:error_canvas_gantt_parent_task_not_found) }, status: :not_found
   end
@@ -559,32 +539,6 @@ class CanvasGanttsController < ApplicationController
     true
   end
 
-  def ensure_relation_delay_consistent!(issue_from, issue_to, relation_type, delay)
-    return true unless DELAY_RELATION_TYPES.include?(relation_type) && delay.is_a?(Integer)
-
-    predecessor, successor = relation_type == 'follows' ? [issue_to, issue_from] : [issue_from, issue_to]
-    predecessor_due = predecessor&.due_date
-    successor_start = successor&.start_date
-    return true if predecessor_due.blank? || successor_start.blank?
-
-    minimum_successor_start = add_working_days_to_date(predecessor_due.to_date, 1 + delay, relation_non_working_week_days)
-    return true if successor_start.to_date >= minimum_successor_start
-
-    render json: { errors: [l(:error_canvas_gantt_relation_delay_mismatch)] }, status: :unprocessable_entity
-    false
-  end
-
-  def ensure_relation_cycle_safe!(candidate_relation:, replacing_relation_id: nil)
-    relations = build_relations(issue_scope(descendant_project_ids).to_a)
-    filtered_relations = relations.reject { |relation| relation[:id].to_s == replacing_relation_id.to_s }
-    next_relations = filtered_relations + [candidate_relation]
-    constraint_graph = RedmineCanvasGantt::ConstraintGraph.new(relations: next_relations)
-    return true unless constraint_graph.cyclic?
-
-    render json: { errors: [l(:error_canvas_gantt_relation_cycle_detected)] }, status: :unprocessable_entity
-    false
-  end
-
   def relation_non_working_week_days
     Array(Setting.non_working_week_days).filter_map do |day|
       parsed = Integer(day, exception: false)
@@ -604,9 +558,12 @@ class CanvasGanttsController < ApplicationController
   end
 
   def ensure_relation_change_valid!(issue_from:, issue_to:, relation_id:, relation_type:, delay:, replacing_relation_id: nil)
-    return false unless ensure_relation_delay_consistent!(issue_from, issue_to, relation_type, delay)
-
-    ensure_relation_cycle_safe!(
+    relation_change_validator.validate!(
+      issue_from: issue_from,
+      issue_to: issue_to,
+      relation_type: relation_type,
+      delay: delay,
+      existing_relations: data_payload_builder.build_relations(issue_scope(descendant_project_ids).to_a),
       candidate_relation: build_candidate_relation(
         relation_id: relation_id,
         issue_from: issue_from,
@@ -614,7 +571,10 @@ class CanvasGanttsController < ApplicationController
         relation_type: relation_type,
         delay: delay
       ),
-      replacing_relation_id: replacing_relation_id
+      replacing_relation_id: replacing_relation_id,
+      error_renderer: lambda { |message_key|
+        render json: { errors: [l(message_key)] }, status: :unprocessable_entity
+      }
     )
   end
 
@@ -634,20 +594,6 @@ class CanvasGanttsController < ApplicationController
     else
       render json: { errors: relation.errors.full_messages }, status: :unprocessable_entity
     end
-  end
-
-  def add_working_days_to_date(date, days, non_working_week_days)
-    current = date.to_date
-    remaining = [days.to_i, 0].max
-
-    while remaining.positive?
-      current += 1
-      next if non_working_week_days.include?(current.wday)
-
-      remaining -= 1
-    end
-
-    current
   end
 
   def relation_delay_provided?
@@ -674,91 +620,17 @@ class CanvasGanttsController < ApplicationController
   end
 
   def load_parent_issue(source_issue, raw_parent_issue_id)
-    return nil if raw_parent_issue_id.blank?
-
-    parent_issue = Issue.visible.find(raw_parent_issue_id)
-    unless ensure_issue_in_scope(parent_issue)
-      return :invalid
-    end
-
-    if parent_issue.id == source_issue.id
-      render json: { errors: [l(:error_canvas_gantt_task_cannot_be_child_of_itself)] }, status: :unprocessable_entity
-      return :invalid
-    end
-
-    # No hierarchy change: keep current parent without failing cycle checks.
-    return parent_issue if source_issue.parent_id == parent_issue.id
-
-    # Reject only when trying to move under own descendant.
-    if source_issue.descendants.exists?(parent_issue.id)
-      render json: { errors: [l(:error_canvas_gantt_cannot_move_under_own_descendant)] }, status: :unprocessable_entity
-      return :invalid
-    end
-
-    parent_issue
-  rescue ActiveRecord::RecordNotFound
-    render json: { error: l(:error_canvas_gantt_parent_task_not_found) }, status: :not_found
-    :invalid
-  end
-
-  def build_inherited_subtask_attributes(parent_issue)
-    {
-      parent_issue_id: parent_issue.id,
-      project_id: parent_issue.project_id,
-      tracker_id: parent_issue.tracker_id,
-      status_id: parent_issue.status_id,
-      priority_id: parent_issue.priority_id,
-      assigned_to_id: parent_issue.assigned_to_id,
-      fixed_version_id: parent_issue.fixed_version_id,
-      category_id: parent_issue.category_id
-    }
-  end
-
-  def allowed_to_bulk_create_subtasks?(parent_issue)
-    User.current.allowed_to?(:add_issues, parent_issue.project) &&
-      User.current.allowed_to?(:manage_subtasks, parent_issue.project)
-  end
-
-  def create_subtask_from_subject(raw_subject, parent_issue, inherited_attrs)
-    subject = raw_subject.to_s.strip
-    if subject.blank?
-      return {
-        status: 'error',
-        subject: subject,
-        errors: [l(:error_canvas_gantt_subject_blank)]
+    parent_issue_resolver.call(
+      source_issue: source_issue,
+      raw_parent_issue_id: raw_parent_issue_id,
+      issue_scope_checker: method(:ensure_issue_in_scope),
+      validation_error_renderer: lambda { |message_key|
+        render json: { errors: [l(message_key)] }, status: :unprocessable_entity
+      },
+      not_found_renderer: lambda { |message_key|
+        render json: { error: l(message_key) }, status: :not_found
       }
-    end
-
-    issue = Issue.new
-    issue.author = User.current
-    issue.safe_attributes = inherited_attrs.merge(subject: subject)
-    issue.parent_issue_id = parent_issue.id
-
-    if issue.save
-      unless issue.parent_id == parent_issue.id
-        begin
-          issue.destroy
-        rescue StandardError
-          # Keep original linkage error even if cleanup fails.
-        end
-        return {
-          status: 'error',
-          subject: subject,
-          errors: [l(:error_canvas_gantt_parent_linkage_failed)]
-        }
-      end
-      {
-        status: 'ok',
-        subject: subject,
-        issue_id: issue.id
-      }
-    else
-      {
-        status: 'error',
-        subject: subject,
-        errors: issue.errors.full_messages
-      }
-    end
+    )
   end
 
   def custom_field_serializer
@@ -790,43 +662,21 @@ class CanvasGanttsController < ApplicationController
     )
   end
 
-  def build_tasks(issues)
-    data_payload_builder.build_tasks(issues)
+  def edit_meta_payload_builder
+    @edit_meta_payload_builder ||= RedmineCanvasGantt::EditMetaPayloadBuilder.new(current_user: User.current)
   end
 
-  def build_project_custom_fields(project_ids, issues = [])
-    custom_field_extractor.build_project_custom_fields(project_ids, issues)
+  def relation_change_validator
+    @relation_change_validator ||= RedmineCanvasGantt::RelationChangeValidator.new(
+      non_working_week_days: relation_non_working_week_days
+    )
   end
 
-  def build_relations(issues)
-    data_payload_builder.build_relations(issues)
+  def bulk_subtask_creator
+    @bulk_subtask_creator ||= RedmineCanvasGantt::BulkSubtaskCreator.new(current_user: User.current)
   end
 
-  def build_versions(project_ids)
-    data_payload_builder.build_versions(project_ids)
-  end
-
-  def build_statuses
-    data_payload_builder.build_statuses
-  end
-
-  def build_project_payload
-    data_payload_builder.build_project_payload(@project)
-  end
-
-  def extract_custom_fields(issue, field_editable)
-    custom_field_extractor.extract_custom_fields(issue, inline_custom_fields_enabled? && field_editable[:custom_field_values])
-  end
-
-  def build_task_custom_field_values(issue)
-    custom_field_extractor.build_task_custom_field_values(issue)
-  end
-
-  def serialize_relation(relation)
-    relation_params_normalizer.serialize_relation(relation)
-  end
-
-  def normalize_relation_delay(relation_type)
-    relation_params_normalizer.normalize_delay(relation_type)
+  def parent_issue_resolver
+    @parent_issue_resolver ||= RedmineCanvasGantt::ParentIssueResolver.new
   end
 end

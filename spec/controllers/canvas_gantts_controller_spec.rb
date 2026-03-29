@@ -30,22 +30,28 @@ RSpec.describe CanvasGanttsController, type: :controller do
     end
 
     it 'returns data payload with expected top-level keys' do
+      payload_builder = instance_double(RedmineCanvasGantt::DataPayloadBuilder)
       allow(controller).to receive(:set_permissions) do
         controller.instance_variable_set(:@permissions, { editable: true, viewable: true })
       end
       allow(controller).to receive(:descendant_project_ids).and_return([1, 2])
       allow(controller).to receive(:issue_scope).with([1, 2]).and_return([double('Issue')])
-      allow(controller).to receive(:build_tasks).and_return([{ id: 10 }])
-      allow(controller).to receive(:build_relations).and_return([{ id: 20 }])
-      allow(controller).to receive(:build_versions).with([1, 2]).and_return([{ id: 30 }])
-      allow(controller).to receive(:build_statuses).and_return([{ id: 40 }])
-      allow(controller).to receive(:build_project_payload).and_return({ id: 1, name: 'Demo' })
+      allow(controller).to receive(:data_payload_builder).and_return(payload_builder)
+      allow(payload_builder).to receive(:build).and_return({
+        tasks: [{ id: 10 }],
+        custom_fields: [{ id: 15 }],
+        relations: [{ id: 20 }],
+        versions: [{ id: 30 }],
+        statuses: [{ id: 40 }],
+        project: { id: 1, name: 'Demo' },
+        permissions: { editable: true, viewable: true }
+      })
 
       get :data, params: { project_id: 'demo' }, format: :json
 
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body)
-      expect(body.keys).to contain_exactly('tasks', 'relations', 'versions', 'statuses', 'project', 'permissions')
+      expect(body.keys).to contain_exactly('tasks', 'custom_fields', 'relations', 'versions', 'statuses', 'project', 'permissions')
       expect(body['permissions']).to eq('editable' => true, 'viewable' => true)
     end
   end
@@ -68,6 +74,14 @@ RSpec.describe CanvasGanttsController, type: :controller do
       expect(i18n_payload['label_row_height_m']).to eq(I18n.t(:label_row_height_m))
       expect(i18n_payload['label_status_completed']).to eq(I18n.t(:label_status_completed))
       expect(i18n_payload['label_status_incomplete']).to eq(I18n.t(:label_status_incomplete))
+      expect(i18n_payload['label_peak']).to eq(I18n.t(:label_peak))
+      expect(i18n_payload['label_total']).to eq(I18n.t(:label_total))
+      expect(i18n_payload['label_workload']).to eq(I18n.t(:label_workload))
+      expect(i18n_payload['label_show_workload']).to eq(I18n.t(:label_show_workload))
+      expect(i18n_payload['label_capacity_threshold']).to eq(I18n.t(:label_capacity_threshold))
+      expect(i18n_payload['label_leaf_issues_only']).to eq(I18n.t(:label_leaf_issues_only))
+      expect(i18n_payload['label_include_closed_issues']).to eq(I18n.t(:label_include_closed_issues))
+      expect(i18n_payload['label_today_onward_only']).to eq(I18n.t(:label_today_onward_only))
     end
 
     it 'includes localized help labels in Japanese frontend i18n payload' do
@@ -81,6 +95,14 @@ RSpec.describe CanvasGanttsController, type: :controller do
         expect(i18n_payload['help_desc_maximize_left']).to eq(I18n.t(:help_desc_maximize_left))
         expect(i18n_payload['button_close']).to eq(I18n.t(:button_close))
         expect(i18n_payload['label_notifications']).to eq(I18n.t(:label_notifications))
+        expect(i18n_payload['label_peak']).to eq(I18n.t(:label_peak))
+        expect(i18n_payload['label_total']).to eq(I18n.t(:label_total))
+        expect(i18n_payload['label_workload']).to eq(I18n.t(:label_workload))
+        expect(i18n_payload['label_show_workload']).to eq(I18n.t(:label_show_workload))
+        expect(i18n_payload['label_capacity_threshold']).to eq(I18n.t(:label_capacity_threshold))
+        expect(i18n_payload['label_leaf_issues_only']).to eq(I18n.t(:label_leaf_issues_only))
+        expect(i18n_payload['label_include_closed_issues']).to eq(I18n.t(:label_include_closed_issues))
+        expect(i18n_payload['label_today_onward_only']).to eq(I18n.t(:label_today_onward_only))
         expect(i18n_payload['label_auto_schedule_move_mode']).to eq(I18n.t(:label_auto_schedule_move_mode))
         expect(i18n_payload['label_auto_schedule_move_mode_off']).to eq(I18n.t(:label_auto_schedule_move_mode_off))
         expect(i18n_payload['label_auto_schedule_move_mode_constraint_push']).to eq(I18n.t(:label_auto_schedule_move_mode_constraint_push))
@@ -99,6 +121,14 @@ RSpec.describe CanvasGanttsController, type: :controller do
         expect(i18n_payload['help_desc_maximize_left']).to eq(I18n.t(:help_desc_maximize_left))
         expect(i18n_payload['button_close']).to eq(I18n.t(:button_close))
         expect(i18n_payload['label_notifications']).to eq(I18n.t(:label_notifications))
+        expect(i18n_payload['label_peak']).to eq(I18n.t(:label_peak))
+        expect(i18n_payload['label_total']).to eq(I18n.t(:label_total))
+        expect(i18n_payload['label_workload']).to eq(I18n.t(:label_workload))
+        expect(i18n_payload['label_show_workload']).to eq(I18n.t(:label_show_workload))
+        expect(i18n_payload['label_capacity_threshold']).to eq(I18n.t(:label_capacity_threshold))
+        expect(i18n_payload['label_leaf_issues_only']).to eq(I18n.t(:label_leaf_issues_only))
+        expect(i18n_payload['label_include_closed_issues']).to eq(I18n.t(:label_include_closed_issues))
+        expect(i18n_payload['label_today_onward_only']).to eq(I18n.t(:label_today_onward_only))
         expect(i18n_payload['label_auto_schedule_move_mode']).to eq(I18n.t(:label_auto_schedule_move_mode))
         expect(i18n_payload['label_auto_schedule_move_mode_off']).to eq(I18n.t(:label_auto_schedule_move_mode_off))
         expect(i18n_payload['label_auto_schedule_move_mode_constraint_push']).to eq(I18n.t(:label_auto_schedule_move_mode_constraint_push))
@@ -584,7 +614,7 @@ RSpec.describe CanvasGanttsController, type: :controller do
     end
   end
 
-  describe '#build_relations' do
+  describe 'DataPayloadBuilder relation serialization' do
     it 'serializes relation delay into the frontend payload' do
       relation = instance_double(
         IssueRelation,
@@ -596,7 +626,7 @@ RSpec.describe CanvasGanttsController, type: :controller do
       )
       issue = instance_double(Issue, relations: [relation])
 
-      expect(controller.send(:build_relations, [issue])).to eq([
+      expect(controller.send(:data_payload_builder).build_relations([issue])).to eq([
         {
           id: 50,
           from: 10,
@@ -620,7 +650,7 @@ RSpec.describe CanvasGanttsController, type: :controller do
     end
   end
 
-  describe '#extract_custom_fields / #build_task_custom_field_values' do
+  describe 'CustomFieldExtractor helpers' do
     let(:allowed_custom_field) do
       instance_double(
         IssueCustomField,
@@ -664,14 +694,14 @@ RSpec.describe CanvasGanttsController, type: :controller do
     end
 
     it 'filters out custom fields that are not applicable to the issue tracker in edit_meta' do
-      custom_fields, custom_field_values = controller.send(:extract_custom_fields, issue, { custom_field_values: true })
+      custom_fields, custom_field_values = controller.send(:custom_field_extractor).extract_custom_fields(issue, true)
 
       expect(custom_fields.map { |cf| cf[:id] }).to eq([1])
       expect(custom_field_values).to eq('1' => 'A-001')
     end
 
     it 'filters out custom fields that are not applicable to the issue tracker in data payload values' do
-      values = controller.send(:build_task_custom_field_values, issue)
+      values = controller.send(:custom_field_extractor).build_task_custom_field_values(issue)
       expect(values).to eq('1' => 'A-001')
     end
   end
