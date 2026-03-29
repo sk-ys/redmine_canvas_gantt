@@ -20,7 +20,8 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
         resolveNextOverloadBar,
         resetHistogramSelectionCycle,
         resolveNextHistogramTask,
-        getOverloadCycleInfo
+        getOverloadCycleInfo,
+        suppressNextFocusedHistogramBarVerticalScroll
     } = useWorkloadStore();
     const { viewport } = useTaskStore();
     const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -151,6 +152,7 @@ export const WorkloadSidebar: React.FC<WorkloadSidebarProps> = ({
                                                     const selectedBar = resolveNextOverloadBar(assignee.assigneeId);
                                                     if (!selectedBar) return;
 
+                                                    suppressNextFocusedHistogramBarVerticalScroll(selectedBar);
                                                     resetHistogramSelectionCycle();
                                                     const { taskId } = resolveNextHistogramTask(selectedBar.assigneeId, selectedBar.dateStr);
                                                     if (!taskId) return;

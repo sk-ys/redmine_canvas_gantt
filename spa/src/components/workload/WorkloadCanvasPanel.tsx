@@ -38,7 +38,8 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         workloadData,
         capacityThreshold,
         focusedHistogramBar,
-        setFocusedHistogramBar
+        setFocusedHistogramBar,
+        consumeFocusedHistogramBarVerticalScrollSuppression
     } = useWorkloadStore();
     const { viewport, zoomLevel } = useTaskStore();
     const isSidebarResizing = useUIStore((state) => state.isSidebarResizing);
@@ -183,6 +184,9 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         if (suppressFocusedBarScrollKeyRef.current === focusedBarKey) {
             return;
         }
+        if (consumeFocusedHistogramBarVerticalScrollSuppression(focusedHistogramBar)) {
+            return;
+        }
 
         const assignees = Array.from(workloadData.assignees.values()).sort((a, b) => a.assigneeName.localeCompare(b.assigneeName));
         const assigneeIndex = assignees.findIndex((assignee) => assignee.assigneeId === focusedHistogramBar.assigneeId);
@@ -195,7 +199,7 @@ export const WorkloadCanvasPanel: React.FC<WorkloadCanvasPanelProps> = ({
         if (Math.abs(viewportRef.current.scrollTop - nextScrollTop) > 1) {
             viewportRef.current.scrollTop = nextScrollTop;
         }
-    }, [focusedHistogramBar, rowHeight, workloadData]);
+    }, [consumeFocusedHistogramBarVerticalScrollSuppression, focusedHistogramBar, rowHeight, workloadData]);
 
     useEffect(() => {
         if (!focusedHistogramBar || !workloadData || !viewportRef.current) return;

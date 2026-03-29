@@ -532,6 +532,21 @@ describe('WorkloadCanvasPanel', () => {
         expect(viewportElement.scrollTop).toBe(80);
     });
 
+    it('keeps the workload pane vertical position fixed when overload focus requests scroll suppression', () => {
+        useWorkloadStore.setState({
+            ...useWorkloadStore.getState(),
+            workloadData: buildFocusedOverloadWorkloadData(),
+            focusedHistogramBar: { assigneeId: 2, dateStr: '2026-01-12' },
+            suppressFocusedHistogramBarVerticalScrollKey: '2:2026-01-12'
+        });
+
+        render(<WorkloadCanvasPanel scrollTop={48} />);
+
+        const viewportElement = screen.getByTestId('workload-canvas-viewport');
+        expect(viewportElement.scrollTop).toBe(48);
+        expect(useWorkloadStore.getState().suppressFocusedHistogramBarVerticalScrollKey).toBeNull();
+    });
+
     it('adjusts the shared viewport horizontally to reveal the focused overload bar', () => {
         useWorkloadStore.setState({
             ...useWorkloadStore.getState(),

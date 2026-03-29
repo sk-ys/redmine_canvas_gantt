@@ -258,12 +258,14 @@ describe('WorkloadSidebar', () => {
         fireEvent.click(overloadControl);
 
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-02' });
+        expect(useWorkloadStore.getState().suppressFocusedHistogramBarVerticalScrollKey).toBe('1:2026-01-02');
         expect(useTaskStore.getState().selectedTaskId).toBe('task-early');
         expect(screen.getByTestId('overload-cycle-count-1')).toHaveTextContent('1/2');
 
         fireEvent.click(overloadControl);
 
         expect(useWorkloadStore.getState().focusedHistogramBar).toEqual({ assigneeId: 1, dateStr: '2026-01-05' });
+        expect(useWorkloadStore.getState().suppressFocusedHistogramBarVerticalScrollKey).toBe('1:2026-01-05');
         expect(useTaskStore.getState().selectedTaskId).toBe('task-late');
         expect(screen.getByTestId('overload-cycle-count-1')).toHaveTextContent('2/2');
     });

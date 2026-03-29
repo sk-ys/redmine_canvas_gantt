@@ -119,6 +119,7 @@ interface WorkloadState {
     histogramSelectionCycle: HistogramSelectionCycle;
     overloadFocusCycle: OverloadFocusCycle;
     focusedHistogramBar: FocusedHistogramBar;
+    suppressFocusedHistogramBarVerticalScrollKey: string | null;
 
     // Actions
     setWorkloadPaneVisible: (visible: boolean) => void;
@@ -132,6 +133,8 @@ interface WorkloadState {
     getHistogramTaskCycleInfo: (assigneeId: number, dateStr: string) => CycleInfo;
     getHistogramBarLabelInfo: (assigneeId: number, dateStr: string) => CycleInfo;
     setFocusedHistogramBar: (bar: FocusedHistogramBar) => void;
+    suppressNextFocusedHistogramBarVerticalScroll: (bar: FocusedHistogramBar) => void;
+    consumeFocusedHistogramBarVerticalScrollSuppression: (bar: FocusedHistogramBar) => boolean;
     resetOverloadFocus: () => void;
     resolveNextOverloadBar: (assigneeId: number) => FocusedHistogramBar;
     getOverloadCycleInfo: (assigneeId: number) => CycleInfo;
@@ -152,6 +155,7 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
     histogramSelectionCycle: HISTOGRAM_SELECTION_RESET,
     overloadFocusCycle: OVERLOAD_FOCUS_RESET,
     focusedHistogramBar: null,
+    suppressFocusedHistogramBarVerticalScrollKey: null,
 
     setWorkloadPaneVisible: (visible) => {
         set({ workloadPaneVisible: visible });
@@ -206,6 +210,22 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
 
     setFocusedHistogramBar: (bar) => {
         set({ focusedHistogramBar: bar });
+    },
+
+    suppressNextFocusedHistogramBarVerticalScroll: (bar) => {
+        const key = bar ? `${bar.assigneeId}:${bar.dateStr}` : null;
+        set({ suppressFocusedHistogramBarVerticalScrollKey: key });
+    },
+
+    consumeFocusedHistogramBarVerticalScrollSuppression: (bar) => {
+        const currentKey = get().suppressFocusedHistogramBarVerticalScrollKey;
+        const barKey = bar ? `${bar.assigneeId}:${bar.dateStr}` : null;
+        if (!currentKey || !barKey || currentKey !== barKey) {
+            return false;
+        }
+
+        set({ suppressFocusedHistogramBarVerticalScrollKey: null });
+        return true;
     },
 
     resolveNextHistogramTask: (assigneeId, dateStr) => {
@@ -276,7 +296,8 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
     resetOverloadFocus: () => {
         set({
             overloadFocusCycle: OVERLOAD_FOCUS_RESET,
-            focusedHistogramBar: null
+            focusedHistogramBar: null,
+            suppressFocusedHistogramBarVerticalScrollKey: null
         });
     },
 
@@ -364,7 +385,8 @@ export const useWorkloadStore = create<WorkloadState>((set, get) => ({
             workloadData: data,
             histogramSelectionCycle: HISTOGRAM_SELECTION_RESET,
             overloadFocusCycle: OVERLOAD_FOCUS_RESET,
-            focusedHistogramBar
+            focusedHistogramBar,
+            suppressFocusedHistogramBarVerticalScrollKey: null
         });
     }
 }));
@@ -383,7 +405,10 @@ useTaskStore.subscribe((state, prevState) => {
             workloadState.focusedHistogramBar?.assigneeId !== nextFocusedHistogramBar?.assigneeId ||
             workloadState.focusedHistogramBar?.dateStr !== nextFocusedHistogramBar?.dateStr
         ) {
-            useWorkloadStore.setState({ focusedHistogramBar: nextFocusedHistogramBar });
+            useWorkloadStore.setState({
+                focusedHistogramBar: nextFocusedHistogramBar,
+                suppressFocusedHistogramBarVerticalScrollKey: null
+            });
         }
     }
 
