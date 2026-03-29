@@ -11,45 +11,20 @@ import { buildRedmineUrl } from '../utils/redmineUrl';
 import { useToolbarMenuState } from './gantt/useToolbarMenuState';
 import { useWorkloadStore } from '../stores/WorkloadStore';
 import type { GanttExportHandle } from '../export/types';
+import {
+    applyIndeterminateState,
+    isCheckboxChecked,
+    mergeStatusSelection,
+    resolveCheckboxState,
+    toggleAllSelectionValues,
+    toggleSelectionValue,
+} from './gantt/toolbarSelection';
 
 interface GanttToolbarProps {
     zoomLevel: ZoomLevel;
     onZoomChange: (level: ZoomLevel) => void;
     exportRef: React.RefObject<GanttExportHandle | null>;
 }
-
-const toggleSelectionValue = <T,>(selectedValues: T[], value: T): T[] =>
-    selectedValues.includes(value)
-        ? selectedValues.filter((selectedValue) => selectedValue !== value)
-        : [...selectedValues, value];
-
-const toggleAllSelectionValues = <T,>(isAllSelected: boolean, allValues: T[]): T[] =>
-    isAllSelected ? [] : allValues;
-
-type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
-
-const dedupeNumbers = (values: number[]): number[] => Array.from(new Set(values));
-
-const mergeStatusSelection = (selectedIds: number[], groupIds: number[], shouldSelect: boolean): number[] => {
-    if (shouldSelect) return dedupeNumbers([...selectedIds, ...groupIds]);
-    const groupIdSet = new Set(groupIds);
-    return selectedIds.filter((id) => !groupIdSet.has(id));
-};
-
-const resolveCheckboxState = (groupIds: number[], selectedIds: number[]): CheckboxState => {
-    if (groupIds.length === 0) return 'unchecked';
-    const selectedGroupCount = groupIds.filter((id) => selectedIds.includes(id)).length;
-    if (selectedGroupCount === 0) return 'unchecked';
-    if (selectedGroupCount === groupIds.length) return 'checked';
-    return 'indeterminate';
-};
-
-const applyIndeterminateState = (element: HTMLInputElement | null, state: CheckboxState) => {
-    if (!element) return;
-    element.indeterminate = state === 'indeterminate';
-};
-
-const getCheckboxChecked = (state: CheckboxState): boolean => state === 'checked';
 
 export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomChange, exportRef }) => {
     const {
@@ -1074,7 +1049,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                 <input
                                     ref={selectAllStatusesRef}
                                     type="checkbox"
-                                    checked={getCheckboxChecked(allStatusesState)}
+                                    checked={isCheckboxChecked(allStatusesState)}
                                     onChange={toggleAllStatuses}
                                 />
                                 <span style={{ fontWeight: 500 }}>{i18n.t('label_all_select') || 'Select All'}</span>
@@ -1083,7 +1058,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                 <input
                                     ref={completedStatusesRef}
                                     type="checkbox"
-                                    checked={getCheckboxChecked(completedStatusesState)}
+                                    checked={isCheckboxChecked(completedStatusesState)}
                                     onChange={toggleCompletedStatuses}
                                 />
                                 {i18n.t('label_status_completed') || 'Completed'}
@@ -1092,7 +1067,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                 <input
                                     ref={incompleteStatusesRef}
                                     type="checkbox"
-                                    checked={getCheckboxChecked(incompleteStatusesState)}
+                                    checked={isCheckboxChecked(incompleteStatusesState)}
                                     onChange={toggleIncompleteStatuses}
                                 />
                                 {i18n.t('label_status_incomplete') || 'Incomplete'}

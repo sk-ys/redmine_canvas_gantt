@@ -14,6 +14,7 @@ import { applyFilters } from './taskStore/filters';
 import { isDescendantTask, tailDisplayOrderForParent, tailDisplayOrderForRoot } from './taskStore/hierarchy';
 import { computeCenteredViewport } from './taskStore/viewport';
 import { buildMoveTaskResult, createTaskLayoutSnapshot, restoreTaskSnapshot, saveModifiedTasks } from './taskStore/taskPersistence';
+import { buildUniformExpansionMaps, initializeExpansionMaps } from './taskStore/expansion';
 import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
 import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
 import { AutoScheduleMoveMode } from '../types/constraints';
@@ -220,6 +221,14 @@ const buildDerivedTaskState = (
     };
 };
 
+const buildAllExpandedStates = (state: TaskState, expanded: boolean) => {
+    if (expanded) {
+        return buildUniformExpansionMaps(state.allTasks, true);
+    }
+
+    return buildUniformExpansionMaps(state.allTasks, false);
+};
+
 const toDerivedTaskStatePatch = (derived: DerivedTaskState): DerivedTaskStatePatch => ({
     tasks: derived.tasks,
     layoutRows: derived.layoutRows,
@@ -362,18 +371,10 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     setAutoSave: (enabled) => set({ autoSave: enabled }),
 
     setTasks: (tasks) => set((state) => {
-        const projectExpansion = { ...state.projectExpansion };
-        const taskExpansion = { ...state.taskExpansion };
-        const versionExpansion = { ...state.versionExpansion };
-
-        tasks.forEach((task) => {
-            const projectId = task.projectId ?? 'default_project';
-            if (projectExpansion[projectId] === undefined) projectExpansion[projectId] = true;
-            const assigneeId = task.assignedToId === undefined || task.assignedToId === null ? 'none' : String(task.assignedToId);
-            const assigneeGroupKey = `assignee:${assigneeId}`;
-            if (projectExpansion[assigneeGroupKey] === undefined) projectExpansion[assigneeGroupKey] = true;
-            if (taskExpansion[task.id] === undefined) taskExpansion[task.id] = true;
-            if (task.fixedVersionId && versionExpansion[task.fixedVersionId] === undefined) versionExpansion[task.fixedVersionId] = true;
+        const { projectExpansion, taskExpansion, versionExpansion } = initializeExpansionMaps(tasks, {
+            projectExpansion: state.projectExpansion,
+            versionExpansion: state.versionExpansion,
+            taskExpansion: state.taskExpansion
         });
 
         const derived = buildDerivedTaskState(state, {
@@ -959,18 +960,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
         const shouldExpand = anyProjectCollapsed || anyVersionCollapsed || anyTaskCollapsed;
 
-        const projectExpansion: Record<string, boolean> = {};
-        const versionExpansion: Record<string, boolean> = {};
-        const taskExpansion: Record<string, boolean> = {};
-
-        state.allTasks.forEach((task) => {
-            const projectId = task.projectId ?? 'default_project';
-            projectExpansion[projectId] = shouldExpand;
-            const assigneeId = task.assignedToId === undefined || task.assignedToId === null ? 'none' : String(task.assignedToId);
-            projectExpansion[`assignee:${assigneeId}`] = shouldExpand;
-            taskExpansion[task.id] = shouldExpand;
-            if (task.fixedVersionId) versionExpansion[task.fixedVersionId] = shouldExpand;
-        });
+        const { projectExpansion, versionExpansion, taskExpansion } = buildAllExpandedStates(state, shouldExpand);
 
         const layout = buildLayoutFromState(state, { projectExpansion, versionExpansion, taskExpansion });
 
@@ -985,18 +975,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }),
 
     expandAll: () => set((state) => {
-        const projectExpansion: Record<string, boolean> = {};
-        const versionExpansion: Record<string, boolean> = {};
-        const taskExpansion: Record<string, boolean> = {};
-
-        state.allTasks.forEach((task) => {
-            const projectId = task.projectId ?? 'default_project';
-            projectExpansion[projectId] = true;
-            const assigneeId = task.assignedToId === undefined || task.assignedToId === null ? 'none' : String(task.assignedToId);
-            projectExpansion[`assignee:${assigneeId}`] = true;
-            taskExpansion[task.id] = true;
-            if (task.fixedVersionId) versionExpansion[task.fixedVersionId] = true;
-        });
+        const { projectExpansion, versionExpansion, taskExpansion } = buildAllExpandedStates(state, true);
 
         const layout = buildLayoutFromState(state, { projectExpansion, versionExpansion, taskExpansion });
 
@@ -1011,18 +990,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }),
 
     collapseAll: () => set((state) => {
-        const projectExpansion: Record<string, boolean> = {};
-        const versionExpansion: Record<string, boolean> = {};
-        const taskExpansion: Record<string, boolean> = {};
-
-        state.allTasks.forEach((task) => {
-            const projectId = task.projectId ?? 'default_project';
-            projectExpansion[projectId] = false;
-            const assigneeId = task.assignedToId === undefined || task.assignedToId === null ? 'none' : String(task.assignedToId);
-            projectExpansion[`assignee:${assigneeId}`] = false;
-            taskExpansion[task.id] = false;
-            if (task.fixedVersionId) versionExpansion[task.fixedVersionId] = false;
-        });
+        const { projectExpansion, versionExpansion, taskExpansion } = buildAllExpandedStates(state, false);
 
         const layout = buildLayoutFromState(state, { projectExpansion, versionExpansion, taskExpansion });
 
