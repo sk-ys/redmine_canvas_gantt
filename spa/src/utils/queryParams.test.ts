@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseResolvedQueryState, readIssueQueryParamsFromUrl, replaceIssueQueryParamsInUrl } from './queryParams';
+import {
+    parseResolvedQueryState,
+    readIssueQueryParamsFromUrl,
+    replaceIssueQueryParamsInUrl,
+    toBusinessQueryState,
+    toResolvedQueryStateFromStore
+} from './queryParams';
 
 describe('parseResolvedQueryState', () => {
     it('accepts backend boolean grouping payload', () => {
@@ -50,6 +56,51 @@ describe('readIssueQueryParamsFromUrl', () => {
             sortConfig: undefined,
             groupBy: null,
             showSubprojects: undefined
+        });
+    });
+});
+
+describe('toResolvedQueryStateFromStore', () => {
+    it('normalizes store state into query payload shape', () => {
+        expect(toResolvedQueryStateFromStore({
+            activeQueryId: 9,
+            selectedStatusIds: [1, 2],
+            selectedAssigneeIds: [7, null],
+            selectedProjectIds: ['3'],
+            selectedVersionIds: ['4'],
+            sortConfig: { key: 'subject', direction: 'asc' },
+            groupByProject: false,
+            groupByAssignee: true,
+            showSubprojects: false
+        })).toEqual({
+            queryId: 9,
+            selectedStatusIds: [1, 2],
+            selectedAssigneeIds: [7, null],
+            selectedProjectIds: ['3'],
+            selectedVersionIds: ['4'],
+            sortConfig: { key: 'subject', direction: 'asc' },
+            groupBy: 'assignee',
+            showSubprojects: false
+        });
+    });
+});
+
+describe('toBusinessQueryState', () => {
+    it('fills defaults when resolved query state is partial', () => {
+        expect(toBusinessQueryState({
+            queryId: 11,
+            selectedStatusIds: [1],
+            groupBy: 'project'
+        })).toEqual({
+            queryId: 11,
+            selectedStatusIds: [1],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            sortConfig: null,
+            groupByProject: true,
+            groupByAssignee: false,
+            showSubprojects: true
         });
     });
 });

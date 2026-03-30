@@ -1,5 +1,7 @@
 module RedmineCanvasGantt
   class QueryStateResolver
+    QueryResolution = Struct.new(:issue_ids, :query, keyword_init: true)
+
     DEFAULT_STATE = {
       query_id: nil,
       selected_status_ids: [],
@@ -44,19 +46,19 @@ module RedmineCanvasGantt
     end
 
     def resolve(project_ids:)
-      state = DEFAULT_STATE.deep_dup
+      state = default_state
       selected_project_ids = resolve_selected_project_ids(project_ids)
       state[:selected_project_ids] = selected_project_ids.map(&:to_s)
       state[:show_subprojects] = resolve_show_subprojects
 
-      base_issue_ids, query = resolve_base_issue_ids
-      state.merge!(extract_supported_state(query)) if query
-      state[:query_id] = query.id if query&.id.present?
+      query_resolution = resolve_query_resolution
+      state.merge!(state_from_query(query_resolution.query)) if query_resolution.query
+      state[:query_id] = query_resolution.query.id if query_resolution.query&.id.present?
 
-      apply_url_overrides!(state)
+      apply_request_overrides!(state)
 
       issues = load_issues(
-        base_issue_ids: base_issue_ids,
+        base_issue_ids: query_resolution.issue_ids,
         project_ids: project_ids,
         selected_project_ids: selected_project_ids,
         state: state
@@ -71,77 +73,68 @@ module RedmineCanvasGantt
 
     private
 
-    def resolve_base_issue_ids
+    def default_state
+      DEFAULT_STATE.deep_dup
+    end
+
+    def resolve_query_resolution
       query_id = @params[:query_id].presence
-      return [nil, nil] unless query_id
+      return QueryResolution.new(issue_ids: nil, query: nil) unless query_id
 
       query = IssueQuery.find_by(id: query_id)
       unless query&.visible?(@current_user)
-        @warnings << "Ignored invalid query_id=#{query_id}"
-        Rails.logger.warn("[redmine_canvas_gantt] invalid query_id=#{query_id} for user #{@current_user.id}")
-        return [nil, nil]
+        warn_invalid_query_id(query_id)
+        return QueryResolution.new(issue_ids: nil, query: nil)
       end
 
+      working_query = build_working_query(query)
+      QueryResolution.new(issue_ids: working_query.issue_ids, query: working_query)
+    rescue StandardError => e
+      warn_query_resolution_failure(query_id, e)
+      QueryResolution.new(issue_ids: nil, query: nil)
+    end
+
+    def build_working_query(query)
       working_query = query.dup
       working_query.filters = filtered_query_filters(query.filters || {})
-      [working_query.issue_ids, working_query]
-    rescue StandardError => e
+      working_query
+    end
+
+    def warn_invalid_query_id(query_id)
+      @warnings << "Ignored invalid query_id=#{query_id}"
+      Rails.logger.warn("[redmine_canvas_gantt] invalid query_id=#{query_id} for user #{@current_user.id}")
+    end
+
+    def warn_query_resolution_failure(query_id, error)
       @warnings << "Failed to resolve query_id=#{query_id}"
-      Rails.logger.warn("[redmine_canvas_gantt] query_id=#{query_id} resolution failed: #{e.class}: #{e.message}")
-      [nil, nil]
+      Rails.logger.warn("[redmine_canvas_gantt] query_id=#{query_id} resolution failed: #{error.class}: #{error.message}")
     end
 
     def filtered_query_filters(filters)
-      overrides = []
-      overrides.concat(URL_OVERRIDE_FILTERS.select { |name| url_filter_values(name).present? })
-      overrides << 'project_id' if @params[:project_ids].present?
-      overrides << 'subproject_id' if @params.key?(:show_subprojects)
-      return filters if overrides.empty?
+      excluded_filter_keys = query_filter_keys_to_exclude
+      return filters if excluded_filter_keys.empty?
 
       filters.each_with_object({}) do |(key, value), acc|
-        acc[key] = value unless overrides.include?(key)
+        acc[key] = value unless excluded_filter_keys.include?(key)
       end
     end
 
-    def apply_url_overrides!(state)
-      status_ids = parse_integer_list(url_filter_values('status_id'))
-      assignee_ids = parse_integer_or_none_list(url_filter_values('assigned_to_id'))
-      version_ids = parse_string_list(url_filter_values('fixed_version_id'))
-      project_ids = resolve_selected_project_ids(nil)
-
-      state[:selected_status_ids] = status_ids if status_ids.present?
-      state[:selected_assignee_ids] = assignee_ids if assignee_ids.present?
-      state[:selected_version_ids] = version_ids if version_ids.present?
-      state[:selected_project_ids] = project_ids.map(&:to_s) if @params[:project_ids].present?
-      state[:show_subprojects] = resolve_show_subprojects if @params.key?(:show_subprojects)
-
-      url_sort = parse_sort(@params[:sort])
-      state[:sort_config] = url_sort if url_sort
-
-      case @params[:group_by].to_s
-      when 'project'
-        state[:group_by_project] = true
-        state[:group_by_assignee] = false
-      when 'assigned_to'
-        state[:group_by_project] = false
-        state[:group_by_assignee] = true
-      when '', nil
-        nil
-      else
-        @warnings << "Ignored unsupported group_by=#{@params[:group_by]}"
-      end
+    def query_filter_keys_to_exclude
+      keys = URL_OVERRIDE_FILTERS.select { |name| url_filter_values(name).present? }
+      keys << 'project_id' if @params[:project_ids].present?
+      keys << 'subproject_id' if @params.key?(:show_subprojects)
+      keys.uniq
     end
 
-    def extract_supported_state(query)
+    def state_from_query(query)
       filters = query.filters || {}
-      sort_config = extract_sort_config(query)
 
       {
         selected_status_ids: extract_filter_ids(filters['status_id']),
         selected_assignee_ids: extract_filter_ids(filters['assigned_to_id'], allow_none: true),
         selected_project_ids: extract_filter_ids(filters['project_id']).map(&:to_s),
         selected_version_ids: extract_filter_ids(filters['fixed_version_id']).map(&:to_s),
-        sort_config: sort_config || DEFAULT_STATE[:sort_config].deep_dup,
+        sort_config: extract_sort_config(query) || DEFAULT_STATE[:sort_config].deep_dup,
         group_by_project: query.group_by.to_s == 'project',
         group_by_assignee: query.group_by.to_s == 'assigned_to',
         show_subprojects: extract_show_subprojects(filters)
@@ -193,19 +186,86 @@ module RedmineCanvasGantt
       operator != '!*'
     end
 
-    def load_issues(base_issue_ids:, project_ids:, selected_project_ids:, state:)
-      allowed_project_ids = selected_project_ids.presence || project_ids
-      scope = @issue_scope.where(project_id: allowed_project_ids)
-      scope = scope.where(id: base_issue_ids) if base_issue_ids
-      scope = scope.where(status_id: state[:selected_status_ids]) if state[:selected_status_ids].present?
-      scope = scope.where(fixed_version_id: state[:selected_version_ids]) if state[:selected_version_ids].present?
-      scope = apply_assignee_filter(scope, state[:selected_assignee_ids]) if state[:selected_assignee_ids].present?
-      scope = scope.includes(*@issue_includes)
+    def apply_request_overrides!(state)
+      apply_status_override!(state)
+      apply_assignee_override!(state)
+      apply_version_override!(state)
+      apply_project_override!(state)
+      apply_show_subprojects_override!(state)
+      apply_sort_override!(state)
+      apply_group_by_override!(state)
+    end
 
+    def apply_status_override!(state)
+      status_ids = parse_integer_list(url_filter_values('status_id'))
+      state[:selected_status_ids] = status_ids if status_ids.present?
+    end
+
+    def apply_assignee_override!(state)
+      assignee_ids = parse_integer_or_none_list(url_filter_values('assigned_to_id'))
+      state[:selected_assignee_ids] = assignee_ids if assignee_ids.present?
+    end
+
+    def apply_version_override!(state)
+      version_ids = parse_string_list(url_filter_values('fixed_version_id'))
+      state[:selected_version_ids] = version_ids if version_ids.present?
+    end
+
+    def apply_project_override!(state)
+      return unless @params[:project_ids].present?
+
+      project_ids = resolve_selected_project_ids(nil)
+      state[:selected_project_ids] = project_ids.map(&:to_s)
+    end
+
+    def apply_show_subprojects_override!(state)
+      state[:show_subprojects] = resolve_show_subprojects if @params.key?(:show_subprojects)
+    end
+
+    def apply_sort_override!(state)
+      url_sort = parse_sort(@params[:sort])
+      state[:sort_config] = url_sort if url_sort
+    end
+
+    def apply_group_by_override!(state)
+      case @params[:group_by].to_s
+      when 'project'
+        state[:group_by_project] = true
+        state[:group_by_assignee] = false
+      when 'assigned_to'
+        state[:group_by_project] = false
+        state[:group_by_assignee] = true
+      when '', nil
+        nil
+      else
+        @warnings << "Ignored unsupported group_by=#{@params[:group_by]}"
+      end
+    end
+
+    def load_issues(base_issue_ids:, project_ids:, selected_project_ids:, state:)
+      scope = issues_scope_for(
+        base_issue_ids: base_issue_ids,
+        project_ids: project_ids,
+        selected_project_ids: selected_project_ids,
+        state: state
+      )
       issues = scope.to_a
       issues = preserve_query_order(issues, base_issue_ids) if base_issue_ids
       sort_issues!(issues, state[:sort_config])
       issues
+    end
+
+    def issues_scope_for(base_issue_ids:, project_ids:, selected_project_ids:, state:)
+      scope = @issue_scope.where(project_id: project_scope_ids(project_ids, selected_project_ids))
+      scope = scope.where(id: base_issue_ids) if base_issue_ids
+      scope = scope.where(status_id: state[:selected_status_ids]) if state[:selected_status_ids].present?
+      scope = scope.where(fixed_version_id: state[:selected_version_ids]) if state[:selected_version_ids].present?
+      scope = apply_assignee_filter(scope, state[:selected_assignee_ids]) if state[:selected_assignee_ids].present?
+      scope.includes(*@issue_includes)
+    end
+
+    def project_scope_ids(project_ids, selected_project_ids)
+      selected_project_ids.presence || project_ids
     end
 
     def apply_assignee_filter(scope, selected_assignee_ids)

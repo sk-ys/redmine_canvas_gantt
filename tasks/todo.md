@@ -1,3 +1,22 @@
+# Query refactor
+
+- [x] Split backend query resolution responsibilities in `lib/redmine_canvas_gantt/query_state_resolver.rb`
+- [x] Centralize store-to-query serialization in `spa/src/utils/queryParams.ts`
+- [x] Remove unused `spa/src/stores/queryParamsWatcher.ts` and `spa/src/utils/businessQueryState.ts`
+- [x] Add backend/frontend coverage for the refactored query-state helpers
+- [x] Run targeted verification and record results
+
+## Review
+
+- Backend resolver now separates query resolution, query-derived state extraction, request overrides, and issue scope construction
+- Query state now flows through `toResolvedQueryStateFromStore` for both URL sync and API refreshes
+- Existing URL contract and backend payload shape were preserved
+- Verification passed with `npm run lint`
+- Verification passed with `npm run test -- --run src/utils/queryParams.test.ts src/api/client.test.ts src/components/GanttToolbar.test.tsx`
+- Verification passed with `npx tsc -b`
+- Ruby syntax checks passed for resolver and resolver spec
+- Docker Redmine runtime still could not execute plugin RSpec because `rspec` is not installed in the container (`bundler: command not found: rspec`)
+
 # Canvas Gantt query integration
 
 - [x] Inspect current backend/frontend filter and persistence flow

@@ -5,7 +5,15 @@ RSpec.describe RedmineCanvasGantt::QueryStateResolver do
   let(:current_user) { instance_double(User, id: 5) }
   let(:issue_scope) { double('IssueScope') }
   let(:issue_includes) { [:status] }
-  let(:params) { ActionController::Parameters.new(query_id: '42', sort: 'subject:desc', group_by: 'assigned_to') }
+  let(:params) do
+    ActionController::Parameters.new(
+      query_id: '42',
+      sort: 'subject:desc',
+      group_by: 'assigned_to',
+      project_ids: ['9'],
+      show_subprojects: '0'
+    )
+  end
   let(:query) do
     instance_double(
       IssueQuery,
@@ -13,7 +21,8 @@ RSpec.describe RedmineCanvasGantt::QueryStateResolver do
       visible?: true,
       filters: {
         'status_id' => { operator: '=', values: %w[1 2] },
-        'assigned_to_id' => { operator: '=', values: ['7'] }
+        'assigned_to_id' => { operator: '=', values: ['7'] },
+        'project_id' => { operator: '=', values: ['1'] }
       },
       sort_criteria: [['subject', 'asc']],
       group_by: 'project'
@@ -53,6 +62,8 @@ RSpec.describe RedmineCanvasGantt::QueryStateResolver do
       query_id: 42,
       selected_status_ids: [1, 2],
       selected_assignee_ids: [7],
+      selected_project_ids: ['9'],
+      show_subprojects: false,
       sort_config: { key: 'subject', direction: 'desc' },
       group_by_assignee: true,
       group_by_project: false

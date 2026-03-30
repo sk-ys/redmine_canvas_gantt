@@ -18,7 +18,13 @@ import { buildUniformExpansionMaps, initializeExpansionMaps } from './taskStore/
 import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
 import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
 import { AutoScheduleMoveMode } from '../types/constraints';
-import { readIssueQueryParamsFromUrl, replaceIssueQueryParamsInUrl, type ResolvedQueryState } from '../utils/queryParams';
+import {
+    readIssueQueryParamsFromUrl,
+    replaceIssueQueryParamsInUrl,
+    toBusinessQueryState,
+    toResolvedQueryStateFromStore,
+    type ResolvedQueryState
+} from '../utils/queryParams';
 
 type DerivedSchedulingSummary = {
     schedulingStates: Record<string, SchedulingStateInfo>;
@@ -225,17 +231,10 @@ const buildDerivedTaskState = (
     };
 };
 
-const syncQueryStateUrl = (state: Pick<TaskState, 'activeQueryId' | 'selectedStatusIds' | 'selectedAssigneeIds' | 'selectedProjectIds' | 'selectedVersionIds' | 'sortConfig' | 'groupByProject' | 'groupByAssignee' | 'showSubprojects'>) => {
-    replaceIssueQueryParamsInUrl({
-        queryId: state.activeQueryId ?? undefined,
-        selectedStatusIds: state.selectedStatusIds,
-        selectedAssigneeIds: state.selectedAssigneeIds,
-        selectedProjectIds: state.selectedProjectIds,
-        selectedVersionIds: state.selectedVersionIds,
-        sortConfig: state.sortConfig,
-        groupBy: state.groupByProject ? 'project' : (state.groupByAssignee ? 'assignee' : null),
-        showSubprojects: state.showSubprojects
-    });
+type QuerySyncState = Pick<TaskState, 'activeQueryId' | 'selectedStatusIds' | 'selectedAssigneeIds' | 'selectedProjectIds' | 'selectedVersionIds' | 'sortConfig' | 'groupByProject' | 'groupByAssignee' | 'showSubprojects'>;
+
+const syncQueryStateUrl = (state: QuerySyncState) => {
+    replaceIssueQueryParamsInUrl(toResolvedQueryStateFromStore(state));
 };
 
 const buildAllExpandedStates = (state: TaskState, expanded: boolean) => {
@@ -430,15 +429,16 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }),
     setTaskStatuses: (statuses) => set(() => ({ taskStatuses: statuses })),
     applyResolvedQueryState: (resolved) => set((state) => {
-        const groupByProject = resolved?.groupBy === 'project' ? true : false;
-        const groupByAssignee = resolved?.groupBy === 'assignee' ? true : false;
-        const showSubprojects = resolved?.showSubprojects ?? true;
-        const sortConfig = resolved?.sortConfig ?? { key: 'startDate', direction: 'asc' };
-        const selectedStatusIds = resolved?.selectedStatusIds ?? [];
-        const selectedAssigneeIds = resolved?.selectedAssigneeIds ?? [];
-        const selectedProjectIds = resolved?.selectedProjectIds ?? [];
-        const selectedVersionIds = resolved?.selectedVersionIds ?? [];
-        const activeQueryId = typeof resolved?.queryId === 'number' && resolved.queryId > 0 ? resolved.queryId : null;
+        const queryState = toBusinessQueryState(resolved);
+        const groupByProject = queryState.groupByProject;
+        const groupByAssignee = queryState.groupByAssignee;
+        const showSubprojects = queryState.showSubprojects;
+        const sortConfig = queryState.sortConfig ?? { key: 'startDate', direction: 'asc' };
+        const selectedStatusIds = queryState.selectedStatusIds;
+        const selectedAssigneeIds = queryState.selectedAssigneeIds;
+        const selectedProjectIds = queryState.selectedProjectIds;
+        const selectedVersionIds = queryState.selectedVersionIds;
+        const activeQueryId = queryState.queryId;
         const layout = buildLayoutFromState(state, {
             groupByProject,
             groupByAssignee,
@@ -1231,16 +1231,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const { apiClient } = await import('../api/client');
         const state = get();
         const data = await apiClient.fetchData({
-            query: {
-                queryId: state.activeQueryId ?? undefined,
-                selectedStatusIds: state.selectedStatusIds,
-                selectedAssigneeIds: state.selectedAssigneeIds,
-                selectedProjectIds: state.selectedProjectIds,
-                selectedVersionIds: state.selectedVersionIds,
-                sortConfig: state.sortConfig,
-                groupBy: state.groupByProject ? 'project' : (state.groupByAssignee ? 'assignee' : null),
-                showSubprojects: state.showSubprojects
-            }
+            query: toResolvedQueryStateFromStore(state)
         });
         if (!data) return;
         const { setTasks, setRelations, setVersions, setTaskStatuses, setCustomFields, applyResolvedQueryState } = state;

@@ -11,6 +11,18 @@ export interface ResolvedQueryState {
     showSubprojects?: boolean;
 }
 
+export interface QueryUrlStateSource {
+    activeQueryId: number | null;
+    selectedStatusIds: number[];
+    selectedAssigneeIds: (number | null)[];
+    selectedProjectIds: string[];
+    selectedVersionIds: string[];
+    sortConfig: BusinessQueryState['sortConfig'];
+    groupByProject: boolean;
+    groupByAssignee: boolean;
+    showSubprojects: boolean;
+}
+
 const isPersistedQueryId = (value: unknown): value is number =>
     typeof value === 'number' && Number.isInteger(value) && value > 0;
 
@@ -76,7 +88,7 @@ const CONTROLLED_KEYS = [
     'show_subprojects'
 ] as const;
 
-const toBusinessQueryState = (state: Partial<ResolvedQueryState>): BusinessQueryState => ({
+export const toBusinessQueryState = (state: Partial<ResolvedQueryState> = {}): BusinessQueryState => ({
     queryId: state.queryId ?? null,
     selectedStatusIds: state.selectedStatusIds ?? [],
     selectedAssigneeIds: state.selectedAssigneeIds ?? [],
@@ -86,6 +98,17 @@ const toBusinessQueryState = (state: Partial<ResolvedQueryState>): BusinessQuery
     groupByProject: state.groupBy === 'project',
     groupByAssignee: state.groupBy === 'assignee',
     showSubprojects: state.showSubprojects ?? true
+});
+
+export const toResolvedQueryStateFromStore = (state: QueryUrlStateSource): ResolvedQueryState => ({
+    queryId: state.activeQueryId ?? undefined,
+    selectedStatusIds: state.selectedStatusIds,
+    selectedAssigneeIds: state.selectedAssigneeIds,
+    selectedProjectIds: state.selectedProjectIds,
+    selectedVersionIds: state.selectedVersionIds,
+    sortConfig: state.sortConfig ?? undefined,
+    groupBy: state.groupByProject ? 'project' : (state.groupByAssignee ? 'assignee' : null),
+    showSubprojects: state.showSubprojects
 });
 
 export const readIssueQueryParamsFromUrl = (search: string = window.location.search): ResolvedQueryState => {
