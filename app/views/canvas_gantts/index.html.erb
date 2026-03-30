@@ -2,6 +2,10 @@
   <%= javascript_tag do %>
     window.RedmineCanvasGantt = {
       projectId: <%= @project.id %>,
+      projectPath: '<%= project_path(@project) %>',
+      issueListPath: '<%= project_issues_path(@project) %>',
+      newIssuePath: '<%= new_project_issue_path(@project) %>',
+      canvasGanttPath: '<%= project_canvas_gantt_path(@project) %>',
       apiBase: '<%= project_path(@project) %>/canvas_gantt',
       redmineBase: '<%= Redmine::Utils.relative_url_root %>',
       authToken: '<%= form_authenticity_token %>',

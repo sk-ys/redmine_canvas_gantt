@@ -27,6 +27,11 @@ en:
   label_leaf_issues_only: "Leaf Issues Only"
   label_include_closed_issues: "Include Closed Issues"
   label_today_onward_only: "Today Onward Only"
+  label_edit_query_in_redmine: "Edit Query in Redmine"
+  label_edit_query_in_redmine_tooltip: "Edit filter conditions in the standard Redmine issue list"
+  label_open_in_canvas_gantt: "Open in Canvas Gantt"
+  label_open_in_canvas_gantt_tooltip: "Open Canvas Gantt with the current saved query"
+  label_canvas_gantt_query_requires_save: "To reuse this query in Canvas Gantt, save it first."
   label_critical_path_total_slack: "Critical path task. Total slack: %{days} working day(s)."
 
   label_sort_by: "Sort by"

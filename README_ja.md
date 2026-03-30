@@ -88,6 +88,63 @@ Redmine Canvas Gantt は、タイムラインを HTML5 Canvas で描画しつつ
    - サイドバーの行を別タスクへドラッグして子チケット化
    - 子チケット一括作成で複数の子チケットをまとめて追加
 
+## 共有ビューとクエリパラメータ
+
+Canvas Gantt では、共有すべき業務条件と個人向けの UI 状態を分離して扱います。
+
+- 共有用の業務条件は URL パラメータと `query_id` から解決されます
+- ズーム、スクロール位置、サイドバー幅、表示列などの UI 状態は `localStorage` に保存されます
+- 同じ条件が複数ソースにある場合の優先順位は次の通りです
+  URL パラメータ -> 保存済みクエリ (`query_id`) -> `localStorage` -> デフォルト値
+
+### クエリ編集の流れ
+
+Canvas Gantt は Redmine 標準のクエリ編集 UI を再実装しません。クエリの作成、編集、保存は Redmine 標準のチケット一覧で行い、Canvas Gantt は保存済みクエリを `query_id` として受け取って表示に反映します。
+
+- Canvas Gantt のツールバーにある **Redmineでクエリ編集** で、現在のプロジェクトの標準チケット一覧を開きます
+- Redmine 標準の一覧画面でフィルタ条件を調整し、標準の **Save** でクエリを保存します
+- 保存後、一覧画面の **Canvas Ganttで開く** で `query_id` 付きの Canvas Gantt に戻ります
+- 未保存クエリには `query_id` が無いため、そのままは戻らず、まず保存を促す表示になります
+
+Phase 1 では保存済みクエリの往復のみをサポートします。未保存の Redmine フィルタ条件を Canvas Gantt の URL に変換して戻す機能はまだありません。
+
+### 対応している共有パラメータ
+
+- `query_id`: Redmine の保存済みチケットクエリを基底条件として使います。保存済みのクエリ ID のみ対応します
+- `status_ids[]`: ステータス ID で絞り込みます
+- `assigned_to_ids[]`: 担当者 ID で絞り込みます。未割当は `none` を使います
+- `project_ids[]`: 現在のプロジェクト配下で表示対象のプロジェクトを絞り込みます
+- `fixed_version_ids[]`: 対象バージョン ID で絞り込みます。未設定は `none` を使います
+- `group_by`: `project` または `assigned_to`
+- `sort`: フロントエンドのソートキーと方向を指定します。例: `subject:asc`, `startDate:desc`
+- `show_subprojects`: `0` でサブプロジェクト非表示、未指定または `1` で表示
+
+### URL 例
+
+保存済みクエリを基底にして開く:
+
+```text
+/projects/demo/canvas_gantt?query_id=12
+```
+
+保存済みクエリにステータスと担当者条件を上書きする:
+
+```text
+/projects/demo/canvas_gantt?query_id=12&status_ids[]=1&status_ids[]=2&assigned_to_ids[]=5
+```
+
+ブラウザ保存状態に依存せず、特定プロジェクト・特定バージョンの共有ビューを開く:
+
+```text
+/projects/demo/canvas_gantt?project_ids[]=3&fixed_version_ids[]=7&group_by=project&sort=startDate:asc
+```
+
+サブプロジェクトを隠し、未割当チケットだけを表示する:
+
+```text
+/projects/demo/canvas_gantt?assigned_to_ids[]=none&show_subprojects=0
+```
+
 ## Configuration
 
 **管理** -> **プラグイン** -> **Canvas Gantt** -> **設定** から設定します。

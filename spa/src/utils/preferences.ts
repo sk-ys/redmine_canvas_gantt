@@ -10,19 +10,14 @@ export interface StoredPreferences {
     showProgressLine?: boolean;
     showPointsOrphans?: boolean;
     showVersions?: boolean;
+    selectedStatusIds?: number[];
+    selectedProjectIds?: string[];
     visibleColumns?: string[];
-    groupByProject?: boolean;
-    groupByAssignee?: boolean;
     organizeByDependency?: boolean;
     columnWidths?: Record<string, number>;
     sidebarWidth?: number;
-    selectedAssigneeIds?: (number | null)[];
-    selectedProjectIds?: string[];
     customScales?: Record<number, number>;
     rowHeight?: number;
-    selectedStatusIds?: number[];
-    sortConfig?: { key: string; direction: 'asc' | 'desc' } | null;
-    selectedVersionIds?: string[];
     autoSave?: boolean;
     defaultRelationType?: 'precedes' | 'relates' | 'blocks';
     autoCalculateDelay?: boolean;
@@ -33,6 +28,32 @@ export interface StoredPreferences {
     includeClosedIssues?: boolean;
     todayOnwardOnly?: boolean;
 }
+
+const sanitizePreferences = (prefs: StoredPreferences): StoredPreferences => Object.fromEntries(
+    Object.entries({
+        zoomLevel: prefs.zoomLevel,
+        viewMode: prefs.viewMode,
+        viewport: prefs.viewport,
+        showProgressLine: prefs.showProgressLine,
+        showPointsOrphans: prefs.showPointsOrphans,
+        showVersions: prefs.showVersions,
+        visibleColumns: prefs.visibleColumns,
+        columnWidths: prefs.columnWidths,
+        sidebarWidth: prefs.sidebarWidth,
+        customScales: prefs.customScales,
+        rowHeight: prefs.rowHeight,
+        autoSave: prefs.autoSave,
+        defaultRelationType: prefs.defaultRelationType,
+        autoCalculateDelay: prefs.autoCalculateDelay,
+        autoApplyDefaultRelation: prefs.autoApplyDefaultRelation,
+        autoScheduleMoveMode: prefs.autoScheduleMoveMode,
+        capacityThreshold: prefs.capacityThreshold,
+        leafIssuesOnly: prefs.leafIssuesOnly,
+        includeClosedIssues: prefs.includeClosedIssues,
+        todayOnwardOnly: prefs.todayOnwardOnly,
+        organizeByDependency: prefs.organizeByDependency
+    }).filter(([, value]) => value !== undefined)
+) as StoredPreferences;
 
 const STORAGE_KEY = 'canvasGantt:preferences';
 const STORAGE_VERSION = 2;
@@ -83,14 +104,14 @@ export const loadPreferences = (projectId?: string | number | null): StoredPrefe
         const projectKey = resolveProjectKey(projectId);
 
         if (isPreferencesEnvelopeV2(parsed)) {
-            return parsed.projects[projectKey] ?? {};
+            return sanitizePreferences(parsed.projects[projectKey] ?? {});
         }
 
         // V1 migration: apply old shared preferences to current project only.
         if (isRecord(parsed)) {
-            const migrated = toEnvelope(parsed as StoredPreferences, projectKey);
+            const migrated = toEnvelope(sanitizePreferences(parsed as StoredPreferences), projectKey);
             persistEnvelope(migrated);
-            return migrated.projects[projectKey] ?? {};
+            return sanitizePreferences(migrated.projects[projectKey] ?? {});
         }
 
         return {};
@@ -105,7 +126,7 @@ export const savePreferences = (prefs: StoredPreferences, projectId?: string | n
 
     const projectKey = resolveProjectKey(projectId);
     const currentProjectPrefs = loadPreferences(projectId);
-    const nextProjectPrefs = { ...currentProjectPrefs, ...prefs };
+    const nextProjectPrefs = { ...currentProjectPrefs, ...sanitizePreferences(prefs) };
 
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -117,7 +138,7 @@ export const savePreferences = (prefs: StoredPreferences, projectId?: string | n
         const parsed = JSON.parse(raw) as unknown;
         const baseEnvelope = isPreferencesEnvelopeV2(parsed)
             ? parsed
-            : toEnvelope(parsed as StoredPreferences, projectKey);
+            : toEnvelope(sanitizePreferences(parsed as StoredPreferences), projectKey);
         const nextEnvelope: PreferencesEnvelopeV2 = {
             version: STORAGE_VERSION,
             projects: {

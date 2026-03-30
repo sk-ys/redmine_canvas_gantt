@@ -52,6 +52,8 @@ class CanvasGanttsController < ApplicationController
     label_leaf_issues_only: :label_leaf_issues_only,
     label_include_closed_issues: :label_include_closed_issues,
     label_today_onward_only: :label_today_onward_only,
+    label_edit_query_in_redmine: :label_edit_query_in_redmine,
+    label_edit_query_in_redmine_tooltip: :label_edit_query_in_redmine_tooltip,
     label_critical_path_total_slack: :label_critical_path_total_slack,
 
     button_expand: :label_expand,
@@ -228,6 +230,7 @@ class CanvasGanttsController < ApplicationController
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'relation_change_validator').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'bulk_subtask_creator').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'parent_issue_resolver').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'query_state_resolver').to_s
 
   helper RedmineCanvasGantt::ViteAssetHelper
   accept_api_auth :data, :edit_meta, :update, :bulk_create_subtasks, :create_relation, :update_relation, :destroy_relation
@@ -263,13 +266,15 @@ class CanvasGanttsController < ApplicationController
   def data
     begin
       project_ids = descendant_project_ids
-      issues = issue_scope(project_ids).to_a
+      resolved_query = query_state_resolver.resolve(project_ids: project_ids)
 
       render json: data_payload_builder.build(
         project: @project,
         permissions: @permissions,
         project_ids: project_ids,
-        issues: issues
+        issues: resolved_query[:issues],
+        initial_state: resolved_query[:initial_state],
+        warnings: resolved_query[:warnings]
       )
     rescue => e
       render json: { error: e.message }, status: :internal_server_error
@@ -469,6 +474,16 @@ class CanvasGanttsController < ApplicationController
     scope = Issue.visible.where(project_id: project_ids).includes(*ISSUE_INCLUDES)
     scope = scope.where(status_id: params[:status_ids]) if params[:status_ids].present?
     scope
+  end
+
+  def query_state_resolver
+    @query_state_resolver ||= RedmineCanvasGantt::QueryStateResolver.new(
+      project: @project,
+      params: params,
+      current_user: User.current,
+      issue_scope: Issue.visible,
+      issue_includes: ISSUE_INCLUDES
+    )
   end
 
   def ensure_issue_in_scope(issue)

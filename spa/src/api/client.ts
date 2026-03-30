@@ -1,5 +1,6 @@
 import type { Relation, Project, Task, Version, TaskStatus } from '../types';
 import type { TaskEditMeta, InlineEditSettings, CustomFieldMeta, EditOption } from '../types/editMeta';
+import { buildIssueQueryParams, parseResolvedQueryState, type ResolvedQueryState } from '../utils/queryParams';
 
 type ApiTask = Record<string, unknown>;
 type ApiRelation = Record<string, unknown>;
@@ -41,6 +42,8 @@ interface ApiData {
     statuses: TaskStatus[];
     customFields: CustomFieldMeta[];
     permissions: { editable: boolean; viewable: boolean };
+    initialState?: ResolvedQueryState;
+    warnings?: string[];
 }
 
 interface UpdateTaskResult {
@@ -68,6 +71,10 @@ declare global {
     interface Window {
         RedmineCanvasGantt?: {
             projectId: number;
+            projectPath?: string;
+            issueListPath?: string;
+            newIssuePath?: string;
+            canvasGanttPath?: string;
             apiBase: string;
             redmineBase: string;
             authToken: string;
@@ -166,7 +173,7 @@ const parseCustomFieldMeta = (value: unknown): CustomFieldMeta | null => {
 };
 
 export const apiClient = {
-    fetchData: async (params?: { statusIds?: number[] }): Promise<ApiData> => {
+    fetchData: async (params?: { query?: ResolvedQueryState }): Promise<ApiData> => {
         const config = getConfig();
 
         const parseDate = (value: string | null | undefined): number | null => {
@@ -175,12 +182,9 @@ export const apiClient = {
             return Number.isFinite(ts) ? ts : null;
         };
 
-        const query = new URLSearchParams();
-        if (params?.statusIds && params.statusIds.length > 0) {
-            params.statusIds.forEach(id => query.append('status_ids[]', String(id)));
-        }
+        const query = buildIssueQueryParams(params?.query ?? {});
         const qs = query.toString();
-        const url = `${config.apiBase}/data.json` + (qs ? `?${qs}` : '');
+        const url = new URL(`${config.apiBase}/data.json` + (qs ? `?${qs}` : ''), window.location.origin).toString();
 
         const response = await fetch(url, {
             headers: buildJsonHeaders(config)
@@ -297,7 +301,21 @@ export const apiClient = {
             viewable: Boolean(permissionsRecord.viewable)
         };
 
-        return { tasks, relations, versions, statuses, customFields, project, permissions };
+        const warnings = Array.isArray(data.warnings)
+            ? data.warnings.filter((entry): entry is string => typeof entry === 'string')
+            : [];
+
+        return {
+            tasks,
+            relations,
+            versions,
+            statuses,
+            customFields,
+            project,
+            permissions,
+            initialState: parseResolvedQueryState(data.initial_state),
+            warnings
+        };
     },
 
     fetchEditMeta: async (taskId: string): Promise<TaskEditMeta> => {

@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useTaskStore } from '../../stores/TaskStore';
+import { useUIStore } from '../../stores/UIStore';
 import { getMinFiniteStartDate } from '../../utils/taskRange';
 import type { CustomFieldMeta } from '../../types/editMeta';
 import type { Relation, Task, Version, Viewport } from '../../types';
+import { readIssueQueryParamsFromUrl } from '../../utils/queryParams';
 
 type Params = {
     viewportFromStorage: boolean;
@@ -28,13 +30,14 @@ export const useInitialGanttData = ({
         hasFetched.current = true;
 
         import('../../api/client').then(({ apiClient }) => {
-            const savedStatusIds = useTaskStore.getState().selectedStatusIds;
-            apiClient.fetchData({ statusIds: savedStatusIds }).then(data => {
+            apiClient.fetchData({ query: readIssueQueryParamsFromUrl() }).then(data => {
+                useTaskStore.getState().applyResolvedQueryState(data.initialState);
                 setTasks(data.tasks);
                 setRelations(data.relations);
                 setVersions(data.versions);
                 setCustomFields(data.customFields ?? []);
                 useTaskStore.getState().setTaskStatuses(data.statuses ?? []);
+                (data.warnings ?? []).forEach((warning) => useUIStore.getState().addNotification(warning, 'warning'));
 
                 if (!viewportFromStorage) {
                     const minStart = getMinFiniteStartDate(data.tasks);

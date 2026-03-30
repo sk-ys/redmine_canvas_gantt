@@ -55,14 +55,37 @@ describe('apiClient.fetchData', () => {
                 ],
                 relations: [{ id: 99, from: 10, to: 11, type: 'precedes' }],
                 project: { id: 1, name: 'P' },
-                permissions: { editable: true, viewable: true }
+                permissions: { editable: true, viewable: true },
+                initial_state: {
+                    query_id: 7,
+                    selected_status_ids: [1],
+                    group_by: 'project',
+                    sort_config: { key: 'startDate', direction: 'desc' }
+                },
+                warnings: ['Invalid query_id ignored']
             })
         });
         vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-        const data = await apiClient.fetchData();
+        const data = await apiClient.fetchData({
+            query: {
+                queryId: 7,
+                selectedStatusIds: [1]
+            }
+        });
 
         expect(data.relations).toEqual([{ id: '99', from: '10', to: '11', type: 'precedes', delay: undefined }]);
+        expect(data.initialState).toEqual({
+            queryId: 7,
+            selectedStatusIds: [1],
+            groupBy: 'project',
+            sortConfig: { key: 'startDate', direction: 'desc' }
+        });
+        expect(data.warnings).toEqual(['Invalid query_id ignored']);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:3000/projects/1/canvas_gantt/data.json?query_id=7&status_ids%5B%5D=1',
+            expect.anything()
+        );
     });
 });
 

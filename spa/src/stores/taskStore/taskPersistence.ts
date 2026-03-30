@@ -13,6 +13,12 @@ type FetchDataResult = {
     tasks: Task[];
 };
 
+type FetchDataParams = {
+    query?: {
+        selectedStatusIds?: number[];
+    };
+};
+
 export const createTaskLayoutSnapshot = (state: TaskLayoutSnapshot): TaskLayoutSnapshot => ({
     allTasks: state.allTasks.map((task) => ({ ...task })),
     tasks: state.tasks.map((task) => ({ ...task })),
@@ -48,7 +54,7 @@ export const saveModifiedTasks = async (
     modifiedTaskIds: Set<string>,
     selectedStatusIds: number[],
     updateTask: (task: Task) => Promise<UpdateTaskFieldsResult>,
-    fetchData: (params: { statusIds: number[] }) => Promise<FetchDataResult>
+    fetchData: (params: FetchDataParams) => Promise<FetchDataResult>
 ) => {
     const mutableTaskById = new Map(tasks.map(task => [task.id, { ...task }]));
     const hasSamePersistedFields = (local: Task, remote: Task): boolean => {
@@ -144,7 +150,7 @@ export const saveModifiedTasks = async (
         }
 
         if (conflictTaskIds.length > 0) {
-            const latest = await fetchData({ statusIds: selectedStatusIds });
+            const latest = await fetchData({ query: { selectedStatusIds } });
             const latestTaskById = new Map(latest.tasks.map(task => [task.id, task]));
             const refreshedPending: string[] = [];
 

@@ -31,11 +31,18 @@ RSpec.describe CanvasGanttsController, type: :controller do
 
     it 'returns data payload with expected top-level keys' do
       payload_builder = instance_double(RedmineCanvasGantt::DataPayloadBuilder)
+      resolver = instance_double(RedmineCanvasGantt::QueryStateResolver)
       allow(controller).to receive(:set_permissions) do
         controller.instance_variable_set(:@permissions, { editable: true, viewable: true })
       end
       allow(controller).to receive(:descendant_project_ids).and_return([1, 2])
-      allow(controller).to receive(:issue_scope).with([1, 2]).and_return([double('Issue')])
+      allow(controller).to receive(:query_state_resolver).and_return(resolver)
+      issue = double('Issue', project_id: 1)
+      allow(resolver).to receive(:resolve).and_return({
+        issues: [issue],
+        initial_state: { query_id: 7 },
+        warnings: ['Invalid query_id ignored']
+      })
       allow(controller).to receive(:data_payload_builder).and_return(payload_builder)
       allow(payload_builder).to receive(:build).and_return({
         tasks: [{ id: 10 }],
@@ -44,14 +51,16 @@ RSpec.describe CanvasGanttsController, type: :controller do
         versions: [{ id: 30 }],
         statuses: [{ id: 40 }],
         project: { id: 1, name: 'Demo' },
-        permissions: { editable: true, viewable: true }
+        permissions: { editable: true, viewable: true },
+        initial_state: { query_id: 7 },
+        warnings: ['Invalid query_id ignored']
       })
 
       get :data, params: { project_id: 'demo' }, format: :json
 
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body)
-      expect(body.keys).to contain_exactly('tasks', 'custom_fields', 'relations', 'versions', 'statuses', 'project', 'permissions')
+      expect(body.keys).to contain_exactly('tasks', 'custom_fields', 'relations', 'versions', 'statuses', 'project', 'permissions', 'initial_state', 'warnings')
       expect(body['permissions']).to eq('editable' => true, 'viewable' => true)
     end
   end

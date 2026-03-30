@@ -1,12 +1,17 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { navigateToRedminePath } from '../utils/navigation';
 import { GanttToolbar } from './GanttToolbar';
 import { AutoScheduleMoveMode, RelationType } from '../types/constraints';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
 import type { GanttExportHandle } from '../export/types';
 import '../stores/preferencesWatcher';
+
+vi.mock('../utils/navigation', () => ({
+    navigateToRedminePath: vi.fn()
+}));
 
 const getCanvasGanttConfig = (): NonNullable<Window['RedmineCanvasGantt']> => {
     const config = window.RedmineCanvasGantt;
@@ -23,17 +28,20 @@ describe('GanttToolbar shortcuts', () => {
     };
 
     beforeEach(() => {
+        vi.clearAllMocks();
         window.localStorage.clear();
         window.RedmineCanvasGantt = {
-            ...(window.RedmineCanvasGantt ?? {
-                projectId: 1,
-                apiBase: '',
-                redmineBase: '',
-                authToken: '',
-                apiKey: '',
-                nonWorkingWeekDays: [],
-                i18n: {}
-            }),
+            projectId: 1,
+            projectPath: '/projects/ecookbook',
+            issueListPath: '/projects/ecookbook/issues',
+            newIssuePath: '/projects/ecookbook/issues/new',
+            canvasGanttPath: '/projects/ecookbook/canvas_gantt',
+            apiBase: '',
+            redmineBase: '',
+            authToken: '',
+            apiKey: '',
+            nonWorkingWeekDays: [],
+            i18n: {},
             settings: {
                 ...(window.RedmineCanvasGantt?.settings ?? {}),
             }
@@ -211,7 +219,69 @@ describe('GanttToolbar shortcuts', () => {
         render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
         fireEvent.click(screen.getByTitle('New issue'));
 
-        expect(useUIStore.getState().issueDialogUrl).toBe('/redmine/projects/1/issues/new');
+        expect(useUIStore.getState().issueDialogUrl).toBe('/redmine/projects/ecookbook/issues/new');
+    });
+
+    it('navigates to the Redmine issue list with query_id when editing a saved query', () => {
+        const config = getCanvasGanttConfig();
+        window.RedmineCanvasGantt = {
+            ...config,
+            redmineBase: '/redmine',
+            i18n: {
+                ...(config.i18n ?? {}),
+                label_edit_query_in_redmine_tooltip: 'Edit query in Redmine'
+            }
+        };
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true,
+            activeQueryId: 12
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+        fireEvent.click(screen.getByTestId('edit-query-in-redmine-button'));
+
+        expect(navigateToRedminePath).toHaveBeenCalledWith('/projects/ecookbook/issues?query_id=12');
+    });
+
+    it('navigates to the plain Redmine issue list when no saved query is active', () => {
+        const config = getCanvasGanttConfig();
+        window.RedmineCanvasGantt = {
+            ...config,
+            redmineBase: '/redmine',
+            i18n: {
+                ...(config.i18n ?? {}),
+                label_edit_query_in_redmine_tooltip: 'Edit query in Redmine'
+            }
+        };
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true,
+            activeQueryId: null
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+        fireEvent.click(screen.getByTestId('edit-query-in-redmine-button'));
+
+        expect(navigateToRedminePath).toHaveBeenCalledWith('/projects/ecookbook/issues');
     });
 
     it('updates row height via checkbox list menu and keeps it open', () => {

@@ -88,6 +88,63 @@ Redmine Canvas Gantt provides a fast, interactive Gantt chart for Redmine by ren
    - Drag a sidebar row onto another task to make it a child issue.
    - Use bulk subtask creation to add multiple child issues at once.
 
+## Shared Views and Query Parameters
+
+Canvas Gantt separates shared business conditions from personal UI preferences.
+
+- Shared business conditions are resolved from the URL and optional `query_id`
+- Personal UI state such as zoom, viewport, sidebar width, and visible columns stays in `localStorage`
+- When the same condition is provided by multiple sources, the precedence is:
+  URL parameters -> saved query (`query_id`) -> `localStorage` -> defaults
+
+### Query editing flow
+
+Canvas Gantt does not reimplement Redmine's query editor. Query creation, editing, and saving are done in the standard Redmine issue list, and Canvas Gantt consumes the saved query through `query_id`.
+
+- Use **Edit Query in Redmine** in the Canvas Gantt toolbar to open the standard issue list for the current project
+- Adjust filters in the Redmine issue list and save the query with Redmine's built-in **Save** action
+- After the query is saved, use **Open in Canvas Gantt** in the issue list to return to Canvas Gantt with `query_id`
+- If the query is not saved yet, Canvas Gantt does not receive a `query_id`, so the issue list shows a save notice instead of returning directly
+
+Phase 1 supports the saved-query flow only. Unsaved Redmine filter parameters are not converted back into Canvas Gantt URLs yet.
+
+### Supported shared parameters
+
+- `query_id`: use an existing Redmine saved issue query as the base condition. Only persisted query ids are supported
+- `status_ids[]`: filter by issue status ids
+- `assigned_to_ids[]`: filter by assignee ids, use `none` for unassigned issues
+- `project_ids[]`: narrow the visible projects inside the current project/subproject scope
+- `fixed_version_ids[]`: filter by target version ids, use `none` for issues without a version
+- `group_by`: `project` or `assigned_to`
+- `sort`: frontend sort key plus direction, for example `subject:asc` or `startDate:desc`
+- `show_subprojects`: `0` to hide subprojects, omit it or use `1` to include them
+
+### Example URLs
+
+Use a saved Redmine query as the base view:
+
+```text
+/projects/demo/canvas_gantt?query_id=12
+```
+
+Override a saved query with explicit status and assignee filters:
+
+```text
+/projects/demo/canvas_gantt?query_id=12&status_ids[]=1&status_ids[]=2&assigned_to_ids[]=5
+```
+
+Open a shared project/version view without relying on browser storage:
+
+```text
+/projects/demo/canvas_gantt?project_ids[]=3&fixed_version_ids[]=7&group_by=project&sort=startDate:asc
+```
+
+Hide subprojects and show only unassigned issues:
+
+```text
+/projects/demo/canvas_gantt?assigned_to_ids[]=none&show_subprojects=0
+```
+
 ## Configuration
 
 Configure the plugin from **Administration** -> **Plugins** -> **Canvas Gantt** -> **Configure**.

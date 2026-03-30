@@ -18,6 +18,7 @@ import { buildUniformExpansionMaps, initializeExpansionMaps } from './taskStore/
 import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
 import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
 import { AutoScheduleMoveMode } from '../types/constraints';
+import { readIssueQueryParamsFromUrl, replaceIssueQueryParamsInUrl, type ResolvedQueryState } from '../utils/queryParams';
 
 type DerivedSchedulingSummary = {
     schedulingStates: Record<string, SchedulingStateInfo>;
@@ -43,6 +44,7 @@ interface TaskState {
     versions: Version[];
     taskStatuses: TaskStatus[];
     customFields: CustomFieldMeta[];
+    activeQueryId: number | null;
     selectedStatusIds: number[];
     viewport: Viewport;
     viewMode: ViewMode;
@@ -84,6 +86,7 @@ interface TaskState {
     setVersions: (versions: Version[]) => void;
     setTaskStatuses: (statuses: TaskStatus[]) => void;
     setCustomFields: (fields: CustomFieldMeta[]) => void;
+    applyResolvedQueryState: (state?: ResolvedQueryState) => void;
     setSelectedStatusFromServer: (ids: number[]) => void;
     setShowVersions: (show: boolean) => void;
     addRelation: (relation: Relation) => void;
@@ -130,6 +133,7 @@ interface TaskState {
 }
 
 const preferences = loadPreferences();
+const initialUrlState = readIssueQueryParamsFromUrl();
 
 const DEFAULT_VIEWPORT: Viewport = {
     startDate: preferences.viewport?.startDate ?? new Date().setFullYear(new Date().getFullYear() - 1),
@@ -219,6 +223,19 @@ const buildDerivedTaskState = (
         rowCount: layout.rowCount,
         ...schedulingSummary
     };
+};
+
+const syncQueryStateUrl = (state: Pick<TaskState, 'activeQueryId' | 'selectedStatusIds' | 'selectedAssigneeIds' | 'selectedProjectIds' | 'selectedVersionIds' | 'sortConfig' | 'groupByProject' | 'groupByAssignee' | 'showSubprojects'>) => {
+    replaceIssueQueryParamsInUrl({
+        queryId: state.activeQueryId ?? undefined,
+        selectedStatusIds: state.selectedStatusIds,
+        selectedAssigneeIds: state.selectedAssigneeIds,
+        selectedProjectIds: state.selectedProjectIds,
+        selectedVersionIds: state.selectedVersionIds,
+        sortConfig: state.sortConfig,
+        groupBy: state.groupByProject ? 'project' : (state.groupByAssignee ? 'assignee' : null),
+        showSubprojects: state.showSubprojects
+    });
 };
 
 const buildAllExpandedStates = (state: TaskState, expanded: boolean) => {
@@ -337,14 +354,15 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     versions: [],
     taskStatuses: [],
     customFields: [],
-    selectedStatusIds: preferences.selectedStatusIds ?? [],
+    activeQueryId: initialUrlState.queryId ?? null,
+    selectedStatusIds: [],
     viewport: DEFAULT_VIEWPORT,
     viewMode: preferences.viewMode ?? 'Week',
     zoomLevel: preferences.zoomLevel ?? 1,
     layoutRows: [],
     rowCount: 0,
-    groupByProject: preferences.groupByProject ?? true,
-    groupByAssignee: preferences.groupByAssignee ?? false,
+    groupByProject: true,
+    groupByAssignee: false,
     showVersions: preferences.showVersions ?? true,
     organizeByDependency: preferences.organizeByDependency ?? false,
     viewportFromStorage: Boolean(preferences.viewport),
@@ -357,13 +375,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     versionExpansion: {},
     taskExpansion: {},
     filterText: '',
-    selectedAssigneeIds: preferences.selectedAssigneeIds ?? [],
-    selectedProjectIds: preferences.selectedProjectIds ?? [],
-    selectedVersionIds: preferences.selectedVersionIds ?? [],
-    sortConfig: preferences.sortConfig !== undefined ? preferences.sortConfig : { key: 'startDate', direction: 'asc' },
+    selectedAssigneeIds: [],
+    selectedProjectIds: [],
+    selectedVersionIds: [],
+    sortConfig: { key: 'startDate', direction: 'asc' },
     customScales: preferences.customScales ?? {},
     currentProjectId: window.RedmineCanvasGantt?.projectId?.toString() || null,
-    showSubprojects: preferences.groupByProject ?? true,
+    showSubprojects: true,
     isSortingSuspended: false,
     modifiedTaskIds: new Set(),
     autoSave: preferences.autoSave ?? false,
@@ -411,6 +429,43 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         };
     }),
     setTaskStatuses: (statuses) => set(() => ({ taskStatuses: statuses })),
+    applyResolvedQueryState: (resolved) => set((state) => {
+        const groupByProject = resolved?.groupBy === 'project' ? true : false;
+        const groupByAssignee = resolved?.groupBy === 'assignee' ? true : false;
+        const showSubprojects = resolved?.showSubprojects ?? true;
+        const sortConfig = resolved?.sortConfig ?? { key: 'startDate', direction: 'asc' };
+        const selectedStatusIds = resolved?.selectedStatusIds ?? [];
+        const selectedAssigneeIds = resolved?.selectedAssigneeIds ?? [];
+        const selectedProjectIds = resolved?.selectedProjectIds ?? [];
+        const selectedVersionIds = resolved?.selectedVersionIds ?? [];
+        const activeQueryId = typeof resolved?.queryId === 'number' && resolved.queryId > 0 ? resolved.queryId : null;
+        const layout = buildLayoutFromState(state, {
+            groupByProject,
+            groupByAssignee,
+            showSubprojects,
+            sortConfig,
+            selectedAssigneeIds,
+            selectedProjectIds,
+            selectedVersionIds
+        });
+
+        const nextState = {
+            activeQueryId,
+            selectedStatusIds,
+            selectedAssigneeIds,
+            selectedProjectIds,
+            selectedVersionIds,
+            groupByProject,
+            groupByAssignee,
+            showSubprojects,
+            sortConfig,
+            tasks: layout.tasks,
+            layoutRows: layout.layoutRows,
+            rowCount: layout.rowCount
+        };
+        syncQueryStateUrl(nextState);
+        return nextState;
+    }),
     setCustomFields: (customFields) => set((state) => {
         const derived = buildDerivedTaskState(state, { customFields });
         return {
@@ -420,7 +475,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }),
     setSelectedStatusFromServer: (ids) => {
         set({ selectedStatusIds: ids });
-        get().refreshData();
+        syncQueryStateUrl(get());
+        void get().refreshData().catch((error) => console.error('Failed to refresh data', error));
     },
     setShowVersions: (show) => set((state) => {
         const layout = buildLayoutFromState(state, { showVersions: show });
@@ -865,7 +921,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             groupByAssignee: nextGroupByAssignee,
             showSubprojects: nextShowSubprojects
         });
-        return {
+        const nextState = {
             groupByProject: grouped,
             groupByAssignee: nextGroupByAssignee,
             showSubprojects: nextShowSubprojects,
@@ -873,6 +929,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
+        syncQueryStateUrl({ ...state, ...nextState });
+        return nextState;
     }),
     setGroupByAssignee: (grouped) => set((state) => {
         const nextGroupByProject = grouped ? false : state.groupByProject;
@@ -882,7 +940,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             groupByProject: nextGroupByProject,
             showSubprojects: nextShowSubprojects
         });
-        return {
+        const nextState = {
             groupByAssignee: grouped,
             groupByProject: nextGroupByProject,
             showSubprojects: nextShowSubprojects,
@@ -890,6 +948,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
+        syncQueryStateUrl({ ...state, ...nextState });
+        return nextState;
     }),
     setOrganizeByDependency: (enabled) => set((state) => {
         const layout = buildLayoutFromState(state, { organizeByDependency: enabled });
@@ -1016,32 +1076,40 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     setSelectedAssigneeIds: (ids) => set((state) => {
         const layout = buildLayoutFromState(state, { selectedAssigneeIds: ids });
-        return {
+        const nextState = {
             selectedAssigneeIds: ids,
             tasks: layout.tasks,
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
+        syncQueryStateUrl({ ...state, ...nextState });
+        queueMicrotask(() => void get().refreshData());
+        return nextState;
     }),
 
     setSelectedProjectIds: (ids) => set((state) => {
         const layout = buildLayoutFromState(state, { selectedProjectIds: ids });
-        return {
+        const nextState = {
             selectedProjectIds: ids,
             tasks: layout.tasks,
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
+        syncQueryStateUrl({ ...state, ...nextState });
+        queueMicrotask(() => void get().refreshData());
+        return nextState;
     }),
     setSelectedVersionIds: (ids) => set((state) => {
         const layout = buildLayoutFromState(state, { selectedVersionIds: ids });
-        savePreferences({ selectedVersionIds: ids });
-        return {
+        const nextState = {
             selectedVersionIds: ids,
             tasks: layout.tasks,
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
+        syncQueryStateUrl({ ...state, ...nextState });
+        queueMicrotask(() => void get().refreshData());
+        return nextState;
     }),
 
     scrollToTask: (taskId: string) => set((state) => {
@@ -1150,25 +1218,40 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
         const layout = buildLayoutFromState(state, { sortConfig: newSort });
 
-        savePreferences({ sortConfig: newSort });
-        return {
+        const nextState = {
             sortConfig: newSort,
             tasks: layout.tasks,
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
+        syncQueryStateUrl({ ...state, ...nextState });
+        return nextState;
     }),
     refreshData: async () => {
         const { apiClient } = await import('../api/client');
         const state = get();
-        const data = await apiClient.fetchData({ statusIds: state.selectedStatusIds });
-        const { setTasks, setRelations, setVersions, setTaskStatuses, setCustomFields } = state;
+        const data = await apiClient.fetchData({
+            query: {
+                queryId: state.activeQueryId ?? undefined,
+                selectedStatusIds: state.selectedStatusIds,
+                selectedAssigneeIds: state.selectedAssigneeIds,
+                selectedProjectIds: state.selectedProjectIds,
+                selectedVersionIds: state.selectedVersionIds,
+                sortConfig: state.sortConfig,
+                groupBy: state.groupByProject ? 'project' : (state.groupByAssignee ? 'assignee' : null),
+                showSubprojects: state.showSubprojects
+            }
+        });
+        if (!data) return;
+        const { setTasks, setRelations, setVersions, setTaskStatuses, setCustomFields, applyResolvedQueryState } = state;
+        applyResolvedQueryState(data.initialState);
         setTasks(data.tasks);
         setRelations(data.relations);
         setVersions(data.versions);
         setTaskStatuses(data.statuses);
         setCustomFields(data.customFields);
         set({ modifiedTaskIds: new Set() });
+        (data.warnings ?? []).forEach((warning) => useUIStore.getState().addNotification(warning, 'warning'));
     },
 
     saveChanges: async () => {

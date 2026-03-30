@@ -1,0 +1,48 @@
+<% project = local_assigns[:project] || @project %>
+<% query = local_assigns[:query] || @query %>
+<% can_open_canvas_gantt = project.present? && User.current.allowed_to?(:view_canvas_gantt, project) %>
+
+<% if can_open_canvas_gantt %>
+  <% canvas_gantt_path = "#{project_path(project)}/canvas_gantt" %>
+  <div id="canvas-gantt-query-action-source" style="display:none;">
+    <% if query&.persisted? %>
+      <%= link_to(
+        l(:label_open_in_canvas_gantt),
+        "#{canvas_gantt_path}?query_id=#{query.id}",
+        class: 'canvas-gantt-query-action',
+        id: 'canvas-gantt-query-action-link',
+        title: l(:label_open_in_canvas_gantt_tooltip),
+        style: 'margin-left: 0.75em;'
+      ) %>
+    <% else %>
+      <%= content_tag(
+        :span,
+        l(:label_canvas_gantt_query_requires_save),
+        class: 'canvas-gantt-query-action',
+        id: 'canvas-gantt-query-action-notice',
+        title: l(:label_canvas_gantt_query_requires_save),
+        style: 'margin-left: 0.75em;'
+      ) %>
+    <% end %>
+  </div>
+
+  <script>
+    (function() {
+      var source = document.getElementById('canvas-gantt-query-action-source');
+      if (!source) return;
+
+      var target = document.querySelector('#query_form_with_buttons p.buttons');
+      if (!target) return;
+
+      var action = source.firstElementChild;
+      if (!action) return;
+
+      if (action.id) {
+        var existing = document.getElementById(action.id);
+        if (existing && existing !== action) return;
+      }
+
+      target.appendChild(action);
+    })();
+  </script>
+<% end %>
