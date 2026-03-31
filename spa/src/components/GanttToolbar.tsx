@@ -9,6 +9,7 @@ import { getRelationTypeLabel } from '../utils/relationEditing';
 import { savePreferences } from '../utils/preferences';
 import { buildRedmineUrl } from '../utils/redmineUrl';
 import { navigateToRedminePath } from '../utils/navigation';
+import { buildRedmineIssueQueryParams, toResolvedQueryStateFromStore } from '../utils/queryParams';
 import { useToolbarMenuState } from './gantt/useToolbarMenuState';
 import { useWorkloadStore } from '../stores/WorkloadStore';
 import type { GanttExportHandle } from '../export/types';
@@ -33,7 +34,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         filterText, setFilterText, allTasks, versions, selectedAssigneeIds, setSelectedAssigneeIds,
         selectedProjectIds, setSelectedProjectIds, selectedVersionIds, setSelectedVersionIds,
         setRowHeight, taskStatuses, selectedStatusIds, setSelectedStatusFromServer, showVersions, setShowVersions,
-        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId
+        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects
     } = useTaskStore();
     const {
         showProgressLine,
@@ -234,8 +235,21 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         const projectId = window.RedmineCanvasGantt?.projectId;
         if (!issueListPath && !projectId) return;
 
-        const query = activeQueryId !== null ? `?query_id=${activeQueryId}` : '';
-        navigateToRedminePath(`${issueListPath ?? `/projects/${projectId}/issues`}${query}`);
+        const queryState = toResolvedQueryStateFromStore({
+            activeQueryId,
+            selectedStatusIds,
+            selectedAssigneeIds,
+            selectedProjectIds,
+            selectedVersionIds,
+            sortConfig,
+            groupByProject,
+            groupByAssignee,
+            showSubprojects
+        });
+        const { params, notices } = buildRedmineIssueQueryParams(queryState);
+        notices.forEach((notice) => useUIStore.getState().addNotification(notice, 'warning'));
+        const query = params.toString();
+        navigateToRedminePath(`${issueListPath ?? `/projects/${projectId}/issues`}${query ? `?${query}` : ''}`);
     };
 
     const baseColumnOptions = [

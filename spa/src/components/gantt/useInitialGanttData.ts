@@ -30,7 +30,10 @@ export const useInitialGanttData = ({
         hasFetched.current = true;
 
         import('../../api/client').then(({ apiClient }) => {
-            apiClient.fetchData({ query: readIssueQueryParamsFromUrl() }).then(data => {
+            apiClient.fetchData({
+                rawSearch: window.location.search,
+                query: readIssueQueryParamsFromUrl()
+            }).then(data => {
                 useTaskStore.getState().applyResolvedQueryState(data.initialState);
                 setTasks(data.tasks);
                 setRelations(data.relations);

@@ -1,3 +1,24 @@
+# Epic 6 query compatibility
+
+- [x] Audit current query URL parsing and Redmine issue-list navigation flow
+- [x] Extend backend query resolution for Redmine standard filter parameters and snake_case sort
+- [x] Extend SPA query parsing and Redmine issue-list URL generation while preserving Canvas URL compatibility
+- [x] Update Epic 6 spec notes to match the implemented compatibility boundaries
+- [x] Add/update frontend and backend coverage for standard URL parsing and round-trip navigation
+- [x] Run targeted verification and record results
+
+## Review
+
+- Backend `QueryStateResolver` now accepts Redmine standard issue query params (`set_filter`, `f[]`, `op[field]`, `v[field][]`) for the supported fields and returns warnings for unsupported fields/operators
+- Snake_case Redmine `sort` values such as `start_date:desc` now normalize into the existing internal sort keys without breaking the existing Canvas URL contract
+- SPA query helpers now read Redmine standard URLs, keep Canvas-specific URL sync behavior for backward compatibility, and build canonical Redmine issue-list URLs separately
+- The toolbar `Redmineでクエリ編集` action now carries supported shared filters back to Redmine using standard issue-list query parameters and emits warnings when a filter cannot be represented exactly
+- Updated `spec-docs/epic6.md` to document the actual compatibility boundary: supported fields/operators, `localStorage` scope, and round-trip limitations
+- Verification passed with `cd spa && npm run test -- --run src/utils/queryParams.test.ts src/components/GanttToolbar.test.tsx src/api/client.test.ts`
+- Verification passed with `cd spa && npx tsc -b`
+- Verification passed with `cd spa && npm run lint`
+- Ruby syntax checks passed for `lib/redmine_canvas_gantt/query_state_resolver.rb` and `spec/lib/redmine_canvas_gantt/query_state_resolver_spec.rb`
+
 # Help screen refresh
 
 - [x] Audit current help dialog against the live toolbar and editing flows

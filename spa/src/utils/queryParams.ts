@@ -23,6 +23,30 @@ export interface QueryUrlStateSource {
     showSubprojects: boolean;
 }
 
+const SORT_FIELD_TO_REDMINE: Record<string, string> = {
+    id: 'id',
+    subject: 'subject',
+    projectName: 'project',
+    trackerName: 'tracker',
+    statusId: 'status',
+    priorityId: 'priority',
+    assignedToName: 'assigned_to',
+    authorName: 'author',
+    startDate: 'start_date',
+    dueDate: 'due_date',
+    estimatedHours: 'estimated_hours',
+    ratioDone: 'done_ratio',
+    fixedVersionName: 'fixed_version',
+    categoryName: 'category',
+    createdOn: 'created_on',
+    updatedOn: 'updated_on',
+    spentHours: 'spent_hours'
+};
+
+const REDMINE_SORT_TO_FIELD = Object.fromEntries(
+    Object.entries(SORT_FIELD_TO_REDMINE).map(([field, redmine]) => [redmine, field])
+) as Record<string, string>;
+
 const isPersistedQueryId = (value: unknown): value is number =>
     typeof value === 'number' && Number.isInteger(value) && value > 0;
 
@@ -37,6 +61,19 @@ const parseIntegerList = (params: URLSearchParams, keys: string[]): number[] | u
         .map(Number);
 };
 
+const parseIntegerTokens = (values: string[]): number[] =>
+    values
+        .flatMap((value) => value.split(/[|,]/))
+        .map((value) => value.trim())
+        .filter((value) => /^-?\d+$/.test(value))
+        .map(Number);
+
+const parseStringTokens = (values: string[]): string[] =>
+    values
+        .flatMap((value) => value.split(/[|,]/))
+        .map((value) => value.trim())
+        .filter(Boolean);
+
 const parseStringList = (params: URLSearchParams, keys: string[]): string[] | undefined => {
     const values = keys.flatMap((key) => params.getAll(key));
     if (values.length === 0) return undefined;
@@ -45,6 +82,76 @@ const parseStringList = (params: URLSearchParams, keys: string[]): string[] | un
         .flatMap((value) => value.split(/[|,]/))
         .map((value) => value.trim())
         .filter(Boolean);
+};
+
+const appendStandardFilter = (params: URLSearchParams, field: string, operator: string, values: string[] = []): void => {
+    params.append('f[]', field);
+    params.set(`op[${field}]`, operator);
+    values.forEach((value) => params.append(`v[${field}][]`, value));
+};
+
+const readStandardFilterValues = (params: URLSearchParams, field: string): string[] =>
+    params.getAll(`v[${field}][]`).concat(params.getAll(`v[${field}]`));
+
+const parseStandardQueryState = (params: URLSearchParams): Partial<ResolvedQueryState> => {
+    if (params.get('set_filter') !== '1') return {};
+
+    const fields = params.getAll('f[]').concat(params.getAll('f'));
+    if (fields.length === 0) return {};
+
+    const standardState: Partial<ResolvedQueryState> = {};
+
+    fields.forEach((field) => {
+        const operator = params.get(`op[${field}]`) ?? '';
+        const values = readStandardFilterValues(params, field);
+
+        switch (field) {
+            case 'status_id':
+                if (operator === '=') {
+                    standardState.selectedStatusIds = parseIntegerTokens(values);
+                } else if (operator === '*') {
+                    standardState.selectedStatusIds = [];
+                }
+                break;
+            case 'assigned_to_id':
+                if (operator === '=') {
+                    standardState.selectedAssigneeIds = parseStringTokens(values).flatMap((value) => {
+                        if (value === 'none' || value === '_none') return [null];
+                        return /^-?\d+$/.test(value) ? [Number(value)] : [];
+                    });
+                } else if (operator === '*') {
+                    standardState.selectedAssigneeIds = [];
+                } else if (operator === '!*') {
+                    standardState.selectedAssigneeIds = [null];
+                }
+                break;
+            case 'project_id':
+                if (operator === '=') {
+                    standardState.selectedProjectIds = parseStringTokens(values);
+                } else if (operator === '*') {
+                    standardState.selectedProjectIds = [];
+                }
+                break;
+            case 'fixed_version_id':
+                if (operator === '=') {
+                    standardState.selectedVersionIds = parseStringTokens(values).flatMap((value) => {
+                        if (value === 'none' || value === '_none') return ['_none'];
+                        return /^-?\d+$/.test(value) ? [value] : [];
+                    });
+                } else if (operator === '*') {
+                    standardState.selectedVersionIds = [];
+                }
+                break;
+            case 'subproject_id':
+                if (operator === '!*') standardState.showSubprojects = false;
+                if (operator === '*') standardState.showSubprojects = true;
+                break;
+            default:
+                break;
+        }
+    });
+
+    return standardState;
 };
 
 const parseAssigneeList = (params: URLSearchParams): (number | null)[] | undefined => {
@@ -69,6 +176,9 @@ const parseVersionList = (params: URLSearchParams): string[] | undefined => {
 
 const CONTROLLED_KEYS = [
     'query_id',
+    'set_filter',
+    'f[]',
+    'f',
     'status_ids[]',
     'status_ids',
     'status_id[]',
@@ -87,6 +197,23 @@ const CONTROLLED_KEYS = [
     'sort',
     'show_subprojects'
 ] as const;
+
+const isControlledDynamicKey = (key: string): boolean =>
+    /^op\[[^\]]+\]$/.test(key) || /^v\[[^\]]+\](?:\[\])?$/.test(key);
+
+const parseSortConfig = (rawSort: string | null): BusinessQueryState['sortConfig'] | undefined => {
+    const [rawField, rawDirection] = (rawSort || '').split(':', 2);
+    if (!rawField) return undefined;
+
+    const direction = rawDirection === 'desc' ? 'desc' : 'asc';
+    const key = REDMINE_SORT_TO_FIELD[rawField] ?? rawField;
+
+    return { key, direction };
+};
+
+const toRedmineSortField = (key: string): string | null => SORT_FIELD_TO_REDMINE[key] ?? null;
+const DEFAULT_SORT_KEY = 'startDate';
+const DEFAULT_SORT_DIRECTION = 'asc';
 
 export const toBusinessQueryState = (state: Partial<ResolvedQueryState> = {}): BusinessQueryState => ({
     queryId: state.queryId ?? null,
@@ -113,22 +240,20 @@ export const toResolvedQueryStateFromStore = (state: QueryUrlStateSource): Resol
 
 export const readIssueQueryParamsFromUrl = (search: string = window.location.search): ResolvedQueryState => {
     const params = new URLSearchParams(search);
-    const sort = params.get('sort');
-    const [sortKey, sortDirection] = (sort || '').split(':', 2);
-    const validDirection = sortDirection === 'desc' ? 'desc' : 'asc';
+    const standardState = parseStandardQueryState(params);
     const groupBy = params.get('group_by');
     const queryIdRaw = params.get('query_id');
     const parsedQueryId = queryIdRaw && /^-?\d+$/.test(queryIdRaw) ? Number(queryIdRaw) : undefined;
 
     return {
         queryId: isPersistedQueryId(parsedQueryId) ? parsedQueryId : undefined,
-        selectedStatusIds: parseIntegerList(params, ['status_ids[]', 'status_ids', 'status_id[]', 'status_id']),
-        selectedAssigneeIds: parseAssigneeList(params),
-        selectedProjectIds: parseStringList(params, ['project_ids[]', 'project_ids']),
-        selectedVersionIds: parseVersionList(params),
-        sortConfig: sortKey ? { key: sortKey, direction: validDirection } : undefined,
+        selectedStatusIds: standardState.selectedStatusIds ?? parseIntegerList(params, ['status_ids[]', 'status_ids', 'status_id[]', 'status_id']),
+        selectedAssigneeIds: standardState.selectedAssigneeIds ?? parseAssigneeList(params),
+        selectedProjectIds: standardState.selectedProjectIds ?? parseStringList(params, ['project_ids[]', 'project_ids']),
+        selectedVersionIds: standardState.selectedVersionIds ?? parseVersionList(params),
+        sortConfig: parseSortConfig(params.get('sort')),
         groupBy: groupBy === 'assigned_to' || groupBy === 'assignee' ? 'assignee' : (groupBy === 'project' ? 'project' : null),
-        showSubprojects: params.get('show_subprojects') === null ? undefined : params.get('show_subprojects') !== '0'
+        showSubprojects: params.get('show_subprojects') === null ? standardState.showSubprojects : params.get('show_subprojects') !== '0'
     };
 };
 
@@ -149,9 +274,81 @@ export const buildIssueQueryParams = (state: Partial<ResolvedQueryState>): URLSe
     return params;
 };
 
+export const buildRedmineIssueQueryParams = (
+    state: Partial<ResolvedQueryState>
+): { params: URLSearchParams; notices: string[] } => {
+    const params = new URLSearchParams();
+    const businessState = toBusinessQueryState(state);
+    const notices: string[] = [];
+    let hasStandardFilters = false;
+
+    if (isPersistedQueryId(businessState.queryId)) params.set('query_id', String(businessState.queryId));
+
+    if (businessState.selectedStatusIds.length > 0) {
+        appendStandardFilter(params, 'status_id', '=', businessState.selectedStatusIds.map(String));
+        hasStandardFilters = true;
+    }
+
+    if (businessState.selectedAssigneeIds.length > 0) {
+        const numericIds = businessState.selectedAssigneeIds.filter((id): id is number => id !== null).map(String);
+        const includesNone = businessState.selectedAssigneeIds.includes(null);
+
+        if (includesNone && numericIds.length > 0) {
+            notices.push('Unassigned assignee filter was omitted because Redmine URL export cannot combine it with specific assignees.');
+        }
+
+        if (numericIds.length > 0) {
+            appendStandardFilter(params, 'assigned_to_id', '=', numericIds);
+            hasStandardFilters = true;
+        } else if (includesNone) {
+            appendStandardFilter(params, 'assigned_to_id', '!*');
+            hasStandardFilters = true;
+        }
+    }
+
+    if (businessState.selectedProjectIds.length > 0) {
+        appendStandardFilter(params, 'project_id', '=', businessState.selectedProjectIds);
+        hasStandardFilters = true;
+    }
+
+    if (businessState.selectedVersionIds.length > 0) {
+        const numericVersionIds = businessState.selectedVersionIds.filter((id) => id !== '_none');
+
+        if (numericVersionIds.length !== businessState.selectedVersionIds.length) {
+            notices.push('No-version filter was omitted because Redmine URL export only supports explicit version IDs.');
+        }
+
+        if (numericVersionIds.length > 0) {
+            appendStandardFilter(params, 'fixed_version_id', '=', numericVersionIds);
+            hasStandardFilters = true;
+        }
+    }
+
+    if (state.showSubprojects === false) {
+        appendStandardFilter(params, 'subproject_id', '!*');
+        hasStandardFilters = true;
+    }
+
+    if (hasStandardFilters) params.set('set_filter', '1');
+    if (state.groupBy === 'project' && hasStandardFilters) params.set('group_by', 'project');
+    if (state.groupBy === 'assignee') params.set('group_by', 'assigned_to');
+
+    if (businessState.sortConfig?.key) {
+        const sortField = toRedmineSortField(businessState.sortConfig.key);
+        const isDefaultSort = businessState.sortConfig.key === DEFAULT_SORT_KEY && businessState.sortConfig.direction === DEFAULT_SORT_DIRECTION;
+        if (sortField && !isDefaultSort) params.set('sort', `${sortField}:${businessState.sortConfig.direction}`);
+    }
+
+    return { params, notices };
+};
+
 export const replaceIssueQueryParamsInUrl = (state: ResolvedQueryState): void => {
     const params = new URLSearchParams(window.location.search);
-    CONTROLLED_KEYS.forEach((key) => params.delete(key));
+    Array.from(params.keys()).forEach((key) => {
+        if (CONTROLLED_KEYS.includes(key as typeof CONTROLLED_KEYS[number]) || isControlledDynamicKey(key)) {
+            params.delete(key);
+        }
+    });
     const nextParams = buildIssueQueryParams(state);
     nextParams.forEach((value, key) => params.append(key, value));
     const nextSearch = params.toString();

@@ -173,7 +173,7 @@ const parseCustomFieldMeta = (value: unknown): CustomFieldMeta | null => {
 };
 
 export const apiClient = {
-    fetchData: async (params?: { query?: ResolvedQueryState }): Promise<ApiData> => {
+    fetchData: async (params?: { query?: ResolvedQueryState; rawSearch?: string }): Promise<ApiData> => {
         const config = getConfig();
 
         const parseDate = (value: string | null | undefined): number | null => {
@@ -182,8 +182,9 @@ export const apiClient = {
             return Number.isFinite(ts) ? ts : null;
         };
 
-        const query = buildIssueQueryParams(params?.query ?? {});
-        const qs = query.toString();
+        const qs = params?.rawSearch
+            ? params.rawSearch.replace(/^\?/, '')
+            : buildIssueQueryParams(params?.query ?? {}).toString();
         const url = new URL(`${config.apiBase}/data.json` + (qs ? `?${qs}` : ''), window.location.origin).toString();
 
         const response = await fetch(url, {

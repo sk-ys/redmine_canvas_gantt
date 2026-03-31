@@ -35,6 +35,14 @@ module RedmineCanvasGantt
     }.freeze
     QUERY_FIELD_TO_SORT = SORT_FIELD_TO_QUERY.invert.freeze
     URL_OVERRIDE_FILTERS = %w[status_id assigned_to_id fixed_version_id].freeze
+    STANDARD_FILTER_FIELDS = %w[status_id assigned_to_id project_id fixed_version_id subproject_id].freeze
+    STANDARD_FILTER_OPERATORS = {
+      'status_id' => %w[= * o c],
+      'assigned_to_id' => %w[= * !*],
+      'project_id' => %w[= *],
+      'fixed_version_id' => %w[= *],
+      'subproject_id' => %w[* !*]
+    }.freeze
 
     def initialize(project:, params:, current_user:, issue_scope:, issue_includes:)
       @project = project
@@ -121,6 +129,7 @@ module RedmineCanvasGantt
 
     def query_filter_keys_to_exclude
       keys = URL_OVERRIDE_FILTERS.select { |name| url_filter_values(name).present? }
+      keys.concat(supported_standard_filter_fields)
       keys << 'project_id' if @params[:project_ids].present?
       keys << 'subproject_id' if @params.key?(:show_subprojects)
       keys.uniq
@@ -187,6 +196,7 @@ module RedmineCanvasGantt
     end
 
     def apply_request_overrides!(state)
+      apply_standard_filter_overrides!(state)
       apply_status_override!(state)
       apply_assignee_override!(state)
       apply_version_override!(state)
@@ -240,6 +250,67 @@ module RedmineCanvasGantt
       else
         @warnings << "Ignored unsupported group_by=#{@params[:group_by]}"
       end
+    end
+
+    def apply_standard_filter_overrides!(state)
+      return unless standard_filtering_enabled?
+
+      standard_filter_fields.each do |field|
+        operator = standard_filter_operator(field)
+        next if operator.blank?
+
+        unless STANDARD_FILTER_OPERATORS.fetch(field, []).include?(operator)
+          @warnings << "Ignored unsupported operator #{operator} for #{field}"
+          next
+        end
+
+        values = standard_filter_values(field)
+
+        case field
+        when 'status_id'
+          apply_standard_status_filter!(state, operator, values)
+        when 'assigned_to_id'
+          apply_standard_assignee_filter!(state, operator, values)
+        when 'project_id'
+          state[:selected_project_ids] = (operator == '*' ? [] : parse_string_list(values))
+        when 'fixed_version_id'
+          state[:selected_version_ids] = (operator == '*' ? [] : parse_version_list(values))
+        when 'subproject_id'
+          state[:show_subprojects] = (operator == '*')
+        end
+      end
+
+      unsupported_standard_filter_fields.each do |field|
+        @warnings << "Ignored unsupported field #{field}"
+      end
+    end
+
+    def apply_standard_status_filter!(state, operator, values)
+      state[:selected_status_ids] = case operator
+                                    when '='
+                                      parse_integer_list(values)
+                                    when '*'
+                                      []
+                                    when 'o'
+                                      IssueStatus.where(is_closed: false).pluck(:id)
+                                    when 'c'
+                                      IssueStatus.where(is_closed: true).pluck(:id)
+                                    else
+                                      state[:selected_status_ids]
+                                    end
+    end
+
+    def apply_standard_assignee_filter!(state, operator, values)
+      state[:selected_assignee_ids] = case operator
+                                      when '='
+                                        parse_integer_or_none_list(values)
+                                      when '*'
+                                        []
+                                      when '!*'
+                                        [nil]
+                                      else
+                                        state[:selected_assignee_ids]
+                                      end
     end
 
     def load_issues(base_issue_ids:, project_ids:, selected_project_ids:, state:)
@@ -337,10 +408,11 @@ module RedmineCanvasGantt
 
       field, direction = value.split(':', 2)
       normalized_direction = direction.presence || 'asc'
-      return nil unless SORT_FIELD_TO_QUERY.key?(field)
+      normalized_field = QUERY_FIELD_TO_SORT[field] || field
+      return nil unless SORT_FIELD_TO_QUERY.key?(normalized_field)
       return nil unless %w[asc desc].include?(normalized_direction)
 
-      { key: field, direction: normalized_direction }
+      { key: normalized_field, direction: normalized_direction }
     end
 
     def parse_integer_list(values)
@@ -353,7 +425,7 @@ module RedmineCanvasGantt
     def parse_integer_or_none_list(values)
       Array(values).flat_map { |value| value.to_s.split(/[|,]/) }.filter_map do |value|
         stripped = value.strip
-        if stripped == '_none'
+        if %w[_none none].include?(stripped)
           nil
         elsif stripped.match?(/\A-?\d+\z/)
           stripped.to_i
@@ -361,8 +433,44 @@ module RedmineCanvasGantt
       end
     end
 
+    def parse_version_list(values)
+      Array(values).flat_map { |value| value.to_s.split(/[|,]/) }.filter_map do |value|
+        stripped = value.strip
+        next '_none' if %w[_none none].include?(stripped)
+        next stripped if stripped.match?(/\A-?\d+\z/)
+      end.uniq
+    end
+
     def parse_string_list(values)
       Array(values).flat_map { |value| value.to_s.split(/[|,]/) }.map(&:strip).reject(&:blank?).uniq
+    end
+
+    def standard_filtering_enabled?
+      @params[:set_filter].to_s == '1'
+    end
+
+    def standard_filter_fields
+      Array(@params[:f] || @params['f'] || @params['f[]']).map(&:to_s).reject(&:blank?).uniq
+    end
+
+    def supported_standard_filter_fields
+      return [] unless standard_filtering_enabled?
+
+      standard_filter_fields.select do |field|
+        STANDARD_FILTER_FIELDS.include?(field) && STANDARD_FILTER_OPERATORS.fetch(field, []).include?(standard_filter_operator(field))
+      end
+    end
+
+    def unsupported_standard_filter_fields
+      standard_filter_fields - STANDARD_FILTER_FIELDS
+    end
+
+    def standard_filter_operator(field)
+      @params.dig(:op, field) || @params.dig('op', field)
+    end
+
+    def standard_filter_values(field)
+      Array(@params.dig(:v, field) || @params.dig('v', field))
     end
 
     def url_filter_values(name)
