@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { fireEvent, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { UiSidebar } from './UiSidebar';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
@@ -9,6 +8,61 @@ import { useEditMetaStore } from '../stores/EditMetaStore';
 import { SIDEBAR_RESIZE_CURSOR } from '../constants';
 
 describe('UiSidebar', () => {
+    const initialUpdateViewport = useTaskStore.getState().updateViewport;
+
+    const createMockDataTransfer = (): DataTransfer => {
+        const values = new Map<string, string>();
+
+        return {
+            effectAllowed: 'all',
+            dropEffect: 'move',
+            setData: vi.fn((type: string, value: string) => {
+                values.set(type, value);
+            }),
+            getData: vi.fn((type: string) => values.get(type) ?? '')
+        } as unknown as DataTransfer;
+    };
+
+    const stubAnimationFrames = () => {
+        const callbacks: FrameRequestCallback[] = [];
+        const cancelAnimationFrame = vi.fn();
+
+        vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+            callbacks.push(callback);
+            return callbacks.length;
+        }));
+        vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame);
+
+        return { callbacks, cancelAnimationFrame };
+    };
+
+    const createDragEvent = (
+        type: 'dragStart' | 'dragOver' | 'dragEnd',
+        element: Element,
+        dataTransfer: DataTransfer,
+        clientY?: number
+    ) => {
+        const event = createEvent[type](element, { dataTransfer });
+
+        if (clientY !== undefined) {
+            Object.defineProperty(event, 'clientY', {
+                configurable: true,
+                value: clientY
+            });
+        }
+
+        return event;
+    };
+
+    const runNextAnimationFrame = async (callbacks: FrameRequestCallback[]) => {
+        const callback = callbacks.shift();
+        if (!callback) return;
+
+        await act(async () => {
+            callback(0);
+        });
+    };
+
     const expectNotificationSprite = (testId: string) => {
         const badge = screen.getByTestId(testId);
         const svg = badge.querySelector('svg');
@@ -23,6 +77,12 @@ describe('UiSidebar', () => {
     beforeEach(() => {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+    });
+
+    afterEach(() => {
+        useTaskStore.setState({ updateViewport: initialUpdateViewport });
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
     });
 
     it('shows task id column', () => {
@@ -893,5 +953,241 @@ describe('UiSidebar', () => {
         expect(input).toHaveAttribute('min', '0');
         expect(screen.getByText('h')).toBeInTheDocument();
         expect(screen.queryByText('%')).not.toBeInTheDocument();
+    });
+
+    it('auto-scrolls from row dragover near the body edge and keeps the child highlight', async () => {
+        const { callbacks } = stubAnimationFrames();
+        const realUpdateViewport = useTaskStore.getState().updateViewport;
+        const updateViewportSpy = vi.fn((updates: Parameters<typeof realUpdateViewport>[0]) => {
+            realUpdateViewport(updates);
+        });
+
+        useUIStore.setState({ visibleColumns: ['subject'] });
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 80,
+                rowHeight: 32
+            },
+            groupByProject: false,
+            updateViewport: updateViewportSpy
+        });
+
+        useTaskStore.getState().setTasks([
+            {
+                id: 'source',
+                subject: 'Source',
+                startDate: 0,
+                dueDate: 1,
+                ratioDone: 0,
+                statusId: 1,
+                lockVersion: 0,
+                editable: true,
+                rowIndex: 0,
+                hasChildren: false
+            },
+            {
+                id: 'target',
+                subject: 'Target',
+                startDate: 0,
+                dueDate: 1,
+                ratioDone: 0,
+                statusId: 1,
+                lockVersion: 0,
+                editable: true,
+                rowIndex: 1,
+                hasChildren: false
+            }
+        ]);
+
+        render(<UiSidebar />);
+
+        const body = screen.getByTestId('sidebar-body');
+        Object.defineProperty(body, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({ top: 0, bottom: 200, left: 0, right: 300, width: 300, height: 200, x: 0, y: 0, toJSON: () => ({}) })
+        });
+
+        const sourceRow = screen.getByTestId('task-row-source');
+        const targetRow = screen.getByTestId('task-row-target');
+        const dataTransfer = createMockDataTransfer();
+
+        await act(async () => {
+            fireEvent(sourceRow, createDragEvent('dragStart', sourceRow, dataTransfer));
+            fireEvent(targetRow, createDragEvent('dragOver', targetRow, dataTransfer, 198));
+        });
+
+        expect(targetRow).toHaveStyle({ backgroundColor: '#e6f4ea' });
+        expect(updateViewportSpy).not.toHaveBeenCalled();
+
+        await runNextAnimationFrame(callbacks);
+
+        await waitFor(() => {
+            expect(updateViewportSpy).toHaveBeenCalled();
+            expect(useTaskStore.getState().viewport.scrollY).toBeGreaterThan(0);
+        });
+        expect(targetRow).toHaveStyle({ backgroundColor: '#e6f4ea' });
+    });
+
+    it('keeps the root drop highlight while auto-scrolling over the body background', async () => {
+        const { callbacks } = stubAnimationFrames();
+        const realUpdateViewport = useTaskStore.getState().updateViewport;
+        const updateViewportSpy = vi.fn((updates: Parameters<typeof realUpdateViewport>[0]) => {
+            realUpdateViewport(updates);
+        });
+
+        useUIStore.setState({ visibleColumns: ['subject'] });
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 64,
+                scale: 1,
+                width: 800,
+                height: 120,
+                rowHeight: 32
+            },
+            groupByProject: false,
+            updateViewport: updateViewportSpy
+        });
+
+        useTaskStore.getState().setTasks([
+            {
+                id: 'filler-1',
+                subject: 'Filler 1',
+                startDate: 0,
+                dueDate: 1,
+                ratioDone: 0,
+                statusId: 1,
+                lockVersion: 0,
+                editable: true,
+                rowIndex: 0,
+                hasChildren: false
+            },
+            {
+                id: 'filler-2',
+                subject: 'Filler 2',
+                startDate: 0,
+                dueDate: 1,
+                ratioDone: 0,
+                statusId: 1,
+                lockVersion: 0,
+                editable: true,
+                rowIndex: 1,
+                hasChildren: false
+            },
+            {
+                id: 'child',
+                subject: 'Child task',
+                startDate: 0,
+                dueDate: 1,
+                ratioDone: 0,
+                statusId: 1,
+                lockVersion: 0,
+                editable: true,
+                parentId: 'parent',
+                rowIndex: 2,
+                hasChildren: false
+            }
+        ]);
+
+        render(<UiSidebar />);
+
+        const body = screen.getByTestId('sidebar-body');
+        Object.defineProperty(body, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({ top: 0, bottom: 200, left: 0, right: 300, width: 300, height: 200, x: 0, y: 0, toJSON: () => ({}) })
+        });
+
+        const sourceRow = screen.getByTestId('task-row-child');
+        const dataTransfer = createMockDataTransfer();
+
+        await act(async () => {
+            fireEvent(sourceRow, createDragEvent('dragStart', sourceRow, dataTransfer));
+            fireEvent(body, createDragEvent('dragOver', body, dataTransfer, 2));
+        });
+
+        expect(body).toHaveStyle({ backgroundColor: '#fff8e1' });
+
+        await runNextAnimationFrame(callbacks);
+
+        await waitFor(() => {
+            expect(updateViewportSpy).toHaveBeenCalled();
+            expect(useTaskStore.getState().viewport.scrollY).toBeLessThan(64);
+        });
+        expect(body).toHaveStyle({ backgroundColor: '#fff8e1' });
+    });
+
+    it('stops the scheduled auto-scroll when dragging ends', async () => {
+        const { callbacks, cancelAnimationFrame } = stubAnimationFrames();
+
+        useUIStore.setState({ visibleColumns: ['subject'] });
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 120,
+                rowHeight: 32
+            },
+            groupByProject: false
+        });
+
+        useTaskStore.getState().setTasks([
+            {
+                id: 'source',
+                subject: 'Source',
+                startDate: 0,
+                dueDate: 1,
+                ratioDone: 0,
+                statusId: 1,
+                lockVersion: 0,
+                editable: true,
+                rowIndex: 0,
+                hasChildren: false
+            },
+            {
+                id: 'target',
+                subject: 'Target',
+                startDate: 0,
+                dueDate: 1,
+                ratioDone: 0,
+                statusId: 1,
+                lockVersion: 0,
+                editable: true,
+                rowIndex: 1,
+                hasChildren: false
+            }
+        ]);
+
+        render(<UiSidebar />);
+
+        const body = screen.getByTestId('sidebar-body');
+        Object.defineProperty(body, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({ top: 0, bottom: 200, left: 0, right: 300, width: 300, height: 200, x: 0, y: 0, toJSON: () => ({}) })
+        });
+
+        const sourceRow = screen.getByTestId('task-row-source');
+        const targetRow = screen.getByTestId('task-row-target');
+        const dataTransfer = createMockDataTransfer();
+
+        await act(async () => {
+            fireEvent(sourceRow, createDragEvent('dragStart', sourceRow, dataTransfer));
+            fireEvent(targetRow, createDragEvent('dragOver', targetRow, dataTransfer, 198));
+        });
+        await runNextAnimationFrame(callbacks);
+
+        await act(async () => {
+            fireEvent(sourceRow, createDragEvent('dragEnd', sourceRow, dataTransfer));
+        });
+
+        expect(cancelAnimationFrame).toHaveBeenCalled();
     });
 });

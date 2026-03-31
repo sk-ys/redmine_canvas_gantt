@@ -18,6 +18,26 @@
 - Ruby syntax checks passed for controller and controller spec
 - Docker Redmine runtime still could not execute plugin RSpec because `rspec` is not installed in the container (`bundler: command not found: rspec`)
 
+# Epic 5 sidebar auto-scroll
+
+- [x] Audit the current sidebar drag-and-drop and virtual scroll flow
+- [x] Implement sidebar drag auto-scroll in `useSidebarDragAndDrop`
+- [x] Wire `UiSidebar` body refs into the drag hook without changing DnD business rules
+- [x] Refresh `spec-docs/epic5.md` so it matches the implementation contract
+- [x] Add/update frontend coverage for the auto-scroll behavior
+- [x] Run targeted verification and record results
+
+## Review
+
+- Added sidebar drag auto-scroll driven by `requestAnimationFrame`, with pointer updates from both task-row and body `dragover` handlers
+- Kept existing child/root drop business rules unchanged and delegated scroll clamping to the existing store `updateViewport`
+- Added pure helper coverage for edge-zone speed calculation and component coverage for row dragover auto-scroll plus dragend cancellation
+- Refreshed `spec-docs/epic5.md` to document the `bodyRef` contract, `dragover` vs frame-loop responsibilities, and acceptance criteria for virtualized rows
+- Verification passed with `cd spa && npm run test -- --run src/components/sidebar/sidebarAutoScroll.test.ts src/components/UiSidebar.test.tsx`
+- Verification passed with `cd spa && npm run lint`
+- Verification passed with `cd spa && npx tsc -b`
+- Vitest logs still include jsdom canvas warnings (`HTMLCanvasElement.getContext()` not implemented), but the targeted tests passed
+
 # Query refactor
 
 - [x] Split backend query resolution responsibilities in `lib/redmine_canvas_gantt/query_state_resolver.rb`
