@@ -8,6 +8,8 @@ import { i18n } from '../utils/i18n';
 import { getRelationTypeLabel } from '../utils/relationEditing';
 import { savePreferences } from '../utils/preferences';
 import { buildRedmineUrl } from '../utils/redmineUrl';
+import { navigateToRedminePath } from '../utils/navigation';
+import { buildRedmineIssueQueryParams, toResolvedQueryStateFromStore } from '../utils/queryParams';
 import { useToolbarMenuState } from './gantt/useToolbarMenuState';
 import { useWorkloadStore } from '../stores/WorkloadStore';
 import type { GanttExportHandle } from '../export/types';
@@ -32,7 +34,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         filterText, setFilterText, allTasks, versions, selectedAssigneeIds, setSelectedAssigneeIds,
         selectedProjectIds, setSelectedProjectIds, selectedVersionIds, setSelectedVersionIds,
         setRowHeight, taskStatuses, selectedStatusIds, setSelectedStatusFromServer, showVersions, setShowVersions,
-        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields
+        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects
     } = useTaskStore();
     const {
         showProgressLine,
@@ -226,6 +228,28 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
             ? visibleColumns.filter(k => k !== key)
             : [...visibleColumns, key];
         setVisibleColumns(next);
+    };
+
+    const openRedmineQueryEditor = () => {
+        const issueListPath = window.RedmineCanvasGantt?.issueListPath;
+        const projectId = window.RedmineCanvasGantt?.projectId;
+        if (!issueListPath && !projectId) return;
+
+        const queryState = toResolvedQueryStateFromStore({
+            activeQueryId,
+            selectedStatusIds,
+            selectedAssigneeIds,
+            selectedProjectIds,
+            selectedVersionIds,
+            sortConfig,
+            groupByProject,
+            groupByAssignee,
+            showSubprojects
+        });
+        const { params, notices } = buildRedmineIssueQueryParams(queryState);
+        notices.forEach((notice) => useUIStore.getState().addNotification(notice, 'warning'));
+        const query = params.toString();
+        navigateToRedminePath(`${issueListPath ?? `/projects/${projectId}/issues`}${query ? `?${query}` : ''}`);
     };
 
     const baseColumnOptions = [
@@ -438,9 +462,10 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
 
                 <button
                     onClick={() => {
+                        const newIssuePath = window.RedmineCanvasGantt?.newIssuePath;
                         const projectId = window.RedmineCanvasGantt?.projectId;
-                        if (projectId) {
-                            useUIStore.getState().openIssueDialog(buildRedmineUrl(`/projects/${projectId}/issues/new`));
+                        if (newIssuePath || projectId) {
+                            useUIStore.getState().openIssueDialog(buildRedmineUrl(newIssuePath ?? `/projects/${projectId}/issues/new`));
                         }
                     }}
                     title={i18n.t('label_issue_new')}
@@ -541,6 +566,32 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                     </div>
                     )}
                 </div>
+
+                <button
+                    type="button"
+                    onClick={openRedmineQueryEditor}
+                    title={i18n.t('label_edit_query_in_redmine_tooltip') || 'Edit filter conditions in the standard Redmine issue list'}
+                    data-testid="edit-query-in-redmine-button"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '0',
+                        borderRadius: '6px',
+                        border: '1px solid #e0e0e0',
+                        backgroundColor: activeQueryId !== null ? '#e8f0fe' : '#fff',
+                        color: activeQueryId !== null ? '#1a73e8' : '#333',
+                        cursor: 'pointer',
+                        width: '32px',
+                        height: '32px'
+                    }}
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M3 5h18" />
+                        <path d="M6 12h12" />
+                        <path d="M10 19h4" />
+                    </svg>
+                </button>
 
                 <div ref={columnMenuRef} style={{ position: 'relative' }}>
                     <button

@@ -9,26 +9,29 @@ describe('Preferences storage', () => {
         }
     });
 
-    it('saves and loads selectedProjectIds per project', () => {
-        const prefs = {
-            selectedProjectIds: ['p1', 'p2']
-        };
+    it('does not load shared query state keys from stored payload', () => {
+        window.localStorage.setItem('canvasGantt:preferences', JSON.stringify({
+            version: 2,
+            projects: {
+                'project:1': {
+                    selectedProjectIds: ['p1', 'p2'],
+                    selectedStatusIds: [1, 2]
+                }
+            }
+        }));
 
-        savePreferences(prefs, 1);
-        const loaded = loadPreferences(1);
-        const notLoadedInAnotherProject = loadPreferences(2);
-
-        expect(loaded.selectedProjectIds).toEqual(['p1', 'p2']);
-        expect(notLoadedInAnotherProject.selectedProjectIds).toBeUndefined();
+        const loaded = loadPreferences(1) as Record<string, unknown>;
+        expect(loaded.selectedProjectIds).toBeUndefined();
+        expect(loaded.selectedStatusIds).toBeUndefined();
     });
 
     it('merges with existing preferences in same project', () => {
         savePreferences({ zoomLevel: 2 }, 1);
-        savePreferences({ selectedProjectIds: ['p1'] }, 1);
+        savePreferences({ showProgressLine: true }, 1);
 
         const loaded = loadPreferences(1);
         expect(loaded.zoomLevel).toBe(2);
-        expect(loaded.selectedProjectIds).toEqual(['p1']);
+        expect(loaded.showProgressLine).toBe(true);
     });
 
     it('saves and loads autoSave', () => {
@@ -47,14 +50,14 @@ describe('Preferences storage', () => {
         const loadedProject2 = loadPreferences(2);
 
         expect(loadedProject1.zoomLevel).toBe(2);
-        expect(loadedProject1.selectedProjectIds).toEqual(['legacy-project']);
+        expect((loadedProject1 as Record<string, unknown>).selectedProjectIds).toBeUndefined();
         expect(loadedProject2.zoomLevel).toBeUndefined();
-        expect(loadedProject2.selectedProjectIds).toBeUndefined();
+        expect((loadedProject2 as Record<string, unknown>).selectedProjectIds).toBeUndefined();
 
         const raw = window.localStorage.getItem('canvasGantt:preferences');
         const parsed = raw ? JSON.parse(raw) : null;
         expect(parsed?.version).toBe(2);
-        expect(parsed?.projects?.['project:1']?.selectedProjectIds).toEqual(['legacy-project']);
+        expect(parsed?.projects?.['project:1']?.selectedProjectIds).toBeUndefined();
     });
 
     it('saves and loads relation preferences', () => {

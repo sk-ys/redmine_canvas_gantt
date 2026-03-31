@@ -52,6 +52,8 @@ class CanvasGanttsController < ApplicationController
     label_leaf_issues_only: :label_leaf_issues_only,
     label_include_closed_issues: :label_include_closed_issues,
     label_today_onward_only: :label_today_onward_only,
+    label_edit_query_in_redmine: :label_edit_query_in_redmine,
+    label_edit_query_in_redmine_tooltip: :label_edit_query_in_redmine_tooltip,
     label_critical_path_total_slack: :label_critical_path_total_slack,
 
     button_expand: :label_expand,
@@ -164,7 +166,10 @@ class CanvasGanttsController < ApplicationController
     label_export_unavailable: :label_export_unavailable,
     label_export_failed: :label_export_failed,
     label_help: :label_help,
+    help_label_layout_filters: :help_label_layout_filters,
     label_help_toolbar_icons: :label_help_toolbar_icons,
+    help_desc_edit_query: :help_desc_edit_query,
+    help_desc_workload: :help_desc_workload,
     help_desc_maximize_left: :help_desc_maximize_left,
     help_desc_maximize_right: :help_desc_maximize_right,
     help_desc_issue_new: :help_desc_issue_new,
@@ -179,6 +184,8 @@ class CanvasGanttsController < ApplicationController
     help_desc_export: :help_desc_export,
     help_desc_organize_by_dependency: :help_desc_organize_by_dependency,
     help_desc_points_orphans: :help_desc_points_orphans,
+    help_label_timeline_view: :help_label_timeline_view,
+    help_desc_prev_next_month: :help_desc_prev_next_month,
     help_desc_today: :help_desc_today,
     help_label_zoom: :help_label_zoom,
     help_desc_zoom: :help_desc_zoom,
@@ -187,6 +194,10 @@ class CanvasGanttsController < ApplicationController
     help_desc_fullscreen: :help_desc_fullscreen,
     help_label_autosave: :help_label_autosave,
     help_desc_autosave: :help_desc_autosave,
+    help_label_editing_saving: :help_label_editing_saving,
+    help_desc_save: :help_desc_save,
+    help_desc_cancel: :help_desc_cancel,
+    help_desc_top: :help_desc_top,
     help_label_basic_operations: :help_label_basic_operations,
     help_op_drag_drop: :help_op_drag_drop,
     help_op_drag_drop_desc: :help_op_drag_drop_desc,
@@ -228,6 +239,7 @@ class CanvasGanttsController < ApplicationController
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'relation_change_validator').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'bulk_subtask_creator').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'parent_issue_resolver').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'query_state_resolver').to_s
 
   helper RedmineCanvasGantt::ViteAssetHelper
   accept_api_auth :data, :edit_meta, :update, :bulk_create_subtasks, :create_relation, :update_relation, :destroy_relation
@@ -263,13 +275,15 @@ class CanvasGanttsController < ApplicationController
   def data
     begin
       project_ids = descendant_project_ids
-      issues = issue_scope(project_ids).to_a
+      resolved_query = query_state_resolver.resolve(project_ids: project_ids)
 
       render json: data_payload_builder.build(
         project: @project,
         permissions: @permissions,
         project_ids: project_ids,
-        issues: issues
+        issues: resolved_query[:issues],
+        initial_state: resolved_query[:initial_state],
+        warnings: resolved_query[:warnings]
       )
     rescue => e
       render json: { error: e.message }, status: :internal_server_error
@@ -362,27 +376,17 @@ class CanvasGanttsController < ApplicationController
     issue_to = Issue.visible.find(relation_params[:issue_to_id])
     return unless ensure_relation_createable!(issue_from, issue_to)
 
-    relation_type = relation_params[:relation_type].to_s
-    return unless ensure_editable_relation_type!(relation_type)
-
-    delay = normalized_relation_delay(relation_type)
-    return if performed?
-    return unless ensure_relation_change_valid!(
-      issue_from: issue_from,
-      issue_to: issue_to,
-      relation_id: '__pending__',
-      relation_type: relation_type,
-      delay: delay
-    )
-
     relation = IssueRelation.new(
       issue_from: issue_from,
-      issue_to: issue_to,
-      relation_type: relation_type,
-      delay: delay
+      issue_to: issue_to
     )
 
-    render_relation_save_result(relation)
+    save_relation_change(
+      relation: relation,
+      issue_from: issue_from,
+      issue_to: issue_to,
+      relation_id: '__pending__'
+    )
   rescue ActiveRecord::RecordNotFound
     render json: { error: l(:error_canvas_gantt_task_not_found) }, status: :not_found
   rescue => e
@@ -394,24 +398,13 @@ class CanvasGanttsController < ApplicationController
     relation = IssueRelation.find(params[:id])
     return unless ensure_relation_editable!(relation)
 
-    relation_type = relation_params[:relation_type].to_s
-    return unless ensure_editable_relation_type!(relation_type)
-
-    delay = normalized_relation_delay(relation_type)
-    return if performed?
-    return unless ensure_relation_change_valid!(
+    save_relation_change(
+      relation: relation,
       issue_from: relation.issue_from,
       issue_to: relation.issue_to,
       relation_id: relation.id,
-      relation_type: relation_type,
-      delay: delay,
       replacing_relation_id: relation.id
     )
-
-    relation.relation_type = relation_type
-    relation.delay = delay
-
-    render_relation_save_result(relation)
   rescue ActiveRecord::RecordNotFound
     render json: { error: l(:error_canvas_gantt_relation_not_found) }, status: :not_found
   rescue => e
@@ -469,6 +462,16 @@ class CanvasGanttsController < ApplicationController
     scope = Issue.visible.where(project_id: project_ids).includes(*ISSUE_INCLUDES)
     scope = scope.where(status_id: params[:status_ids]) if params[:status_ids].present?
     scope
+  end
+
+  def query_state_resolver
+    @query_state_resolver ||= RedmineCanvasGantt::QueryStateResolver.new(
+      project: @project,
+      params: params,
+      current_user: User.current,
+      issue_scope: Issue.visible,
+      issue_includes: ISSUE_INCLUDES
+    )
   end
 
   def ensure_issue_in_scope(issue)
@@ -576,6 +579,27 @@ class CanvasGanttsController < ApplicationController
         render json: { errors: [l(message_key)] }, status: :unprocessable_entity
       }
     )
+  end
+
+  def save_relation_change(relation:, issue_from:, issue_to:, relation_id:, replacing_relation_id: nil)
+    relation_type = relation_params[:relation_type].to_s
+    return unless ensure_editable_relation_type!(relation_type)
+
+    delay = normalized_relation_delay(relation_type)
+    return if performed?
+    return unless ensure_relation_change_valid!(
+      issue_from: issue_from,
+      issue_to: issue_to,
+      relation_id: relation_id,
+      relation_type: relation_type,
+      delay: delay,
+      replacing_relation_id: replacing_relation_id
+    )
+
+    relation.relation_type = relation_type
+    relation.delay = delay
+
+    render_relation_save_result(relation)
   end
 
   def build_candidate_relation(relation_id:, issue_from:, issue_to:, relation_type:, delay:)

@@ -177,19 +177,23 @@ export const UiSidebar: React.FC = () => {
     const settings = React.useMemo(() => {
         return (window as unknown as { RedmineCanvasGantt?: { settings?: InlineEditSettings } }).RedmineCanvasGantt?.settings ?? {};
     }, []);
+    const bodyRef = React.useRef<HTMLDivElement>(null);
 
     const { handleResizeStart } = useSidebarColumnSizing({ tasks, customFields, setColumnWidth });
     const {
         dropTargetTaskId,
         isRootDropActive,
-        setIsRootDropActive,
         handleTaskDragStart,
         handleTaskDragOver,
         handleTaskDrop,
         handleRootDragOver,
         handleRootDrop,
+        handleBodyDragLeave,
         resetDragState
     } = useSidebarDragAndDrop({
+        bodyRef,
+        viewportScrollY: viewport.scrollY,
+        updateViewport,
         canDropAsChild,
         canDropToRoot,
         moveTaskAsChild,
@@ -782,6 +786,8 @@ export const UiSidebar: React.FC = () => {
 
             {/* Body */}
             <div
+                ref={bodyRef}
+                data-testid="sidebar-body"
                 style={{
                     flex: 1,
                     position: 'relative',
@@ -793,10 +799,7 @@ export const UiSidebar: React.FC = () => {
                 onWheel={handleWheel}
                 onDragOver={handleRootDragOver}
                 onDrop={(e) => { void handleRootDrop(e); }}
-                onDragLeave={(e) => {
-                    if (e.currentTarget !== e.target) return;
-                    setIsRootDropActive(false);
-                }}
+                onDragLeave={handleBodyDragLeave}
             >
                 {
                     visibleRows.map(row => {

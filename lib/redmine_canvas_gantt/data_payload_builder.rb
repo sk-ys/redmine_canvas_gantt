@@ -5,7 +5,7 @@ module RedmineCanvasGantt
       @current_user = current_user
     end
 
-    def build(project:, permissions:, project_ids:, issues:)
+    def build(project:, permissions:, project_ids:, issues:, initial_state: nil, warnings: [])
       {
         tasks: build_tasks(issues),
         custom_fields: @custom_field_extractor.build_project_custom_fields(project_ids, issues),
@@ -13,8 +13,10 @@ module RedmineCanvasGantt
         versions: build_versions(project_ids),
         statuses: build_statuses,
         project: build_project_payload(project),
-        permissions: permissions
-      }
+        permissions: permissions,
+        initial_state: initial_state,
+        warnings: warnings.presence
+      }.compact
     end
 
     def build_tasks(issues)

@@ -1,10 +1,11 @@
 require 'redmine'
+require_dependency File.expand_path('lib/redmine_canvas_gantt/issues_query_actions_hook', __dir__)
 
 Redmine::Plugin.register :redmine_canvas_gantt do
   name 'Redmine Canvas Gantt plugin'
   author 'tiohsa'
   description 'A high-performance Canvas-based Gantt chart plugin'
-  version '0.5.0'
+  version '0.6.0'
   url 'https://github.com/tiohsa/redmine_canvas_gantt'
   author_url 'https://github.com/tiohsa/redmine_canvas_gantt'
 

@@ -78,6 +78,18 @@ export interface TaskStatus {
     isClosed: boolean;
 }
 
+export interface BusinessQueryState {
+    queryId: number | null;
+    selectedStatusIds: number[];
+    selectedAssigneeIds: (number | null)[];
+    selectedProjectIds: string[];
+    selectedVersionIds: string[];
+    sortConfig: { key: string; direction: 'asc' | 'desc' } | null;
+    groupByProject: boolean;
+    groupByAssignee: boolean;
+    showSubprojects: boolean;
+}
+
 export interface Viewport {
     startDate: number; // Timestamp of left edge
     scrollX: number; // Horizontal scroll offset (pixels)
