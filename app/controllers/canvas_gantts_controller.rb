@@ -31,7 +31,7 @@ class CanvasGanttsController < ApplicationController
     label_progress_line: :label_progress_line,
     label_group_by_project: :label_group_by_project,
     label_group_by_assignee: :label_group_by_assignee,
-    label_previous_month: :label_previous_month,
+    label_prev_month: :label_prev_month,
     label_next_month: :label_next_month,
     label_today: :label_today,
     button_top: :button_top,
