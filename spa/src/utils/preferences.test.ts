@@ -75,4 +75,11 @@ describe('Preferences storage', () => {
         expect(loaded.autoScheduleMoveMode).toBe('off');
     });
 
+    it('saves and loads baseline visibility preference', () => {
+        savePreferences({ showBaseline: true }, 1);
+
+        expect(loadPreferences(1).showBaseline).toBe(true);
+        expect(loadPreferences(2).showBaseline).toBeUndefined();
+    });
+
 });

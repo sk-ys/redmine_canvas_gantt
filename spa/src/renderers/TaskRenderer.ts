@@ -1,6 +1,8 @@
 import type { Viewport, Task, ZoomLevel, Relation, LayoutRow } from '../types';
 import { LayoutEngine } from '../engines/LayoutEngine';
 import { buildDependencySummary } from './dependencyIndicators';
+import type { BaselineSnapshot } from '../types/baseline';
+import { calculateBaselineDiff, getBaselineTaskState } from '../utils/baseline';
 
 export class TaskRenderer {
     private canvas: HTMLCanvasElement;
@@ -19,7 +21,17 @@ export class TaskRenderer {
         this.canvas = canvas;
     }
 
-    render(viewport: Viewport, tasks: Task[], rowCount: number, zoomLevel: ZoomLevel, relations: Relation[], layoutRows: LayoutRow[] = [], showPointsOrphans: boolean = true) {
+    render(
+        viewport: Viewport,
+        tasks: Task[],
+        rowCount: number,
+        zoomLevel: ZoomLevel,
+        relations: Relation[],
+        layoutRows: LayoutRow[] = [],
+        showPointsOrphans: boolean = true,
+        baselineSnapshot: BaselineSnapshot | null = null,
+        showBaseline: boolean = false
+    ) {
         const ctx = this.canvas.getContext('2d');
         if (!ctx) return;
 
@@ -91,6 +103,9 @@ export class TaskRenderer {
 
                 // Draw Subject BEFORE the bar (to the left)
                 this.drawSubjectBeforeBar(ctx, task, bounds.x, bounds.y, bounds.width, bounds.height);
+                if (showBaseline) {
+                    this.drawBaselineMarker(ctx, task, bounds, baselineSnapshot);
+                }
             } else if (showPointsOrphans && Number.isFinite(task.startDate)) {
                 // Only Start Date -> Draw as a point (triangle_right)
                 // Position orphan points at the center of the day cell.
@@ -100,6 +115,10 @@ export class TaskRenderer {
 
                 // Draw Subject BEFORE the point
                 this.drawSubjectBeforeBar(ctx, task, startX, rowY + (viewport.rowHeight - 12) / 2, 12, 12);
+                if (showBaseline) {
+                    const pointBounds = LayoutEngine.getTaskBounds(task, viewport, 'bar', zoomLevel);
+                    this.drawBaselineMarker(ctx, task, pointBounds, baselineSnapshot);
+                }
             } else if (showPointsOrphans && Number.isFinite(task.dueDate)) {
                 // Only Due Date -> Draw as a point (diamond)
                 // Position orphan points at the center of the day cell.
@@ -109,6 +128,10 @@ export class TaskRenderer {
 
                 // Draw Subject BEFORE the point
                 this.drawSubjectBeforeBar(ctx, task, dueX, rowY + (viewport.rowHeight - 12) / 2, 12, 12);
+                if (showBaseline) {
+                    const pointBounds = LayoutEngine.getTaskBounds(task, viewport, 'bar', zoomLevel);
+                    this.drawBaselineMarker(ctx, task, pointBounds, baselineSnapshot);
+                }
             }
         });
     }
@@ -354,6 +377,35 @@ export class TaskRenderer {
             ctx.fill();
         }
 
+        ctx.restore();
+    }
+
+    private drawBaselineMarker(
+        ctx: CanvasRenderingContext2D,
+        task: Task,
+        bar: { x: number; y: number; width: number; height: number },
+        snapshot: BaselineSnapshot | null
+    ) {
+        const baselineTask = getBaselineTaskState(snapshot, task.id);
+        const diff = calculateBaselineDiff(task, baselineTask);
+        if (!diff?.hasDifference) return;
+
+        const size = Math.max(5, Math.min(8, Math.round(bar.height * 0.45)));
+        const markerX = Math.floor(bar.x + bar.width - size);
+        const markerY = Math.floor(bar.y - size / 2);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(markerX + size / 2, markerY);
+        ctx.lineTo(markerX + size, markerY + size / 2);
+        ctx.lineTo(markerX + size / 2, markerY + size);
+        ctx.lineTo(markerX, markerY + size / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
         ctx.restore();
     }
 

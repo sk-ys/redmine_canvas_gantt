@@ -1,6 +1,8 @@
 import type { Relation, Project, Task, Version, TaskStatus } from '../types';
 import type { TaskEditMeta, InlineEditSettings, CustomFieldMeta, EditOption } from '../types/editMeta';
+import type { BaselineSnapshot, BaselineTaskState } from '../types/baseline';
 import { buildIssueQueryParams, parseResolvedQueryState, type ResolvedQueryState } from '../utils/queryParams';
+import { parseBaselineDateValue } from '../utils/baseline';
 
 type ApiTask = Record<string, unknown>;
 type ApiRelation = Record<string, unknown>;
@@ -41,9 +43,17 @@ interface ApiData {
     project: Project;
     statuses: TaskStatus[];
     customFields: CustomFieldMeta[];
-    permissions: { editable: boolean; viewable: boolean };
+    permissions: { editable: boolean; viewable: boolean; baselineEditable: boolean };
+    baseline?: BaselineSnapshot | null;
     initialState?: ResolvedQueryState;
     warnings?: string[];
+}
+
+interface BaselineSaveResult {
+    status: 'ok' | 'error';
+    baseline: BaselineSnapshot | null;
+    warnings?: string[];
+    error?: string;
 }
 
 interface UpdateTaskResult {
@@ -169,6 +179,86 @@ const parseCustomFieldMeta = (value: unknown): CustomFieldMeta | null => {
         minLength,
         maxLength,
         possibleValues
+    };
+};
+
+const parseBaselineSnapshot = (value: unknown): { snapshot: BaselineSnapshot | null; warnings: string[] } => {
+    const warnings: string[] = [];
+    const root = asRecord(value);
+    if (!root) {
+        return { snapshot: null, warnings };
+    }
+
+    const snapshotIdValue = root.snapshot_id;
+    const projectIdValue = root.project_id;
+    const capturedAtValue = root.captured_at;
+    const capturedByIdValue = root.captured_by_id;
+    const capturedByNameValue = root.captured_by_name;
+    const tasksByIssueIdValue = asRecord(root.tasks_by_issue_id);
+
+    if (typeof snapshotIdValue !== 'string' || snapshotIdValue.trim() === '') {
+        warnings.push('Baseline snapshot discarded: missing snapshot_id');
+        return { snapshot: null, warnings };
+    }
+
+    if (typeof projectIdValue !== 'number' && typeof projectIdValue !== 'string') {
+        warnings.push('Baseline snapshot discarded: missing project_id');
+        return { snapshot: null, warnings };
+    }
+
+    if (typeof capturedAtValue !== 'string' || capturedAtValue.trim() === '') {
+        warnings.push('Baseline snapshot discarded: missing captured_at');
+        return { snapshot: null, warnings };
+    }
+
+    if (!tasksByIssueIdValue) {
+        warnings.push('Baseline snapshot discarded: missing tasks_by_issue_id');
+        return { snapshot: null, warnings };
+    }
+
+    const tasksByIssueId: Record<string, BaselineTaskState> = {};
+    Object.entries(tasksByIssueIdValue).forEach(([key, entry]) => {
+        const taskRecord = asRecord(entry);
+        if (!taskRecord) {
+            warnings.push(`Baseline task skipped: invalid payload for issue ${key}`);
+            return;
+        }
+
+        const issueIdValue = taskRecord.issue_id ?? key;
+        if (typeof issueIdValue !== 'number' && typeof issueIdValue !== 'string') {
+            warnings.push(`Baseline task skipped: invalid issue_id for issue ${key}`);
+            return;
+        }
+
+        const baselineStartDate = parseBaselineDateValue(taskRecord.baseline_start_date);
+        const baselineDueDate = parseBaselineDateValue(taskRecord.baseline_due_date);
+
+        if (taskRecord.baseline_start_date !== undefined && taskRecord.baseline_start_date !== null && baselineStartDate === null) {
+            warnings.push(`Baseline task date parse failure for issue ${String(issueIdValue)} start_date`);
+        }
+        if (taskRecord.baseline_due_date !== undefined && taskRecord.baseline_due_date !== null && baselineDueDate === null) {
+            warnings.push(`Baseline task date parse failure for issue ${String(issueIdValue)} due_date`);
+        }
+
+        tasksByIssueId[String(issueIdValue)] = {
+            issueId: String(issueIdValue),
+            baselineStartDate,
+            baselineDueDate
+        };
+    });
+
+    return {
+        snapshot: {
+            snapshotId: snapshotIdValue,
+            projectId: String(projectIdValue),
+            capturedAt: capturedAtValue,
+            capturedById: typeof capturedByIdValue === 'number' && Number.isFinite(capturedByIdValue)
+                ? capturedByIdValue
+                : null,
+            capturedByName: typeof capturedByNameValue === 'string' ? capturedByNameValue : null,
+            tasksByIssueId
+        },
+        warnings
     };
 };
 
@@ -299,12 +389,16 @@ export const apiClient = {
 
         const permissions = {
             editable: Boolean(permissionsRecord.editable),
-            viewable: Boolean(permissionsRecord.viewable)
+            viewable: Boolean(permissionsRecord.viewable),
+            baselineEditable: Boolean(permissionsRecord.baseline_editable)
         };
 
         const warnings = Array.isArray(data.warnings)
             ? data.warnings.filter((entry): entry is string => typeof entry === 'string')
             : [];
+        const baselinePayload = parseBaselineSnapshot(data.baseline);
+        const baseline = baselinePayload.snapshot;
+        const mergedWarnings = [...warnings, ...baselinePayload.warnings];
 
         return {
             tasks,
@@ -314,8 +408,43 @@ export const apiClient = {
             customFields,
             project,
             permissions,
+            baseline,
             initialState: parseResolvedQueryState(data.initial_state),
-            warnings
+            warnings: mergedWarnings
+        };
+    },
+
+    saveBaseline: async (params?: { query?: ResolvedQueryState; rawSearch?: string }): Promise<BaselineSaveResult> => {
+        const config = getConfig();
+
+        const qs = params?.rawSearch
+            ? params.rawSearch.replace(/^\?/, '')
+            : buildIssueQueryParams(params?.query ?? {}).toString();
+        const url = new URL(`${config.apiBase}/baseline.json` + (qs ? `?${qs}` : ''), window.location.origin).toString();
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: buildJsonHeaders(config, true)
+        });
+
+        if (!response.ok) {
+            return { status: 'error', baseline: null, error: await parseErrorMessage(response) };
+        }
+
+        const payload = await response.json();
+        const root = asRecord(payload);
+        if (!root) {
+            return { status: 'error', baseline: null, error: 'Invalid response' };
+        }
+
+        const baselinePayload = parseBaselineSnapshot(root.baseline ?? root);
+        const warnings = Array.isArray(root.warnings)
+            ? root.warnings.filter((entry): entry is string => typeof entry === 'string')
+            : [];
+        return {
+            status: typeof root.status === 'string' ? root.status as 'ok' | 'error' : 'ok',
+            baseline: baselinePayload.snapshot,
+            warnings: [...warnings, ...baselinePayload.warnings]
         };
     },
 

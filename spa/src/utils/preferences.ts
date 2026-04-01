@@ -10,6 +10,7 @@ export interface StoredPreferences {
     showProgressLine?: boolean;
     showPointsOrphans?: boolean;
     showVersions?: boolean;
+    showBaseline?: boolean;
     selectedStatusIds?: number[];
     selectedProjectIds?: string[];
     visibleColumns?: string[];
@@ -37,6 +38,7 @@ const sanitizePreferences = (prefs: StoredPreferences): StoredPreferences => Obj
         showProgressLine: prefs.showProgressLine,
         showPointsOrphans: prefs.showPointsOrphans,
         showVersions: prefs.showVersions,
+        showBaseline: prefs.showBaseline,
         visibleColumns: prefs.visibleColumns,
         columnWidths: prefs.columnWidths,
         sidebarWidth: prefs.sidebarWidth,

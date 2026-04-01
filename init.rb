@@ -11,7 +11,7 @@ Redmine::Plugin.register :redmine_canvas_gantt do
 
   project_module :canvas_gantt do
     permission :view_canvas_gantt, { canvas_gantts: [:index, :data] }
-    permission :edit_canvas_gantt, { canvas_gantts: [:update, :bulk_create_subtasks, :destroy_relation] }
+    permission :edit_canvas_gantt, { canvas_gantts: [:update, :bulk_create_subtasks, :destroy_relation, :save_baseline] }
   end
 
   menu :project_menu, :canvas_gantt, { controller: 'canvas_gantts', action: 'index' }, caption: 'Canvas Gantt', after: :gantt, param: :project_id

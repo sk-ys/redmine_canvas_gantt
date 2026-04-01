@@ -694,7 +694,7 @@ describe('TaskStore saveChanges ordering', () => {
             customFields: [],
             statuses: [],
             project: { id: 'p1', name: 'P1' },
-            permissions: { editable: true, viewable: true }
+            permissions: { editable: true, viewable: true, baselineEditable: true }
         });
     });
 
@@ -811,7 +811,7 @@ describe('TaskStore saveChanges ordering', () => {
                 customFields: [],
                 statuses: [],
                 project: { id: 'p1', name: 'P1' },
-                permissions: { editable: true, viewable: true }
+                permissions: { editable: true, viewable: true, baselineEditable: true }
             })
             .mockResolvedValueOnce({
                 tasks: latestTasks,
@@ -820,7 +820,7 @@ describe('TaskStore saveChanges ordering', () => {
                 customFields: [],
                 statuses: [],
                 project: { id: 'p1', name: 'P1' },
-                permissions: { editable: true, viewable: true }
+                permissions: { editable: true, viewable: true, baselineEditable: true }
             });
 
         updateTask('18', { startDate: 11, dueDate: 17 });

@@ -196,7 +196,7 @@ describe('InteractionEngine task updates', () => {
             customFields: [],
             statuses: [],
             project: { id: 'p1', name: 'Project' },
-            permissions: { editable: true, viewable: true }
+            permissions: { editable: true, viewable: true, baselineEditable: true }
         });
 
         const { viewport, zoomLevel } = useTaskStore.getState();

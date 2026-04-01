@@ -14,6 +14,7 @@ const fetchDataMock = vi.fn().mockResolvedValue({
     statuses: []
 });
 const backgroundRenderMock = vi.fn();
+const baselineRenderMock = vi.fn();
 const taskRenderMock = vi.fn();
 const overlayRenderMock = vi.fn();
 
@@ -28,6 +29,14 @@ vi.mock('../renderers/BackgroundRenderer', () => ({
     BackgroundRenderer: class {
         render(...args: unknown[]) {
             backgroundRenderMock(...args);
+        }
+    }
+}));
+
+vi.mock('../renderers/BaselineRenderer', () => ({
+    BaselineRenderer: class {
+        render(...args: unknown[]) {
+            baselineRenderMock(...args);
         }
     }
 }));
@@ -128,12 +137,16 @@ describe('GanttContainer Resize', () => {
         fetchDataMock.mockClear();
         vi.clearAllMocks();
         backgroundRenderMock.mockClear();
+        baselineRenderMock.mockClear();
         taskRenderMock.mockClear();
         overlayRenderMock.mockClear();
     });
 
-    it('should use ew-resize and restore previous body styles during sidebar resize', () => {
+    it('should use ew-resize and restore previous body styles during sidebar resize', async () => {
         render(<GanttContainer />);
+        await waitFor(() => {
+            expect(baselineRenderMock).toHaveBeenCalled();
+        });
 
         const resizeHandle = screen.getByTestId('sidebar-resize-handle');
         document.body.style.cursor = 'crosshair';
@@ -357,7 +370,7 @@ describe('GanttContainer Resize', () => {
 
         expect(initialScrollPane).not.toBeNull();
         expect(initialViewport).not.toBeNull();
-        expect(initialCanvases).toHaveLength(3);
+        expect(initialCanvases).toHaveLength(4);
 
         act(() => {
             useWorkloadStore.setState({
@@ -377,7 +390,7 @@ describe('GanttContainer Resize', () => {
 
         expect(nextScrollPane).toBe(initialScrollPane);
         expect(nextViewport).toBe(initialViewport);
-        expect(nextCanvases).toHaveLength(3);
+        expect(nextCanvases).toHaveLength(4);
         expect(screen.getByTestId('workload-split-layout-right')).toBeInTheDocument();
     });
 

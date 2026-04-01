@@ -5,6 +5,7 @@ export const composeExportCanvas = (snapshot: GanttExportSnapshot): HTMLCanvasEl
     const width = Math.max(
         snapshot.headerCanvas.width,
         snapshot.backgroundCanvas.width,
+        snapshot.baselineCanvas.width,
         snapshot.taskCanvas.width,
         snapshot.overlayCanvas.width
     );
@@ -31,6 +32,7 @@ export const composeExportCanvas = (snapshot: GanttExportSnapshot): HTMLCanvasEl
 
     const chartY = snapshot.headerCanvas.height;
     ctx.drawImage(snapshot.backgroundCanvas, 0, chartY);
+    ctx.drawImage(snapshot.baselineCanvas, 0, chartY);
     ctx.drawImage(snapshot.taskCanvas, 0, chartY);
     ctx.drawImage(snapshot.overlayCanvas, 0, chartY);
 

@@ -55,7 +55,7 @@ describe('apiClient.fetchData', () => {
                 ],
                 relations: [{ id: 99, from: 10, to: 11, type: 'precedes' }],
                 project: { id: 1, name: 'P' },
-                permissions: { editable: true, viewable: true },
+                permissions: { editable: true, viewable: true, baseline_editable: true },
                 initial_state: {
                     query_id: 7,
                     selected_status_ids: [1],
@@ -86,6 +86,60 @@ describe('apiClient.fetchData', () => {
             'http://localhost:3000/projects/1/canvas_gantt/data.json?query_id=7&status_ids%5B%5D=1',
             expect.anything()
         );
+    });
+
+    it('parses baseline snapshot payloads', async () => {
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key'
+        };
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                tasks: [],
+                relations: [],
+                versions: [],
+                statuses: [],
+                project: { id: 1, name: 'P' },
+                permissions: { editable: true, viewable: true, baseline_editable: true },
+                baseline: {
+                    snapshot_id: 'baseline-1',
+                    project_id: 1,
+                    captured_at: '2026-04-01T00:00:00.000Z',
+                    captured_by_id: 9,
+                    captured_by_name: 'Alice',
+                    tasks_by_issue_id: {
+                        '10': {
+                            issue_id: 10,
+                            baseline_start_date: '2026-04-10',
+                            baseline_due_date: '2026-04-15'
+                        }
+                    }
+                }
+            })
+        });
+        vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+        const data = await apiClient.fetchData();
+
+        expect(data.baseline).toEqual({
+            snapshotId: 'baseline-1',
+            projectId: '1',
+            capturedAt: '2026-04-01T00:00:00.000Z',
+            capturedById: 9,
+            capturedByName: 'Alice',
+            tasksByIssueId: {
+                '10': {
+                    issueId: '10',
+                    baselineStartDate: new Date('2026-04-10').getTime(),
+                    baselineDueDate: new Date('2026-04-15').getTime()
+                }
+            }
+        });
     });
 });
 
@@ -199,5 +253,65 @@ describe('apiClient.updateRelation', () => {
             method: 'PATCH'
         }));
         expect(rel).toEqual({ id: '3', from: '10', to: '11', type: 'blocks', delay: undefined });
+    });
+});
+
+describe('apiClient.saveBaseline', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        delete window.RedmineCanvasGantt;
+    });
+
+    it('posts to the baseline endpoint and parses the response', async () => {
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key'
+        };
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                status: 'ok',
+                baseline: {
+                    snapshot_id: 'baseline-2',
+                    project_id: 1,
+                    captured_at: '2026-04-02T00:00:00.000Z',
+                    captured_by_id: 7,
+                    captured_by_name: 'Bob',
+                    tasks_by_issue_id: {}
+                },
+                warnings: ['baseline warning']
+            })
+        });
+        vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+        const result = await apiClient.saveBaseline({
+            query: {
+                queryId: 7,
+                selectedStatusIds: [1]
+            }
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:3000/projects/1/canvas_gantt/baseline.json?query_id=7&status_ids%5B%5D=1',
+            expect.objectContaining({
+                method: 'POST'
+            })
+        );
+        expect(result).toEqual({
+            status: 'ok',
+            baseline: {
+                snapshotId: 'baseline-2',
+                projectId: '1',
+                capturedAt: '2026-04-02T00:00:00.000Z',
+                capturedById: 7,
+                capturedByName: 'Bob',
+                tasksByIssueId: {}
+            },
+            warnings: ['baseline warning']
+        });
     });
 });

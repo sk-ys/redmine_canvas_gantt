@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useTaskStore } from '../../stores/TaskStore';
 import { useUIStore } from '../../stores/UIStore';
+import { useBaselineStore } from '../../stores/BaselineStore';
 import { getMinFiniteStartDate } from '../../utils/taskRange';
 import type { CustomFieldMeta } from '../../types/editMeta';
 import type { Relation, Task, Version, Viewport } from '../../types';
@@ -40,6 +41,8 @@ export const useInitialGanttData = ({
                 setVersions(data.versions);
                 setCustomFields(data.customFields ?? []);
                 useTaskStore.getState().setTaskStatuses(data.statuses ?? []);
+                useTaskStore.getState().setPermissions(data.permissions ?? { editable: false, viewable: false, baselineEditable: false });
+                useBaselineStore.getState().setSnapshot(data.baseline ?? null, data.warnings ?? []);
                 (data.warnings ?? []).forEach((warning) => useUIStore.getState().addNotification(warning, 'warning'));
 
                 if (!viewportFromStorage) {

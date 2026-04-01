@@ -4,7 +4,9 @@ import type { TaskStatus, ZoomLevel } from '../types';
 import { AutoScheduleMoveMode, RelationType, type AutoScheduleMoveMode as AutoScheduleMoveModeValue, type DefaultRelationType } from '../types/constraints';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore, DEFAULT_COLUMNS } from '../stores/UIStore';
+import { useBaselineStore } from '../stores/BaselineStore';
 import { i18n } from '../utils/i18n';
+import { apiClient } from '../api/client';
 import { getRelationTypeLabel } from '../utils/relationEditing';
 import { savePreferences } from '../utils/preferences';
 import { buildRedmineUrl } from '../utils/redmineUrl';
@@ -34,11 +36,13 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         filterText, setFilterText, allTasks, versions, selectedAssigneeIds, setSelectedAssigneeIds,
         selectedProjectIds, setSelectedProjectIds, selectedVersionIds, setSelectedVersionIds,
         setRowHeight, taskStatuses, selectedStatusIds, setSelectedStatusFromServer, showVersions, setShowVersions,
-        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects
+        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects, permissions
     } = useTaskStore();
     const {
         showProgressLine,
         toggleProgressLine,
+        showBaseline,
+        toggleBaseline,
         visibleColumns,
         setVisibleColumns,
         toggleLeftPane,
@@ -60,6 +64,8 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         setAutoScheduleMoveMode,
         resetRelationPreferences
     } = useUIStore();
+    const baselineSaveStatus = useBaselineStore(state => state.saveStatus);
+    const hasBaseline = useBaselineStore(state => state.hasBaseline);
     const isRightPaneMaximized = !leftPaneVisible && rightPaneVisible;
     const isLeftPaneMaximized = leftPaneVisible && !rightPaneVisible;
     const {
@@ -194,6 +200,50 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                 error instanceof Error ? error.message : (i18n.t('label_export_failed') || 'Export failed'),
                 'error'
             );
+        }
+    };
+
+    const handleSaveBaseline = async () => {
+        if (!permissions.baselineEditable || baselineSaveStatus === 'saving') {
+            return;
+        }
+
+        const baselineStore = useBaselineStore.getState();
+        baselineStore.setSaveStatus('saving');
+        baselineStore.setLastError(null);
+
+        try {
+            if (modifiedTaskIds.size > 0) {
+                const failures = await saveChanges();
+                if (failures.size > 0) {
+                    baselineStore.setSaveStatus('error');
+                    return;
+                }
+            }
+
+            const result = await apiClient.saveBaseline({
+                query: toResolvedQueryStateFromStore(useTaskStore.getState())
+            });
+
+            if (result.status === 'error') {
+                throw new Error(result.error || 'Failed to save baseline');
+            }
+            if (!result.baseline) {
+                throw new Error('Failed to save baseline');
+            }
+
+            baselineStore.setSnapshot(result.baseline, result.warnings ?? []);
+            baselineStore.setSaveStatus('ready');
+
+            if (result.warnings?.length) {
+                result.warnings.forEach((warning) => useUIStore.getState().addNotification(warning, 'warning'));
+            }
+
+            useUIStore.getState().addNotification(i18n.t('label_baseline_saved') || 'Baseline saved', 'success');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : (i18n.t('label_baseline_save_failed') || 'Failed to save baseline');
+            baselineStore.setLastError(message);
+            useUIStore.getState().addNotification(message, 'error');
         }
     };
 
@@ -1653,7 +1703,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                     <>
                         <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
                         <button
-                            onClick={() => saveChanges()}
+                            onClick={() => void saveChanges()}
                             title="Save changes"
                             style={{
                                 display: 'flex',
@@ -1673,7 +1723,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             {i18n.t('button_save') || "Save"}
                         </button>
                         <button
-                            onClick={() => discardChanges()}
+                            onClick={() => void discardChanges()}
                             title="Discard changes"
                             style={{
                                 display: 'flex',
@@ -1691,6 +1741,69 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             }}
                         >
                             {i18n.t('button_cancel') || "Cancel"}
+                        </button>
+                    </>
+                )}
+
+                {permissions.baselineEditable && (
+                    <>
+                        <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
+                        <button
+                            type="button"
+                            onClick={() => void handleSaveBaseline()}
+                            aria-label={i18n.t('label_save_baseline') || 'Save Baseline'}
+                            title={i18n.t('label_save_baseline_tooltip') || 'Save current plan as baseline'}
+                            disabled={baselineSaveStatus === 'saving'}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '0 12px',
+                                borderRadius: '6px',
+                                border: '1px solid #b45309',
+                                backgroundColor: baselineSaveStatus === 'saving' ? '#fef3c7' : '#fff7ed',
+                                color: '#b45309',
+                                cursor: baselineSaveStatus === 'saving' ? 'not-allowed' : 'pointer',
+                                height: '32px',
+                                fontSize: '13px',
+                                fontWeight: 600
+                            }}
+                        >
+                            {baselineSaveStatus === 'saving'
+                                ? (i18n.t('label_saving_baseline') || 'Saving Baseline...')
+                                : (i18n.t('label_save_baseline') || 'Save Baseline')}
+                        </button>
+                    </>
+                )}
+
+                {permissions.viewable && (
+                    <>
+                        <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
+                        <button
+                            type="button"
+                            onClick={() => toggleBaseline()}
+                            aria-label={i18n.t('label_show_baseline') || 'Show Baseline'}
+                            title={showBaseline
+                                ? (i18n.t('label_hide_baseline_tooltip') || 'Hide baseline comparison')
+                                : (i18n.t('label_show_baseline_tooltip') || 'Show baseline comparison')}
+                            disabled={!hasBaseline}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '0 12px',
+                                borderRadius: '6px',
+                                border: '1px solid #e0e0e0',
+                                backgroundColor: showBaseline ? '#e8f0fe' : '#fff',
+                                color: hasBaseline ? (showBaseline ? '#1a73e8' : '#333') : '#94a3b8',
+                                cursor: hasBaseline ? 'pointer' : 'not-allowed',
+                                opacity: hasBaseline ? 1 : 0.75,
+                                height: '32px',
+                                fontSize: '13px',
+                                fontWeight: 600
+                            }}
+                        >
+                            {i18n.t('label_show_baseline') || 'Show Baseline'}
                         </button>
                     </>
                 )}

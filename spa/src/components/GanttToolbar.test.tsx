@@ -6,11 +6,19 @@ import { GanttToolbar } from './GanttToolbar';
 import { AutoScheduleMoveMode, RelationType } from '../types/constraints';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
+import { useBaselineStore } from '../stores/BaselineStore';
 import type { GanttExportHandle } from '../export/types';
+import { apiClient } from '../api/client';
 import '../stores/preferencesWatcher';
 
 vi.mock('../utils/navigation', () => ({
     navigateToRedminePath: vi.fn()
+}));
+
+vi.mock('../api/client', () => ({
+    apiClient: {
+        saveBaseline: vi.fn()
+    }
 }));
 
 const getCanvasGanttConfig = (): NonNullable<Window['RedmineCanvasGantt']> => {
@@ -55,6 +63,7 @@ describe('GanttToolbar shortcuts', () => {
         };
         useTaskStore.setState(useTaskStore.getInitialState(), true);
         useUIStore.setState(useUIStore.getInitialState(), true);
+        useBaselineStore.setState(useBaselineStore.getInitialState(), true);
     });
 
     const setStatusFilterState = (selectedStatusIds: number[] = []) => {
@@ -190,6 +199,55 @@ describe('GanttToolbar shortcuts', () => {
 
         render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
         expect(screen.getByTestId('relation-settings-menu-button')).toBeInTheDocument();
+    });
+
+    it('shows baseline controls and saves a snapshot when permissions allow', async () => {
+        const saveBaselineMock = vi.mocked(apiClient.saveBaseline);
+        saveBaselineMock.mockResolvedValue({
+            status: 'ok',
+            baseline: {
+                snapshotId: 'baseline-1',
+                projectId: '1',
+                capturedAt: '2026-04-01T00:00:00.000Z',
+                capturedById: 1,
+                capturedByName: 'Alice',
+                tasksByIssueId: {}
+            },
+            warnings: []
+        });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true,
+            permissions: { editable: true, viewable: true, baselineEditable: true }
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        expect(screen.getByRole('button', { name: 'Save Baseline' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeDisabled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save Baseline' }));
+
+        await waitFor(() => {
+            expect(saveBaselineMock).toHaveBeenCalled();
+        });
+
+        await waitFor(() => {
+            expect(useBaselineStore.getState().hasBaseline).toBe(true);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show Baseline' }));
+        expect(useUIStore.getState().showBaseline).toBe(true);
     });
 
     it('opens new issue dialog with redmineBase prefix', () => {

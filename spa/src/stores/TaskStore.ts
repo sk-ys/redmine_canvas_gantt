@@ -6,6 +6,7 @@ import { loadPreferences, savePreferences } from '../utils/preferences';
 import { getMaxFiniteDueDate } from '../utils/taskRange';
 import { i18n } from '../utils/i18n';
 import { useUIStore } from './UIStore';
+import { useBaselineStore } from './BaselineStore';
 import type { MoveTaskAsChildResult } from '../types';
 import type { CustomFieldMeta } from '../types/editMeta';
 import type { LayoutState, SortConfig } from './taskStore/types';
@@ -48,6 +49,7 @@ const queueRefreshData = (refreshData: () => Promise<void>) => {
 };
 
 interface TaskState {
+    permissions: { editable: boolean; viewable: boolean; baselineEditable: boolean };
     allTasks: Task[];
     tasks: Task[];
     relations: Relation[];
@@ -99,6 +101,7 @@ interface TaskState {
     setVersions: (versions: Version[]) => void;
     setTaskStatuses: (statuses: TaskStatus[]) => void;
     setCustomFields: (fields: CustomFieldMeta[]) => void;
+    setPermissions: (permissions: { editable: boolean; viewable: boolean; baselineEditable: boolean }) => void;
     applyResolvedQueryState: (state?: ResolvedQueryState) => void;
     setSelectedStatusFromServer: (ids: number[]) => void;
     setShowVersions: (show: boolean) => void;
@@ -141,7 +144,7 @@ interface TaskState {
     canDropToRoot: (sourceTaskId: string) => boolean;
     moveTaskAsChild: (sourceTaskId: string, targetTaskId: string) => Promise<MoveTaskAsChildResult>;
     moveTaskToRoot: (sourceTaskId: string) => Promise<MoveTaskAsChildResult>;
-    saveChanges: () => Promise<void>;
+    saveChanges: () => Promise<Map<string, string>>;
     discardChanges: () => Promise<void>;
 }
 
@@ -402,6 +405,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     versions: [],
     taskStatuses: [],
     customFields: [],
+    permissions: { editable: false, viewable: false, baselineEditable: false },
     activeQueryId: initialUrlState.queryId ?? null,
     selectedStatusIds: [],
     viewport: DEFAULT_VIEWPORT,
@@ -477,6 +481,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         };
     }),
     setTaskStatuses: (statuses) => set(() => ({ taskStatuses: statuses })),
+    setPermissions: (permissions) => set(() => ({ permissions })),
     applyResolvedQueryState: (resolved) => set((state) => {
         const queryState = toBusinessQueryState(resolved);
         const groupByProject = queryState.groupByProject;
@@ -1188,13 +1193,15 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             query: toResolvedQueryStateFromStore(state)
         });
         if (!data) return;
-        const { setTasks, setRelations, setVersions, setTaskStatuses, setCustomFields, applyResolvedQueryState } = state;
+        const { setTasks, setRelations, setVersions, setTaskStatuses, setCustomFields, setPermissions, applyResolvedQueryState } = state;
         applyResolvedQueryState(data.initialState);
         setTasks(data.tasks);
         setRelations(data.relations);
         setVersions(data.versions);
         setTaskStatuses(data.statuses);
         setCustomFields(data.customFields);
+        setPermissions(data.permissions ?? { editable: false, viewable: false, baselineEditable: false });
+        useBaselineStore.getState().setSnapshot(data.baseline ?? null, data.warnings ?? []);
         set({ modifiedTaskIds: new Set() });
         (data.warnings ?? []).forEach((warning) => useUIStore.getState().addNotification(warning, 'warning'));
     },
@@ -1212,7 +1219,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         );
 
         await state.refreshData();
-
         if (failures.size > 0) {
             const [failedTaskId, failedReason] = failures.entries().next().value as [string, string];
             useUIStore.getState().addNotification(
@@ -1220,6 +1226,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                 'error'
             );
         }
+        return failures;
     },
 
     discardChanges: async () => {

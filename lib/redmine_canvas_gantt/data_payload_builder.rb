@@ -5,7 +5,7 @@ module RedmineCanvasGantt
       @current_user = current_user
     end
 
-    def build(project:, permissions:, project_ids:, issues:, initial_state: nil, warnings: [])
+    def build(project:, permissions:, project_ids:, issues:, initial_state: nil, warnings: [], baseline: nil)
       {
         tasks: build_tasks(issues),
         custom_fields: @custom_field_extractor.build_project_custom_fields(project_ids, issues),
@@ -15,6 +15,7 @@ module RedmineCanvasGantt
         project: build_project_payload(project),
         permissions: permissions,
         initial_state: initial_state,
+        baseline: build_baseline_payload(baseline),
         warnings: warnings.presence
       }.compact
     end
@@ -97,6 +98,16 @@ module RedmineCanvasGantt
         type: relation.relation_type,
         delay: relation.delay
       }
+    end
+
+    def build_baseline_payload(baseline)
+      return nil if baseline.nil?
+
+      if baseline.respond_to?(:to_payload_hash)
+        baseline.to_payload_hash
+      elsif baseline.is_a?(Hash)
+        baseline
+      end
     end
   end
 end

@@ -4,6 +4,7 @@ import type { CustomFieldMeta } from '../types/editMeta';
 export interface GanttExportSnapshot {
     headerCanvas: HTMLCanvasElement;
     backgroundCanvas: HTMLCanvasElement;
+    baselineCanvas: HTMLCanvasElement;
     taskCanvas: HTMLCanvasElement;
     overlayCanvas: HTMLCanvasElement;
     viewport: Viewport;

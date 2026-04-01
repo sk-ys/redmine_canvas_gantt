@@ -165,6 +165,20 @@ class CanvasGanttsController < ApplicationController
     label_export_csv: :label_export_csv,
     label_export_unavailable: :label_export_unavailable,
     label_export_failed: :label_export_failed,
+    label_save_baseline: :label_save_baseline,
+    label_saving_baseline: :label_saving_baseline,
+    label_show_baseline: :label_show_baseline,
+    label_hide_baseline_tooltip: :label_hide_baseline_tooltip,
+    label_show_baseline_tooltip: :label_show_baseline_tooltip,
+    label_save_baseline_tooltip: :label_save_baseline_tooltip,
+    label_baseline_saved: :label_baseline_saved,
+    label_baseline_save_failed: :label_baseline_save_failed,
+    label_baseline_comparison: :label_baseline_comparison,
+    label_baseline_duration: :label_baseline_duration,
+    label_baseline_saved_meta: :label_baseline_saved_meta,
+    label_no_baseline_for_task: :label_no_baseline_for_task,
+    label_baseline_diff_exists: :label_baseline_diff_exists,
+    label_baseline_diff_none: :label_baseline_diff_none,
     label_help: :label_help,
     help_label_layout_filters: :help_label_layout_filters,
     label_help_toolbar_icons: :label_help_toolbar_icons,
@@ -240,9 +254,12 @@ class CanvasGanttsController < ApplicationController
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'bulk_subtask_creator').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'parent_issue_resolver').to_s
   require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'query_state_resolver').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'baseline_task_state').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'baseline_snapshot').to_s
+  require_dependency Rails.root.join('plugins', 'redmine_canvas_gantt', 'lib', 'redmine_canvas_gantt', 'baseline_repository').to_s
 
   helper RedmineCanvasGantt::ViteAssetHelper
-  accept_api_auth :data, :edit_meta, :update, :bulk_create_subtasks, :create_relation, :update_relation, :destroy_relation
+  accept_api_auth :data, :edit_meta, :update, :bulk_create_subtasks, :create_relation, :update_relation, :destroy_relation, :save_baseline
 
   before_action :find_project_by_project_id
   before_action :set_permissions
@@ -276,6 +293,7 @@ class CanvasGanttsController < ApplicationController
     begin
       project_ids = descendant_project_ids
       resolved_query = query_state_resolver.resolve(project_ids: project_ids)
+      baseline_load = baseline_repository.load(project_id: @project.id)
 
       render json: data_payload_builder.build(
         project: @project,
@@ -283,11 +301,34 @@ class CanvasGanttsController < ApplicationController
         project_ids: project_ids,
         issues: resolved_query[:issues],
         initial_state: resolved_query[:initial_state],
-        warnings: resolved_query[:warnings]
+        warnings: resolved_query[:warnings] + baseline_load.warnings,
+        baseline: baseline_load.snapshot
       )
     rescue => e
       render json: { error: e.message }, status: :internal_server_error
     end
+  end
+
+  # POST /projects/:project_id/canvas_gantt/baseline.json
+  def save_baseline
+    return unless ensure_baseline_edit_permission
+
+    project_ids = descendant_project_ids
+    resolved_query = query_state_resolver.resolve(project_ids: project_ids)
+    baseline_snapshot = baseline_repository.build_snapshot(
+      project: @project,
+      issues: resolved_query[:issues],
+      current_user: User.current
+    )
+    saved_snapshot = baseline_repository.replace(project_id: @project.id, snapshot: baseline_snapshot)
+
+    render json: {
+      status: 'ok',
+      baseline: saved_snapshot.to_payload_hash,
+      warnings: resolved_query[:warnings]
+    }
+  rescue => e
+    render json: { error: e.message }, status: :internal_server_error
   end
 
   # GET /projects/:project_id/canvas_gantt/tasks/:id/edit_meta.json
@@ -443,15 +484,27 @@ class CanvasGanttsController < ApplicationController
     end
   end
 
+  def ensure_baseline_edit_permission
+    return true if User.current.allowed_to?(:edit_canvas_gantt, @project)
+
+    render json: { error: l(:error_canvas_gantt_permission_denied) }, status: :forbidden
+    false
+  end
+
   def set_permissions
     @permissions ||= {
       editable: User.current.allowed_to?(:edit_issues, @project),
-      viewable: User.current.allowed_to?(:view_canvas_gantt, @project)
+      viewable: User.current.allowed_to?(:view_canvas_gantt, @project),
+      baseline_editable: User.current.allowed_to?(:edit_canvas_gantt, @project)
     }
   end
 
   def plugin_settings
     @plugin_settings ||= Setting.plugin_redmine_canvas_gantt || {}
+  end
+
+  def baseline_repository
+    @baseline_repository ||= RedmineCanvasGantt::BaselineRepository.new
   end
 
   def descendant_project_ids

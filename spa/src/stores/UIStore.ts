@@ -17,6 +17,7 @@ interface Notification {
 interface UIState {
     notifications: Notification[];
     showProgressLine: boolean;
+    showBaseline: boolean;
     visibleColumns: string[];
     columnWidths: Record<string, number>;
     sidebarWidth: number;
@@ -34,6 +35,8 @@ interface UIState {
     addNotification: (message: string, type?: NotificationType) => void;
     removeNotification: (id: string) => void;
     toggleProgressLine: () => void;
+    toggleBaseline: () => void;
+    setShowBaseline: (value: boolean) => void;
     togglePointsOrphans: () => void;
     toggleLeftPane: () => void;
     toggleRightPane: () => void;
@@ -61,6 +64,7 @@ const DEFAULT_RELATION_TYPE = RelationType.Precedes;
 export const useUIStore = create<UIState>((set) => ({
     notifications: [],
     showProgressLine: preferences.showProgressLine ?? false,
+    showBaseline: preferences.showBaseline ?? false,
     showPointsOrphans: preferences.showPointsOrphans ?? true,
     leftPaneVisible: true,
     rightPaneVisible: true,
@@ -104,6 +108,8 @@ export const useUIStore = create<UIState>((set) => ({
             notifications: state.notifications.filter((n) => n.id !== id)
         })),
     toggleProgressLine: () => set((state) => ({ showProgressLine: !state.showProgressLine })),
+    toggleBaseline: () => set((state) => ({ showBaseline: !state.showBaseline })),
+    setShowBaseline: (value) => set(() => ({ showBaseline: value })),
     togglePointsOrphans: () => set((state) => ({ showPointsOrphans: !state.showPointsOrphans })),
     toggleLeftPane: () => set((state) => {
         if (state.leftPaneVisible && state.rightPaneVisible) {
