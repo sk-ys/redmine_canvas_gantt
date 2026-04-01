@@ -39,13 +39,13 @@ const buildHelpTranslations = (language: 'ja' | 'en'): Record<string, string> =>
             help_desc_filter_tasks: '日本語 フィルタ説明',
             help_desc_edit_query: '日本語 クエリ編集説明',
             help_desc_columns: '日本語 カラム説明',
-            help_desc_workload: '日本語 ワークロード説明',
+            help_desc_workload: '日本語 ワークロード説明 今日以降のみ含む',
             help_desc_assignee_filter: '日本語 担当者説明',
             help_desc_project_filter: '日本語 プロジェクト説明',
             help_desc_version_filter: '日本語 バージョン説明',
             help_desc_status_filter: '日本語 ステータス説明',
             help_desc_progress_line: '日本語 進捗説明',
-            help_desc_dependency_settings: '日本語 依存設定説明',
+            help_desc_dependency_settings: '日本語 依存設定説明 自動適用あり',
             help_desc_export: '日本語 エクスポート説明',
             help_desc_organize_by_dependency: '日本語 依存整理説明',
             help_desc_points_orphans: '日本語 ポイント説明',
@@ -54,9 +54,9 @@ const buildHelpTranslations = (language: 'ja' | 'en'): Record<string, string> =>
             help_desc_zoom: '日本語 ズーム説明',
             help_desc_row_height: '日本語 行高説明',
             help_desc_fullscreen: '日本語 全画面説明',
-            help_desc_autosave: '日本語 自動保存説明',
-            help_desc_save: '日本語 保存説明',
-            help_desc_cancel: '日本語 キャンセル説明',
+            help_desc_autosave: '日本語 自動保存説明 インライン編集含む',
+            help_desc_save: '日本語 保存説明 未保存時のみ表示',
+            help_desc_cancel: '日本語 キャンセル説明 未保存時のみ表示',
             help_desc_top: '日本語 トップ説明',
             help_op_drag_drop: '日本語ドラッグ',
             help_op_drag_drop_desc: '日本語 ドラッグ説明',
@@ -106,13 +106,13 @@ const buildHelpTranslations = (language: 'ja' | 'en'): Record<string, string> =>
         help_desc_filter_tasks: 'English filter description',
         help_desc_edit_query: 'English query editor description',
         help_desc_columns: 'English columns description',
-        help_desc_workload: 'English workload description',
+        help_desc_workload: 'English workload description including today onward only',
         help_desc_assignee_filter: 'English assignee description',
         help_desc_project_filter: 'English project description',
         help_desc_version_filter: 'English version description',
         help_desc_status_filter: 'English status description',
         help_desc_progress_line: 'English progress description',
-        help_desc_dependency_settings: 'English dependency settings description',
+        help_desc_dependency_settings: 'English dependency settings description including auto apply',
         help_desc_export: 'English export description',
         help_desc_organize_by_dependency: 'English organize description',
         help_desc_points_orphans: 'English orphan points description',
@@ -121,9 +121,9 @@ const buildHelpTranslations = (language: 'ja' | 'en'): Record<string, string> =>
         help_desc_zoom: 'English zoom description',
         help_desc_row_height: 'English row height description',
         help_desc_fullscreen: 'English full screen description',
-        help_desc_autosave: 'English auto save description',
-        help_desc_save: 'English save description',
-        help_desc_cancel: 'English cancel description',
+        help_desc_autosave: 'English auto save description including inline edits',
+        help_desc_save: 'English save description shown only with pending edits',
+        help_desc_cancel: 'English cancel description shown only with pending edits',
         help_desc_top: 'English top description',
         help_op_drag_drop: 'English Drag and Drop',
         help_op_drag_drop_desc: 'English drag and drop description',
@@ -177,12 +177,15 @@ describe('HelpDialog', () => {
         expect(screen.getByText('日本語編集と保存')).toBeInTheDocument();
         expect(screen.getByText('日本語 左ペイン説明')).toBeInTheDocument();
         expect(screen.getByText('日本語 クエリ編集説明')).toBeInTheDocument();
-        expect(screen.getByText('日本語 ワークロード説明')).toBeInTheDocument();
+        expect(screen.getByText('日本語 ワークロード説明 今日以降のみ含む')).toBeInTheDocument();
         expect(screen.getByText('日本語 エクスポート説明')).toBeInTheDocument();
         expect(screen.getByText('日本語 前月次月説明')).toBeInTheDocument();
         expect(screen.getByText('日本語 トップ説明')).toBeInTheDocument();
         expect(screen.getByText('日本語 ドラッグ説明')).toBeInTheDocument();
-        expect(screen.getByText('日本語 保存説明')).toBeInTheDocument();
+        expect(screen.getByText('日本語 依存設定説明 自動適用あり')).toBeInTheDocument();
+        expect(screen.getByText('日本語 自動保存説明 インライン編集含む')).toBeInTheDocument();
+        expect(screen.getByText('日本語 保存説明 未保存時のみ表示')).toBeInTheDocument();
+        expect(screen.getByText('日本語 キャンセル説明 未保存時のみ表示')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '日本語閉じる' })).toBeInTheDocument();
         expect(screen.queryByText('1. Layout and Filters')).not.toBeInTheDocument();
         expect(screen.queryByText('Close')).not.toBeInTheDocument();
@@ -200,12 +203,15 @@ describe('HelpDialog', () => {
         expect(screen.getByText('English Editing and Saving')).toBeInTheDocument();
         expect(screen.getByText('English left pane description')).toBeInTheDocument();
         expect(screen.getByText('English query editor description')).toBeInTheDocument();
-        expect(screen.getByText('English workload description')).toBeInTheDocument();
+        expect(screen.getByText('English workload description including today onward only')).toBeInTheDocument();
         expect(screen.getByText('English export description')).toBeInTheDocument();
         expect(screen.getByText('English previous next month description')).toBeInTheDocument();
         expect(screen.getByText('English top description')).toBeInTheDocument();
         expect(screen.getByText('English drag and drop description')).toBeInTheDocument();
-        expect(screen.getByText('English save description')).toBeInTheDocument();
+        expect(screen.getByText('English dependency settings description including auto apply')).toBeInTheDocument();
+        expect(screen.getByText('English auto save description including inline edits')).toBeInTheDocument();
+        expect(screen.getByText('English save description shown only with pending edits')).toBeInTheDocument();
+        expect(screen.getByText('English cancel description shown only with pending edits')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'English Close' })).toBeInTheDocument();
         expect(screen.queryByText('日本語ヘルプ')).not.toBeInTheDocument();
         expect(screen.queryByText('日本語閉じる')).not.toBeInTheDocument();
