@@ -25,6 +25,9 @@ import {
     toggleAllSelectionValues,
     toggleSelectionValue,
 } from './gantt/toolbarSelection';
+import { COLUMN_CATALOG } from './sidebar/sidebarColumnCatalog';
+import { ColumnMenuItem } from './sidebar/ColumnMenuItem';
+import { useColumnMenuDrag } from './sidebar/useColumnMenuDrag';
 
 interface GanttToolbarProps {
     zoomLevel: ZoomLevel;
@@ -46,7 +49,9 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         showBaseline,
         toggleBaseline,
         visibleColumns,
-        setVisibleColumns,
+        columnSettings,
+        toggleColumnVisibility,
+        resetColumns,
         toggleLeftPane,
         toggleRightPane,
         leftPaneVisible,
@@ -104,8 +109,8 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     const [draftAutoCalculateDelay, setDraftAutoCalculateDelay] = React.useState<boolean>(autoCalculateDelay);
     const [draftAutoApplyDefaultRelation, setDraftAutoApplyDefaultRelation] = React.useState<boolean>(autoApplyDefaultRelation);
     const [draftAutoScheduleMoveMode, setDraftAutoScheduleMoveMode] = React.useState<AutoScheduleMoveModeValue>(autoScheduleMoveMode);
-
     const filterInputRef = React.useRef<HTMLInputElement>(null);
+    const columnMenuContentRef = React.useRef<HTMLDivElement>(null);
     const selectAllStatusesRef = React.useRef<HTMLInputElement>(null);
     const completedStatusesRef = React.useRef<HTMLInputElement>(null);
     const incompleteStatusesRef = React.useRef<HTMLInputElement>(null);
@@ -279,13 +284,6 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         updateViewport({ startDate: leftDate.getTime(), scrollX: 0 });
     };
 
-    const toggleColumn = (key: string) => {
-        const next = visibleColumns.includes(key)
-            ? visibleColumns.filter(k => k !== key)
-            : [...visibleColumns, key];
-        setVisibleColumns(next);
-    };
-
     const openRedmineQueryEditor = () => {
         const issueListPath = window.RedmineCanvasGantt?.issueListPath;
         const projectId = window.RedmineCanvasGantt?.projectId;
@@ -308,30 +306,55 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         navigateToRedminePath(`${issueListPath ?? `/projects/${projectId}/issues`}${query ? `?${query}` : ''}`);
     };
 
-    const baseColumnOptions = [
-        { key: 'id', label: 'ID' },
-        { key: 'notification', label: i18n.t('label_notifications') || 'Notifications' },
-        { key: 'project', label: i18n.t('field_project') || 'Project' },
-        { key: 'tracker', label: i18n.t('field_tracker') || 'Tracker' },
-        { key: 'status', label: i18n.t('field_status') || 'Status' },
-        { key: 'priority', label: i18n.t('field_priority') || 'Priority' },
-        { key: 'assignee', label: i18n.t('field_assigned_to') || 'Assignee' },
-        { key: 'author', label: i18n.t('field_author') || 'Author' },
-        { key: 'startDate', label: i18n.t('field_start_date') || 'Start Date' },
-        { key: 'dueDate', label: i18n.t('field_due_date') || 'Due Date' },
-        { key: 'estimatedHours', label: i18n.t('field_estimated_hours') || 'Estimated Time' },
-        { key: 'ratioDone', label: i18n.t('field_done_ratio') || 'Progress' },
-        { key: 'spentHours', label: i18n.t('field_spent_hours') || 'Spent Time' },
-        { key: 'version', label: i18n.t('field_version') || 'Target Version' },
-        { key: 'category', label: i18n.t('field_category') || 'Category' },
-        { key: 'createdOn', label: i18n.t('field_created_on') || 'Created' },
-        { key: 'updatedOn', label: i18n.t('field_updated_on') || 'Updated' }
-    ];
+    const getColumnLabel = (key: string, fallback: string) => {
+        const localizedLabel: Record<string, string> = {
+            subject: i18n.t('field_subject') || fallback,
+            notification: i18n.t('label_notifications') || fallback,
+            project: i18n.t('field_project') || fallback,
+            tracker: i18n.t('field_tracker') || fallback,
+            status: i18n.t('field_status') || fallback,
+            priority: i18n.t('field_priority') || fallback,
+            assignee: i18n.t('field_assigned_to') || fallback,
+            author: i18n.t('field_author') || fallback,
+            startDate: i18n.t('field_start_date') || fallback,
+            dueDate: i18n.t('field_due_date') || fallback,
+            estimatedHours: i18n.t('field_estimated_hours') || fallback,
+            ratioDone: i18n.t('field_done_ratio') || fallback,
+            spentHours: i18n.t('field_spent_hours') || fallback,
+            version: i18n.t('field_version') || fallback,
+            category: i18n.t('field_category') || fallback,
+            createdOn: i18n.t('field_created_on') || fallback,
+            updatedOn: i18n.t('field_updated_on') || fallback
+        };
+        return localizedLabel[key] ?? fallback;
+    };
+
+    const baseColumnOptions = COLUMN_CATALOG.map((column) => ({
+        key: column.key,
+        label: getColumnLabel(column.key, column.label)
+    }));
     const customFieldColumnOptions = customFields.map((cf) => ({
         key: `cf:${cf.id}`,
         label: cf.name
     }));
     const columnOptions = [...baseColumnOptions, ...customFieldColumnOptions];
+    const {
+        effectiveColumnSettings,
+        orderedColumnOptions,
+        draggingColumnKey,
+        dropBeforeColumnKey,
+        handleColumnDragStart,
+        handleColumnDragOver,
+        handleColumnDrop,
+        handleColumnMenuDragOver,
+        clearColumnDragState
+    } = useColumnMenuDrag({
+        columnSettings,
+        visibleColumns,
+        columnOptions,
+        menuContentRef: columnMenuContentRef
+    });
+    const effectiveVisibleColumns = effectiveColumnSettings.filter((entry) => entry.visible).map((entry) => entry.key);
 
     const assignees = React.useMemo(() => {
         const map = new Map<number | null, string>();
@@ -660,8 +683,8 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             padding: '0',
                             borderRadius: '6px',
                             border: '1px solid #e0e0e0',
-                            backgroundColor: visibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#e8f0fe' : '#fff',
-                            color: visibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#1a73e8' : '#333',
+                            backgroundColor: effectiveVisibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#e8f0fe' : '#fff',
+                            color: effectiveVisibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#1a73e8' : '#333',
                             cursor: 'pointer',
                             height: '32px',
                             width: '32px',
@@ -673,7 +696,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             <line x1="9" y1="3" x2="9" y2="21" />
                             <line x1="15" y1="3" x2="15" y2="21" />
                         </svg>
-                        {visibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') && (
+                        {effectiveVisibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') && (
                             <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, backgroundColor: '#1a73e8', borderRadius: '50%' }} />
                         )}
                     </button>
@@ -695,20 +718,34 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                 maxHeight: '300px',
                                 overflowY: 'auto'
                             }}
+                            onDragOver={handleColumnMenuDragOver}
+                            ref={columnMenuContentRef}
                         >
                             <div style={{ fontWeight: 600, marginBottom: '8px', color: '#333' }}>{i18n.t('label_column_plural') || 'Columns'}</div>
-                            {columnOptions.map(option => (
-                                <label key={option.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#444' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={visibleColumns.includes(option.key)}
-                                        onChange={() => toggleColumn(option.key)}
+                            {orderedColumnOptions.map(option => {
+                                const setting = effectiveColumnSettings.find((entry) => entry.key === option.key);
+                                if (!setting) return null;
+
+                                return (
+                                    <ColumnMenuItem
+                                        key={option.key}
+                                        columnKey={option.key}
+                                        label={option.label}
+                                        visible={setting.visible}
+                                        draggable={true}
+                                        isDragging={draggingColumnKey === option.key}
+                                        isDropBefore={dropBeforeColumnKey === option.key}
+                                        isPinned={option.key === 'subject'}
+                                        onToggle={toggleColumnVisibility}
+                                        onDragStart={handleColumnDragStart}
+                                        onDragOver={handleColumnDragOver}
+                                        onDrop={handleColumnDrop}
+                                        onDragEnd={clearColumnDragState}
                                     />
-                                    {option.label}
-                                </label>
-                            ))}
+                                );
+                            })}
                             <button
-                                onClick={() => setVisibleColumns(DEFAULT_COLUMNS)}
+                                onClick={() => resetColumns()}
                                 style={{
                                     marginTop: '8px',
                                     border: 'none',

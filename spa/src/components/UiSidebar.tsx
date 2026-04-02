@@ -12,12 +12,12 @@ import type { InlineEditSettings } from '../types/editMeta';
 import { i18n } from '../utils/i18n';
 import { buildRedmineUrl } from '../utils/redmineUrl';
 import { customFieldEditField, customFieldIdFromEditField, formatCustomFieldCellValue, type SidebarColumn } from './sidebar/sidebarColumns';
+import { mergeColumnSettings, resolveVisibleColumnKeys } from './sidebar/sidebarColumnSettings';
 import { useSidebarColumnSizing } from './sidebar/useSidebarColumnSizing';
 import { useSidebarDragAndDrop } from './sidebar/useSidebarDragAndDrop';
 import { useSidebarInlineEdit } from './sidebar/useSidebarInlineEdit';
 import { SvgIcon } from '../icons/SvgIcon';
 import { getTaskNotification } from './sidebar/sidebarNotifications';
-
 const NOTIFICATION_COLUMN_KEY = 'notification';
 
 const getAvatarColor = (name: string) => {
@@ -165,6 +165,7 @@ export const UiSidebar: React.FC = () => {
     const canDropToRoot = useTaskStore(state => state.canDropToRoot);
     const moveTaskAsChild = useTaskStore(state => state.moveTaskAsChild);
     const moveTaskToRoot = useTaskStore(state => state.moveTaskToRoot);
+    const columnSettings = useUIStore(state => state.columnSettings);
     const visibleColumns = useUIStore(state => state.visibleColumns);
     const setActiveInlineEdit = useUIStore(state => state.setActiveInlineEdit);
     const activeInlineEdit = useUIStore(state => state.activeInlineEdit);
@@ -629,7 +630,15 @@ export const UiSidebar: React.FC = () => {
         }))
     ];
 
-    const activeColumns = columns.filter(col => col.key === 'subject' || visibleColumns.includes(col.key));
+    const effectiveColumnSettings = mergeColumnSettings(
+        columnSettings,
+        columns.map((column) => ({ key: column.key, label: column.title })),
+        visibleColumns
+    );
+    const activeColumnKeys = resolveVisibleColumnKeys(effectiveColumnSettings, []);
+    const activeColumns = activeColumnKeys
+        .map((key) => columns.find((col) => col.key === key))
+        .filter((col): col is SidebarColumn => Boolean(col));
 
     const inlineControlHeight = Math.max(20, Math.min(24, viewport.rowHeight - 6));
 
@@ -657,13 +666,13 @@ export const UiSidebar: React.FC = () => {
                 overflow: 'hidden'
             }}>
                 {
-                    activeColumns.map((col, idx) => {
+                    activeColumns.map((col) => {
                         const sortConfig = useTaskStore.getState().sortConfig;
                         const sortField = getSortField(col.key);
                         const isSorted = sortConfig?.key === sortField;
                         return (
                             <div
-                                key={idx}
+                                key={col.key}
                                 data-testid={`sidebar-header-${col.key}`}
                                 style={{
                                     width: col.width,

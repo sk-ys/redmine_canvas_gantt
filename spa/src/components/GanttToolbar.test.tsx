@@ -10,6 +10,9 @@ import { useBaselineStore } from '../stores/BaselineStore';
 import type { GanttExportHandle } from '../export/types';
 import { apiClient } from '../api/client';
 import '../stores/preferencesWatcher';
+import { resetCanvasGanttTestState } from '../test/testSetup';
+import { setVisibleColumnsForTest } from '../test/columnTestHelpers';
+import type { CustomFieldMeta } from '../types/editMeta';
 
 vi.mock('../utils/navigation', () => ({
     navigateToRedminePath: vi.fn()
@@ -37,33 +40,7 @@ describe('GanttToolbar shortcuts', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        window.localStorage.clear();
-        window.RedmineCanvasGantt = {
-            projectId: 1,
-            projectPath: '/projects/ecookbook',
-            issueListPath: '/projects/ecookbook/issues',
-            newIssuePath: '/projects/ecookbook/issues/new',
-            canvasGanttPath: '/projects/ecookbook/canvas_gantt',
-            apiBase: '',
-            redmineBase: '',
-            authToken: '',
-            apiKey: '',
-            nonWorkingWeekDays: [],
-            i18n: {},
-            settings: {
-                ...(window.RedmineCanvasGantt?.settings ?? {}),
-            }
-        };
-        const config = getCanvasGanttConfig();
-        window.RedmineCanvasGantt = {
-            ...config,
-            settings: {
-                ...(config.settings ?? {}),
-            }
-        };
-        useTaskStore.setState(useTaskStore.getInitialState(), true);
-        useUIStore.setState(useUIStore.getInitialState(), true);
-        useBaselineStore.setState(useBaselineStore.getInitialState(), true);
+        resetCanvasGanttTestState();
     });
 
     const setStatusFilterState = (selectedStatusIds: number[] = []) => {
@@ -594,7 +571,8 @@ describe('GanttToolbar shortcuts', () => {
             modifiedTaskIds: new Set(),
             autoSave: true
         });
-        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'] });
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
 
         render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
 
@@ -603,7 +581,228 @@ describe('GanttToolbar shortcuts', () => {
         expect(screen.getByLabelText('Notifications')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /reset/i }));
-        expect(useUIStore.getState().visibleColumns).toEqual(['notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone']);
+        expect(useUIStore.getState().visibleColumns).toEqual(['id', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone']);
+    });
+
+    it('toggles category column when clicking the row label text', () => {
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        fireEvent.click(screen.getByText('Category'));
+
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'category')?.visible).toBe(true);
+        expect(useUIStore.getState().visibleColumns).toContain('category');
+    });
+
+    it('toggles category column when clicking the row background', () => {
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        fireEvent.click(screen.getByText('Category'));
+
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'category')?.visible).toBe(true);
+        expect(useUIStore.getState().visibleColumns).toContain('category');
+    });
+
+    it('toggles category column when clicking its checkbox', () => {
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        fireEvent.click(screen.getByLabelText('Category'));
+
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'category')?.visible).toBe(true);
+        expect(useUIStore.getState().visibleColumns).toContain('category');
+    });
+
+    it('drags category column to a new position', () => {
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'category', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'category', 'status'], columnSettings });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        const categoryRow = screen.getByText('Category').closest('[role="button"]');
+        const statusRow = screen.getByText('Status').closest('[role="button"]');
+        if (!categoryRow || !statusRow) throw new Error('column rows not found');
+
+        fireEvent.dragStart(categoryRow);
+        fireEvent.dragOver(statusRow);
+        fireEvent.drop(statusRow);
+        fireEvent.dragEnd(categoryRow);
+
+        expect(useUIStore.getState().columnSettings.map((column) => column.key)).toEqual([
+            'id',
+            'subject',
+            'notification',
+            'project',
+            'tracker',
+            'category',
+            'status',
+            'priority',
+            'assignee',
+            'author',
+            'startDate',
+            'dueDate',
+            'estimatedHours',
+            'ratioDone',
+            'spentHours',
+            'version',
+            'createdOn',
+            'updatedOn'
+        ]);
+        expect(useUIStore.getState().visibleColumns).toEqual(['id', 'subject', 'category', 'status']);
+    });
+
+    it('toggles custom field columns in the column menu', () => {
+        const customFields: CustomFieldMeta[] = [
+            { id: 101, name: 'Client Code', fieldFormat: 'string', isRequired: false }
+        ];
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true,
+            customFields
+        });
+
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        fireEvent.click(screen.getByText('Client Code'));
+
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'cf:101')?.visible).toBe(true);
+        expect(useUIStore.getState().visibleColumns).toContain('cf:101');
+    });
+
+    it('drags custom field columns in the column menu', () => {
+        const customFields: CustomFieldMeta[] = [{ id: 101, name: 'Client Code', fieldFormat: 'string', isRequired: false } as CustomFieldMeta];
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true,
+            customFields
+        });
+
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        fireEvent.click(screen.getByText('Client Code'));
+        const customRow = screen.getByText('Client Code').closest('[role="button"]');
+        const statusRow = screen.getByText('Status').closest('[role="button"]');
+        if (!customRow || !statusRow) throw new Error('column rows not found');
+
+        fireEvent.dragStart(customRow);
+        fireEvent.dragOver(statusRow);
+        fireEvent.drop(statusRow);
+        fireEvent.dragEnd(customRow);
+
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'cf:101')?.visible).toBe(true);
+        expect(useUIStore.getState().visibleColumns).toContain('cf:101');
+    });
+
+    it('toggles assignee filter items when clicking the label text', () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [
+                { id: '1', subject: 'Task 1', assignedToId: 10, assignedToName: 'User A', statusId: 1, lockVersion: 0, editable: true, rowIndex: 0, hasChildren: false },
+                { id: '2', subject: 'Task 2', assignedToId: 11, assignedToName: 'User B', statusId: 1, lockVersion: 0, editable: true, rowIndex: 1, hasChildren: false }
+            ] as never,
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Assignee Filter'));
+        fireEvent.click(screen.getByText('User A'));
+
+        expect(useTaskStore.getState().selectedAssigneeIds).toContain(10);
     });
 
     it('toggles completed and incomplete status groups', () => {

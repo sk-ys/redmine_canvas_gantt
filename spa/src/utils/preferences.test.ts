@@ -56,7 +56,7 @@ describe('Preferences storage', () => {
 
         const raw = window.localStorage.getItem('canvasGantt:preferences');
         const parsed = raw ? JSON.parse(raw) : null;
-        expect(parsed?.version).toBe(2);
+        expect(parsed?.version).toBe(3);
         expect(parsed?.projects?.['project:1']?.selectedProjectIds).toBeUndefined();
     });
 

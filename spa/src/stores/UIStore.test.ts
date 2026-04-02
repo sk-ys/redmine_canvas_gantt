@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useUIStore } from './UIStore';
+import { buildColumnSettingsFromVisibleKeys } from '../components/sidebar/sidebarColumnSettings';
+import { getColumnDefinitions } from '../components/sidebar/sidebarColumnCatalog';
 
 describe('UIStore', () => {
     beforeEach(() => {
@@ -94,6 +96,15 @@ describe('UIStore', () => {
         useUIStore.getState().setSidebarResizing(false);
         expect(useUIStore.getState().issueDialogUrl).toBeNull();
         expect(useUIStore.getState().isSidebarResizing).toBe(false);
+    });
+
+    it('keeps columnSettings aligned with visibleColumns updates', () => {
+        const columnSettings = buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'subject', 'status']);
+
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        expect(useUIStore.getState().columnSettings.filter((column) => column.visible).map((column) => column.key).sort()).toEqual(['id', 'status', 'subject'].sort());
+        expect(useUIStore.getState().visibleColumns.sort()).toEqual(['id', 'status', 'subject'].sort());
     });
 
     it('resets relation preferences including auto schedule move mode', () => {
