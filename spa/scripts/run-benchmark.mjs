@@ -209,7 +209,7 @@ const measureScenario = async (browser, scenario) => {
     });
 
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-testid="cell-1-subject"]', { state: 'visible', timeout: 120_000 });
+    await page.waitForSelector('[data-testid="task-row-1"]', { state: 'visible', timeout: 120_000 });
     await page.waitForFunction(
       ({ expectedCanvasCount }) => document.querySelectorAll('.rcg-gantt-viewport canvas').length === expectedCanvasCount,
       { expectedCanvasCount: EXPECTED_CANVAS_COUNT },

@@ -69,7 +69,8 @@ export const saveLastUsedSharedQueryState = (
 
     if (!normalized) {
         if (!envelope.projects[projectKey]) return;
-        const { [projectKey]: _removed, ...rest } = envelope.projects;
+        const rest = { ...envelope.projects };
+        delete rest[projectKey];
         persistEnvelope({ version: STORAGE_VERSION, projects: rest });
         return;
     }
@@ -90,6 +91,7 @@ export const clearLastUsedSharedQueryState = (projectId?: string | number | null
     const envelope = loadEnvelope();
     if (!envelope?.projects[projectKey]) return;
 
-    const { [projectKey]: _removed, ...rest } = envelope.projects;
+    const rest = { ...envelope.projects };
+    delete rest[projectKey];
     persistEnvelope({ version: STORAGE_VERSION, projects: rest });
 };
