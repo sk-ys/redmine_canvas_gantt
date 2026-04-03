@@ -5,7 +5,8 @@ import { useBaselineStore } from '../../stores/BaselineStore';
 import { getMinFiniteStartDate } from '../../utils/taskRange';
 import type { CustomFieldMeta } from '../../types/editMeta';
 import type { Relation, Task, Version, Viewport } from '../../types';
-import { readIssueQueryParamsFromUrl } from '../../utils/queryParams';
+import { replaceIssueQueryParamsInUrl, resolveInitialSharedQueryState } from '../../utils/queryParams';
+import { loadLastUsedSharedQueryState } from '../../utils/sharedQueryState';
 
 type Params = {
     viewportFromStorage: boolean;
@@ -31,9 +32,18 @@ export const useInitialGanttData = ({
         hasFetched.current = true;
 
         import('../../api/client').then(({ apiClient }) => {
+            const initialSharedQueryState = resolveInitialSharedQueryState(
+                window.location.search,
+                loadLastUsedSharedQueryState()
+            );
+
+            if (initialSharedQueryState.source === 'storage') {
+                replaceIssueQueryParamsInUrl(initialSharedQueryState.state);
+            }
+
             apiClient.fetchData({
-                rawSearch: window.location.search,
-                query: readIssueQueryParamsFromUrl()
+                rawSearch: initialSharedQueryState.source === 'url' ? window.location.search : undefined,
+                query: initialSharedQueryState.state
             }).then(data => {
                 useTaskStore.getState().applyResolvedQueryState(data.initialState);
                 setTasks(data.tasks);

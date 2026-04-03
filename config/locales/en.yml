@@ -30,7 +30,7 @@ en:
   label_edit_query_in_redmine: "Edit Query in Redmine"
   label_edit_query_in_redmine_tooltip: "Edit filter conditions in the standard Redmine issue list"
   label_open_in_canvas_gantt: "Open in Canvas Gantt"
-  label_open_in_canvas_gantt_tooltip: "Open Canvas Gantt with the current saved query"
+  label_open_in_canvas_gantt_tooltip: "Open Canvas Gantt with the current issue list query"
   label_canvas_gantt_query_requires_save: "To reuse this query in Canvas Gantt, save it first."
   label_critical_path_total_slack: "Critical path task. Total slack: %{days} working day(s)."
 

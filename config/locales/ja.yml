@@ -32,7 +32,7 @@ ja:
   label_edit_query_in_redmine: "Redmineでクエリ編集"
   label_edit_query_in_redmine_tooltip: "Redmine標準画面でフィルタ条件を編集します"
   label_open_in_canvas_gantt: "Canvas Ganttで開く"
-  label_open_in_canvas_gantt_tooltip: "現在の保存済みクエリ条件で Canvas Gantt を開きます"
+  label_open_in_canvas_gantt_tooltip: "現在のチケット一覧条件で Canvas Gantt を開きます"
   label_canvas_gantt_query_requires_save: "Canvas Gantt で再利用するには、まずクエリを保存してください。"
   label_critical_path_total_slack: "クリティカルパスのタスクです。総余裕期間: %{days} 稼働日。"
 

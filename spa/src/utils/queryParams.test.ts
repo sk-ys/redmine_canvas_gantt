@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildRedmineIssueQueryParams,
+    hasSharedQueryStateInUrl,
+    normalizeResolvedQueryState,
     parseResolvedQueryState,
     readIssueQueryParamsFromUrl,
     replaceIssueQueryParamsInUrl,
+    resolveInitialSharedQueryState,
     toBusinessQueryState,
     toResolvedQueryStateFromStore
 } from './queryParams';
@@ -91,6 +94,85 @@ describe('readIssueQueryParamsFromUrl', () => {
             sortConfig: undefined,
             groupBy: null,
             showSubprojects: undefined
+        });
+    });
+});
+
+describe('normalizeResolvedQueryState', () => {
+    it('drops default-equivalent values', () => {
+        expect(normalizeResolvedQueryState({
+            queryId: null,
+            selectedStatusIds: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            sortConfig: { key: 'startDate', direction: 'asc' },
+            groupBy: 'project',
+            showSubprojects: true
+        })).toBeUndefined();
+    });
+
+    it('keeps meaningful shared state values', () => {
+        expect(normalizeResolvedQueryState({
+            queryId: 12,
+            selectedStatusIds: [1],
+            groupBy: 'assignee',
+            showSubprojects: false
+        })).toEqual({
+            queryId: 12,
+            selectedStatusIds: [1],
+            groupBy: 'assignee',
+            showSubprojects: false
+        });
+    });
+});
+
+describe('hasSharedQueryStateInUrl', () => {
+    it('returns false for a bare Canvas Gantt URL', () => {
+        expect(hasSharedQueryStateInUrl('')).toBe(false);
+    });
+
+    it('treats explicit standard filter params as shared URL input even when they clear filters', () => {
+        expect(hasSharedQueryStateInUrl('?set_filter=1&f[]=status_id&op[status_id]=*')).toBe(true);
+    });
+
+    it('returns true for a persisted query id', () => {
+        expect(hasSharedQueryStateInUrl('?query_id=7')).toBe(true);
+    });
+});
+
+describe('resolveInitialSharedQueryState', () => {
+    it('uses stored state for a bare Canvas Gantt URL', () => {
+        expect(resolveInitialSharedQueryState('', {
+            queryId: 12,
+            selectedStatusIds: [1],
+            groupBy: 'assignee'
+        })).toEqual({
+            state: {
+                queryId: 12,
+                selectedStatusIds: [1],
+                groupBy: 'assignee'
+            },
+            source: 'storage'
+        });
+    });
+
+    it('prefers explicit URL state over stored state', () => {
+        expect(resolveInitialSharedQueryState('?query_id=9', {
+            queryId: 12,
+            selectedStatusIds: [1]
+        })).toEqual({
+            state: {
+                queryId: 9,
+                selectedStatusIds: undefined,
+                selectedAssigneeIds: undefined,
+                selectedProjectIds: undefined,
+                selectedVersionIds: undefined,
+                sortConfig: undefined,
+                groupBy: null,
+                showSubprojects: undefined
+            },
+            source: 'url'
         });
     });
 });

@@ -103,9 +103,9 @@ Canvas Gantt では、共有すべき業務条件と個人向けの UI 状態を
 
 - 共有用の業務条件は URL パラメータと `query_id` から解決されます
 - ズーム、スクロール位置、サイドバー幅、表示列などの UI 状態は `localStorage` に保存されます
-- 共有クエリ条件は `localStorage` からは復元しません
+- `Canvas Gantt` タブが bare `/canvas_gantt` を開いた場合に限り、共有クエリ条件はそのプロジェクトで最後に使った状態を `localStorage` から復元します
 - 同じ共有条件が複数ソースにある場合の優先順位は次の通りです
-  URL パラメータ -> 保存済みクエリ (`query_id`) -> デフォルト値
+  URL パラメータ -> 保存済みクエリ (`query_id`) -> project 単位の last-used shared state -> デフォルト値
 
 ### クエリ編集の流れ
 
@@ -113,10 +113,13 @@ Canvas Gantt は Redmine 標準のクエリ編集 UI を再実装しません。
 
 - Canvas Gantt のツールバーにある **Redmineでクエリ編集** で、現在のプロジェクトの標準チケット一覧を開きます
 - Redmine 標準の一覧画面でフィルタ条件を調整し、標準の **Save** でクエリを保存します
-- 保存後、一覧画面の **Canvas Ganttで開く** で `query_id` 付きの Canvas Gantt に戻ります
-- 未保存クエリには `query_id` が無いため、そのままは戻らず、まず保存を促す表示になります
+- 一覧画面の **Canvas Ganttで開く** で、現在のチケット一覧 URL 状態を引き継いだまま Canvas Gantt に戻ります
+- 保存済みクエリを表示している場合は、戻り先 URL に `query_id` が含まれます
+- 未保存の標準フィルタを表示している場合は、対応している Redmine 標準 filter パラメータをそのまま引き継ぎます
 
 現在の表示が保存済みクエリそのものと一致している場合は `query_id` だけで十分です。保存済みクエリを開いたあとに Canvas Gantt 側で共有条件を追加変更した場合は、ツールバーから Redmine 一覧へ戻る際に `query_id` に加えて Redmine 標準の filter パラメータも付与し、可能な範囲で同じ表示条件を再現します。
+
+project menu の `Canvas Gantt` タブが shared query なしの bare URL を開いた場合は、その project で最後に使った shared filter 状態を復元し、browser URL も canonical な shared query params に書き換えます。
 
 ### 対応している共有パラメータ
 

@@ -103,9 +103,9 @@ Canvas Gantt separates shared business conditions from personal UI preferences.
 
 - Shared business conditions are resolved from the URL and optional `query_id`
 - Personal UI state such as zoom, viewport, sidebar width, and visible columns stays in `localStorage`
-- Shared query conditions do not fall back to `localStorage`
+- When the Canvas Gantt tab opens a bare `/canvas_gantt` URL, shared query conditions fall back to the last-used state stored in `localStorage` for that project
 - When the same shared condition is provided by multiple sources, the precedence is:
-  URL parameters -> saved query (`query_id`) -> defaults
+  URL parameters -> saved query (`query_id`) -> project-scoped last-used shared state -> defaults
 
 ### Query editing flow
 
@@ -113,10 +113,13 @@ Canvas Gantt does not reimplement Redmine's query editor. Query creation, editin
 
 - Use **Edit Query in Redmine** in the Canvas Gantt toolbar to open the standard issue list for the current project
 - Adjust filters in the Redmine issue list and save the query with Redmine's built-in **Save** action
-- After the query is saved, use **Open in Canvas Gantt** in the issue list to return to Canvas Gantt with `query_id`
-- If the query is not saved yet, Canvas Gantt does not receive a `query_id`, so the issue list shows a save notice instead of returning directly
+- Use **Open in Canvas Gantt** in the issue list to return to Canvas Gantt with the current issue-list URL state
+- When the issue list is showing a saved query, the return link includes `query_id`
+- When the issue list is showing an unsaved standard filter, the return link carries the supported Redmine-standard filter parameters directly
 
 `query_id` alone is enough only when the current view exactly matches the saved query. If Canvas Gantt adds extra shared filters on top of that saved query, the toolbar sends `query_id` plus standard Redmine filter parameters so the issue list can reproduce the same view as closely as possible.
+
+When the project menu opens a bare `Canvas Gantt` URL with no shared query input, Canvas Gantt restores the last-used shared filter state for that project and rewrites the browser URL to the canonical shared query params.
 
 ### Supported shared parameters
 

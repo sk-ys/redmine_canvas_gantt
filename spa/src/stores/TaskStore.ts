@@ -17,12 +17,12 @@ import { computeCenteredViewport } from './taskStore/viewport';
 import { buildMoveTaskResult, saveModifiedTasks } from './taskStore/taskPersistence';
 import { runParentMove } from './taskStore/parentMove';
 import { buildUniformExpansionMaps, initializeExpansionMaps } from './taskStore/expansion';
+import { syncSharedQueryState } from './taskStore/querySync';
 import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
 import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
 import { AutoScheduleMoveMode } from '../types/constraints';
 import {
     readIssueQueryParamsFromUrl,
-    replaceIssueQueryParamsInUrl,
     toBusinessQueryState,
     toResolvedQueryStateFromStore,
     type ResolvedQueryState
@@ -239,12 +239,6 @@ const buildDerivedTaskState = (
         rowCount: layout.rowCount,
         ...schedulingSummary
     };
-};
-
-type QuerySyncState = Pick<TaskState, 'activeQueryId' | 'selectedStatusIds' | 'selectedAssigneeIds' | 'selectedProjectIds' | 'selectedVersionIds' | 'sortConfig' | 'groupByProject' | 'groupByAssignee' | 'showSubprojects'>;
-
-const syncQueryStateUrl = (state: QuerySyncState) => {
-    replaceIssueQueryParamsInUrl(toResolvedQueryStateFromStore(state));
 };
 
 const buildAllExpandedStates = (state: TaskState, expanded: boolean) => {
@@ -517,7 +511,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl(nextState);
+        syncSharedQueryState(nextState);
         return nextState;
     }),
     setCustomFields: (customFields) => set((state) => {
@@ -529,7 +523,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }),
     setSelectedStatusFromServer: (ids) => {
         set({ selectedStatusIds: ids });
-        syncQueryStateUrl(get());
+        syncSharedQueryState(get());
         void get().refreshData().catch((error) => console.error('Failed to refresh data', error));
     },
     setShowVersions: (show) => set((state) => {
@@ -888,7 +882,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         return nextState;
     }),
     setGroupByAssignee: (grouped) => set((state) => {
@@ -907,7 +901,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         return nextState;
     }),
     setOrganizeByDependency: (enabled) => set((state) => {
@@ -1041,7 +1035,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         queueRefreshData(get().refreshData);
         return nextState;
     }),
@@ -1054,7 +1048,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         queueRefreshData(get().refreshData);
         return nextState;
     }),
@@ -1066,7 +1060,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         queueRefreshData(get().refreshData);
         return nextState;
     }),
@@ -1183,7 +1177,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         return nextState;
     }),
     refreshData: async () => {

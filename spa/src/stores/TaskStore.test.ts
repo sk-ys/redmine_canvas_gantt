@@ -5,6 +5,7 @@ import { ZOOM_SCALES } from '../utils/grid';
 import { apiClient } from '../api/client';
 import { useUIStore } from './UIStore';
 import { AutoScheduleMoveMode } from '../types/constraints';
+import { loadLastUsedSharedQueryState } from '../utils/sharedQueryState';
 
 vi.mock('../api/client', () => ({
     apiClient: {
@@ -144,6 +145,7 @@ describe('TaskStore zoom behavior', () => {
 
 describe('TaskStore assignee filter', () => {
     beforeEach(() => {
+        window.localStorage.clear();
         useTaskStore.setState(useTaskStore.getInitialState(), true);
     });
 
@@ -191,6 +193,43 @@ describe('TaskStore assignee filter', () => {
         expect(useTaskStore.getState().groupByProject).toBe(false);
         expect(headerRows.length).toBe(2);
         expect(headerRows.every((row) => row.type === 'header' && row.groupKind === 'assignee')).toBe(true);
+    });
+
+    it('setSelectedAssigneeIds は last-used shared query state を保存する', () => {
+        const mockTasks: Task[] = [
+            buildTask({ id: '1', subject: 'Task 1', assignedToId: 10, assignedToName: 'User A' })
+        ];
+
+        const { setTasks, setSelectedAssigneeIds } = useTaskStore.getState();
+        setTasks(mockTasks);
+        setSelectedAssigneeIds([10]);
+
+        expect(loadLastUsedSharedQueryState(1)).toEqual({
+            selectedAssigneeIds: [10]
+        });
+    });
+});
+
+describe('TaskStore shared query persistence', () => {
+    beforeEach(() => {
+        window.localStorage.clear();
+        useTaskStore.setState(useTaskStore.getInitialState(), true);
+    });
+
+    it('applyResolvedQueryState は query_id と shared state を保存する', () => {
+        useTaskStore.getState().applyResolvedQueryState({
+            queryId: 12,
+            selectedStatusIds: [1, 2],
+            groupBy: 'assignee',
+            showSubprojects: false
+        });
+
+        expect(loadLastUsedSharedQueryState(1)).toEqual({
+            queryId: 12,
+            selectedStatusIds: [1, 2],
+            groupBy: 'assignee',
+            showSubprojects: false
+        });
     });
 });
 
