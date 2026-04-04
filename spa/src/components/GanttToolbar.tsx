@@ -1785,7 +1785,6 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
 
                 {modifiedTaskIds.size > 0 && !autoSave && (
                     <>
-                        <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
                         <button
                             onClick={() => void saveChanges()}
                             title="Save changes"
@@ -1841,7 +1840,6 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                     onToggleBaseline={() => toggleBaseline()}
                 />
 
-                <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
                 <button
                     onClick={() => setAutoSave(!autoSave)}
                     title={autoSave ? (i18n.t('tooltip_auto_save_on') || "Auto Save: ON (Changes saved immediately)") : (i18n.t('tooltip_auto_save_off') || "Auto Save: OFF (Use Save button)")}
@@ -1862,8 +1860,6 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                     </svg>
                 </button>
-
-                <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
 
                 <button
                     onClick={openHelpDialog}

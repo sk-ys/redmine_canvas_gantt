@@ -30,7 +30,6 @@ export const BaselineControls: React.FC<BaselineControlsProps> = ({
 
     return (
         <>
-            <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
             <div ref={baselineSaveMenuRef} style={{ position: 'relative' }}>
                 <button
                     type="button"
@@ -101,7 +100,6 @@ export const BaselineControls: React.FC<BaselineControlsProps> = ({
                 )}
             </div>
 
-            <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
             <button
                 type="button"
                 onClick={onToggleBaseline}
