@@ -1,4 +1,13 @@
-import type { Relation, Project, Task, Version, TaskStatus } from '../types';
+import type {
+    FilterAssigneeOption,
+    FilterOptions,
+    FilterProjectOption,
+    Relation,
+    Project,
+    Task,
+    Version,
+    TaskStatus
+} from '../types';
 import type { TaskEditMeta, InlineEditSettings, CustomFieldMeta, EditOption } from '../types/editMeta';
 import type { BaselineSaveScope, BaselineSnapshot, BaselineTaskState } from '../types/baseline';
 import { buildIssueQueryParams, parseResolvedQueryState, type ResolvedQueryState } from '../utils/queryParams';
@@ -40,6 +49,7 @@ interface ApiData {
     tasks: Task[];
     relations: Relation[];
     versions: Version[];
+    filterOptions: FilterOptions;
     project: Project;
     statuses: TaskStatus[];
     customFields: CustomFieldMeta[];
@@ -179,6 +189,85 @@ const parseCustomFieldMeta = (value: unknown): CustomFieldMeta | null => {
         minLength,
         maxLength,
         possibleValues
+    };
+};
+
+const parseFilterProjectOption = (value: unknown): FilterProjectOption | null => {
+    const record = asRecord(value);
+    if (!record) return null;
+    const id = record.id;
+    const name = record.name;
+    if ((typeof id !== 'number' && typeof id !== 'string') || typeof name !== 'string') return null;
+    return { id: String(id), name };
+};
+
+const parseFilterAssigneeOption = (value: unknown): FilterAssigneeOption | null => {
+    const record = asRecord(value);
+    if (!record) return null;
+
+    const id = record.id;
+    const name = record.name;
+    const projectIdsRaw = Array.isArray(record.project_ids) ? record.project_ids : [];
+
+    if (id !== null && typeof id !== 'number' && typeof id !== 'string') return null;
+    if (name !== null && name !== undefined && typeof name !== 'string') return null;
+
+    return {
+        id: id === null || id === undefined ? null : Number(id),
+        name: typeof name === 'string' ? name : null,
+        projectIds: projectIdsRaw
+            .filter((projectId): projectId is string | number => typeof projectId === 'string' || typeof projectId === 'number')
+            .map((projectId) => String(projectId))
+    };
+};
+
+const deriveFilterOptionsFromTasks = (tasks: Task[]): FilterOptions => {
+    const projects = new Map<string, string>();
+    const assignees = new Map<number | null, { name: string | null; projectIds: Set<string> }>();
+
+    tasks.forEach((task) => {
+        if (task.projectId && task.projectName) {
+            projects.set(task.projectId, task.projectName);
+        }
+
+        const assigneeId = task.assignedToId ?? null;
+        const entry = assignees.get(assigneeId) ?? {
+            name: assigneeId === null ? null : (task.assignedToName ?? null),
+            projectIds: new Set<string>()
+        };
+        if (assigneeId !== null && entry.name === null && task.assignedToName) {
+            entry.name = task.assignedToName;
+        }
+        if (task.projectId) {
+            entry.projectIds.add(task.projectId);
+        }
+        assignees.set(assigneeId, entry);
+    });
+
+    return {
+        projects: Array.from(projects.entries()).map(([id, name]) => ({ id, name })),
+        assignees: Array.from(assignees.entries()).map(([id, entry]) => ({
+            id,
+            name: entry.name,
+            projectIds: Array.from(entry.projectIds)
+        }))
+    };
+};
+
+const parseFilterOptions = (value: unknown, tasks: Task[]): FilterOptions => {
+    const fallback = deriveFilterOptionsFromTasks(tasks);
+    const record = asRecord(value);
+    if (!record) return fallback;
+
+    const projectsRaw = Array.isArray(record.projects) ? record.projects : [];
+    const assigneesRaw = Array.isArray(record.assignees) ? record.assignees : [];
+
+    const projects = projectsRaw.map(parseFilterProjectOption).filter((entry): entry is FilterProjectOption => entry !== null);
+    const assignees = assigneesRaw.map(parseFilterAssigneeOption).filter((entry): entry is FilterAssigneeOption => entry !== null);
+
+    return {
+        projects: projects.length > 0 ? projects : fallback.projects,
+        assignees: assignees.length > 0 ? assignees : fallback.assignees
     };
 };
 
@@ -398,6 +487,7 @@ export const apiClient = {
         const warnings = Array.isArray(data.warnings)
             ? data.warnings.filter((entry): entry is string => typeof entry === 'string')
             : [];
+        const filterOptions = parseFilterOptions(data.filter_options, tasks);
         const baselinePayload = parseBaselineSnapshot(data.baseline);
         const baseline = baselinePayload.snapshot;
         const mergedWarnings = [...warnings, ...baselinePayload.warnings];
@@ -406,6 +496,7 @@ export const apiClient = {
             tasks,
             relations,
             versions,
+            filterOptions,
             statuses,
             customFields,
             project,

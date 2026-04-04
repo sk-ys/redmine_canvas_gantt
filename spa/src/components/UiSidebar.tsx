@@ -1316,6 +1316,7 @@ export const UiSidebar: React.FC = () => {
                                                             value={task.fixedVersionId ? Number(task.fixedVersionId) : null}
                                                             options={filteredVersions}
                                                             includeUnassigned
+                                                            emptyOptionLabel={i18n.t('label_none') || '(No version)'}
                                                             controlHeight={inlineControlHeight}
                                                             onCancel={close}
                                                             onCommit={async (next) => {

@@ -46,6 +46,10 @@ RSpec.describe CanvasGanttsController, type: :controller do
         controller.instance_variable_set(:@permissions, { editable: true, viewable: true, baseline_editable: true })
       end
       allow(controller).to receive(:descendant_project_ids).and_return([1, 2])
+      filter_option_project = double('ProjectOption', id: 1, name: 'Demo')
+      filter_option_issue = double('FilterOptionIssue')
+      allow(controller).to receive(:filter_option_projects).with([1, 2]).and_return([filter_option_project])
+      allow(controller).to receive(:filter_option_issues).with([1, 2]).and_return([filter_option_issue])
       allow(controller).to receive(:query_state_resolver).and_return(resolver)
       allow(controller).to receive(:baseline_repository).and_return(baseline_repository)
       issue = double('Issue', project_id: 1)
@@ -66,6 +70,8 @@ RSpec.describe CanvasGanttsController, type: :controller do
         permissions: { editable: true, viewable: true, baseline_editable: true },
         project_ids: [1, 2],
         issues: [issue],
+        filter_option_projects: [filter_option_project],
+        filter_option_issues: [filter_option_issue],
         initial_state: { query_id: 7 },
         warnings: ['Invalid query_id ignored', 'Baseline warning'],
         baseline: baseline_snapshot
@@ -74,6 +80,10 @@ RSpec.describe CanvasGanttsController, type: :controller do
         custom_fields: [{ id: 15 }],
         relations: [{ id: 20 }],
         versions: [{ id: 30 }],
+        filter_options: {
+          projects: [{ id: 1, name: 'Demo' }],
+          assignees: [{ id: 7, name: 'Alice', project_ids: ['1'] }]
+        },
         statuses: [{ id: 40 }],
         project: { id: 1, name: 'Demo' },
         permissions: { editable: true, viewable: true, baseline_editable: true },
@@ -86,8 +96,12 @@ RSpec.describe CanvasGanttsController, type: :controller do
 
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body)
-      expect(body.keys).to contain_exactly('tasks', 'custom_fields', 'relations', 'versions', 'statuses', 'project', 'permissions', 'initial_state', 'baseline', 'warnings')
+      expect(body.keys).to contain_exactly('tasks', 'custom_fields', 'relations', 'versions', 'filter_options', 'statuses', 'project', 'permissions', 'initial_state', 'baseline', 'warnings')
       expect(body['permissions']).to eq('editable' => true, 'viewable' => true, 'baseline_editable' => true)
+      expect(body['filter_options']).to eq(
+        'projects' => [{ 'id' => 1, 'name' => 'Demo' }],
+        'assignees' => [{ 'id' => 7, 'name' => 'Alice', 'project_ids' => ['1'] }]
+      )
       expect(body['baseline']).to include('snapshot_id' => 'baseline-1', 'project_id' => 1)
       expect(body['warnings']).to contain_exactly('Invalid query_id ignored', 'Baseline warning')
     end
@@ -269,6 +283,8 @@ RSpec.describe CanvasGanttsController, type: :controller do
         expect(i18n_payload['label_total']).to eq(I18n.t(:label_total))
         expect(i18n_payload['label_workload']).to eq(I18n.t(:label_workload))
         expect(i18n_payload['label_show_workload']).to eq(I18n.t(:label_show_workload))
+        expect(i18n_payload['label_unassigned']).to eq(I18n.t(:label_unassigned))
+        expect(i18n_payload['label_none']).to eq('(未設定)')
         expect(i18n_payload['label_capacity_threshold']).to eq(I18n.t(:label_capacity_threshold))
         expect(i18n_payload['label_leaf_issues_only']).to eq(I18n.t(:label_leaf_issues_only))
         expect(i18n_payload['label_include_closed_issues']).to eq(I18n.t(:label_include_closed_issues))

@@ -9,9 +9,9 @@ type ColumnMenuItemProps = {
   isDropBefore: boolean;
   isPinned: boolean;
   onToggle: (key: string) => void;
-  onDragStart: (key: string, event: React.DragEvent<HTMLDivElement>) => void;
-  onDragOver: (key: string, event: React.DragEvent<HTMLDivElement>) => void;
-  onDrop: (key: string, event: React.DragEvent<HTMLDivElement>) => void;
+  onDragStart: (key: string, event: React.DragEvent<HTMLElement>) => void;
+  onDragOver: (key: string, event: React.DragEvent<HTMLElement>) => void;
+  onDrop: (key: string, event: React.DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
 };
 
@@ -28,40 +28,49 @@ export const ColumnMenuItem: React.FC<ColumnMenuItemProps> = ({
   onDragOver,
   onDrop,
   onDragEnd
-}) => (
-  <div
-    draggable={draggable}
-    role="button"
-    tabIndex={0}
-    onDragStart={(event) => onDragStart(columnKey, event)}
-    onDragOver={(event) => onDragOver(columnKey, event)}
-    onDrop={(event) => onDrop(columnKey, event)}
-    onDragEnd={onDragEnd}
-    onClick={(event) => {
-      const target = event.target as HTMLElement;
-      if (target.closest('button') || target.closest('input')) return;
-      onToggle(columnKey);
-    }}
-    onKeyDown={(event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onToggle(columnKey);
-      }
-    }}
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '4px 0',
-      color: '#444',
-      cursor: 'pointer',
-      userSelect: 'none',
-      opacity: isDragging ? 0.5 : 1,
-      borderTop: isDropBefore ? '1px solid #1a73e8' : '1px solid transparent'
-    }}
-  >
-    <span
-      aria-hidden="true"
+}) => {
+  const handleToggle = () => {
+    if (isPinned) return;
+    onToggle(columnKey);
+  };
+
+  return (
+    <div
+      role="button"
+      aria-disabled={isPinned}
+      tabIndex={isPinned ? -1 : 0}
+      onDragOver={(event) => onDragOver(columnKey, event)}
+      onDrop={(event) => onDrop(columnKey, event)}
+      onClick={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button') || target.closest('input')) return;
+        handleToggle();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleToggle();
+        }
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '4px 0',
+        color: '#444',
+        cursor: isPinned ? 'default' : 'pointer',
+        userSelect: 'none',
+        opacity: isDragging ? 0.5 : 1,
+        borderTop: isDropBefore ? '1px solid #1a73e8' : '1px solid transparent'
+      }}
+    >
+    <button
+      type="button"
+      draggable={draggable}
+      aria-label={`Reorder ${label}`}
+      onDragStart={(event) => onDragStart(columnKey, event)}
+      onDragEnd={onDragEnd}
+      onClick={(event) => event.stopPropagation()}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -71,19 +80,25 @@ export const ColumnMenuItem: React.FC<ColumnMenuItemProps> = ({
         flexShrink: 0,
         userSelect: 'none',
         WebkitUserSelect: 'none',
-        touchAction: 'none'
+        touchAction: 'none',
+        border: 'none',
+        background: 'transparent',
+        color: 'inherit',
+        cursor: draggable ? 'grab' : 'default',
+        padding: 0
       }}
     >
       ⋮⋮
-    </span>
+    </button>
     <input
       type="checkbox"
       checked={visible}
       aria-label={label}
-      onChange={() => onToggle(columnKey)}
+      onChange={handleToggle}
       disabled={isPinned}
       onClick={(event) => event.stopPropagation()}
     />
     <span style={{ flex: 1 }}>{label}</span>
-  </div>
-);
+    </div>
+  );
+};

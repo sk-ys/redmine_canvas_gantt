@@ -72,6 +72,22 @@ export interface Project {
     dueDate?: string;
 }
 
+export interface FilterProjectOption {
+    id: string;
+    name: string;
+}
+
+export interface FilterAssigneeOption {
+    id: number | null;
+    name: string | null;
+    projectIds: string[];
+}
+
+export interface FilterOptions {
+    projects: FilterProjectOption[];
+    assignees: FilterAssigneeOption[];
+}
+
 export interface TaskStatus {
     id: number;
     name: string;

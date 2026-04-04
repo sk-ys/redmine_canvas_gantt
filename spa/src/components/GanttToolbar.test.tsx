@@ -20,7 +20,8 @@ vi.mock('../utils/navigation', () => ({
 
 vi.mock('../api/client', () => ({
     apiClient: {
-        saveBaseline: vi.fn()
+        saveBaseline: vi.fn(),
+        fetchData: vi.fn()
     }
 }));
 
@@ -41,6 +42,16 @@ describe('GanttToolbar shortcuts', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         resetCanvasGanttTestState();
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [],
+            relations: [],
+            versions: [],
+            filterOptions: { projects: [], assignees: [] },
+            statuses: [],
+            customFields: [],
+            project: { id: '1', name: 'Project' },
+            permissions: { editable: true, viewable: true, baselineEditable: true }
+        });
     });
 
     const setStatusFilterState = (selectedStatusIds: number[] = []) => {
@@ -662,6 +673,88 @@ describe('GanttToolbar shortcuts', () => {
         expect(useUIStore.getState().visibleColumns).toContain('category');
     });
 
+    it('does not toggle a column when clicking its drag handle', () => {
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        fireEvent.click(screen.getByLabelText('Reorder Category'));
+
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'category')?.visible).toBe(false);
+        expect(useUIStore.getState().visibleColumns).not.toContain('category');
+    });
+
+    it('does not toggle the pinned task name column when clicking its row label', () => {
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        fireEvent.click(screen.getByText('Task Name'));
+
+        expect(screen.getByLabelText('Task Name')).toBeDisabled();
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'subject')?.visible).toBe(true);
+        expect(useUIStore.getState().visibleColumns).toContain('subject');
+    });
+
+    it('does not toggle the pinned task name column from keyboard interaction', () => {
+        const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
+
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [],
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Columns'));
+        const taskNameRow = screen.getByText('Task Name').closest('[role="button"]');
+        expect(taskNameRow).not.toBeNull();
+
+        fireEvent.keyDown(taskNameRow!, { key: 'Enter' });
+
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'subject')?.visible).toBe(true);
+        expect(useUIStore.getState().visibleColumns).toContain('subject');
+    });
+
     it('drags category column to a new position', () => {
         const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'category', 'status']);
         useUIStore.setState({ visibleColumns: ['id', 'subject', 'category', 'status'], columnSettings });
@@ -682,14 +775,13 @@ describe('GanttToolbar shortcuts', () => {
         render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
 
         fireEvent.click(screen.getByTitle('Columns'));
-        const categoryRow = screen.getByText('Category').closest('[role="button"]');
-        const statusRow = screen.getByText('Status').closest('[role="button"]');
-        if (!categoryRow || !statusRow) throw new Error('column rows not found');
+        const categoryHandle = screen.getByLabelText('Reorder Category');
+        const statusHandle = screen.getByLabelText('Reorder Status');
 
-        fireEvent.dragStart(categoryRow);
-        fireEvent.dragOver(statusRow);
-        fireEvent.drop(statusRow);
-        fireEvent.dragEnd(categoryRow);
+        fireEvent.dragStart(categoryHandle);
+        fireEvent.dragOver(statusHandle);
+        fireEvent.drop(statusHandle);
+        fireEvent.dragEnd(categoryHandle);
 
         expect(useUIStore.getState().columnSettings.map((column) => column.key)).toEqual([
             'id',
@@ -740,6 +832,12 @@ describe('GanttToolbar shortcuts', () => {
         fireEvent.click(screen.getByTitle('Columns'));
         fireEvent.click(screen.getByText('Client Code'));
 
+        const storedPreferences = JSON.parse(window.localStorage.getItem('canvasGantt:preferences') ?? '{}') as {
+            projects?: Record<string, { visibleColumns?: string[] }>;
+        };
+
+        expect(storedPreferences.projects?.['project:1']?.visibleColumns).toContain('cf:101');
+
         expect(useUIStore.getState().columnSettings.find((column) => column.key === 'cf:101')?.visible).toBe(true);
         expect(useUIStore.getState().visibleColumns).toContain('cf:101');
     });
@@ -767,14 +865,13 @@ describe('GanttToolbar shortcuts', () => {
 
         fireEvent.click(screen.getByTitle('Columns'));
         fireEvent.click(screen.getByText('Client Code'));
-        const customRow = screen.getByText('Client Code').closest('[role="button"]');
-        const statusRow = screen.getByText('Status').closest('[role="button"]');
-        if (!customRow || !statusRow) throw new Error('column rows not found');
+        const customHandle = screen.getByLabelText('Reorder Client Code');
+        const statusHandle = screen.getByLabelText('Reorder Status');
 
-        fireEvent.dragStart(customRow);
-        fireEvent.dragOver(statusRow);
-        fireEvent.drop(statusRow);
-        fireEvent.dragEnd(customRow);
+        fireEvent.dragStart(customHandle);
+        fireEvent.dragOver(statusHandle);
+        fireEvent.drop(statusHandle);
+        fireEvent.dragEnd(customHandle);
 
         expect(useUIStore.getState().columnSettings.find((column) => column.key === 'cf:101')?.visible).toBe(true);
         expect(useUIStore.getState().visibleColumns).toContain('cf:101');
@@ -784,8 +881,8 @@ describe('GanttToolbar shortcuts', () => {
         useTaskStore.setState({
             filterText: '',
             allTasks: [
-                { id: '1', subject: 'Task 1', assignedToId: 10, assignedToName: 'User A', statusId: 1, lockVersion: 0, editable: true, rowIndex: 0, hasChildren: false },
-                { id: '2', subject: 'Task 2', assignedToId: 11, assignedToName: 'User B', statusId: 1, lockVersion: 0, editable: true, rowIndex: 1, hasChildren: false }
+                { id: '1', subject: 'Task 1', projectId: 'p1', projectName: 'Alpha', assignedToId: 10, assignedToName: 'User A', statusId: 1, lockVersion: 0, editable: true, rowIndex: 0, hasChildren: false },
+                { id: '2', subject: 'Task 2', projectId: 'p1', projectName: 'Alpha', assignedToId: 11, assignedToName: 'User B', statusId: 1, lockVersion: 0, editable: true, rowIndex: 1, hasChildren: false }
             ] as never,
             versions: [],
             selectedAssigneeIds: [],
@@ -803,6 +900,356 @@ describe('GanttToolbar shortcuts', () => {
         fireEvent.click(screen.getByText('User A'));
 
         expect(useTaskStore.getState().selectedAssigneeIds).toContain(10);
+    });
+
+    it('keeps unassigned selection checked after a refresh round-trip', async () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [
+                { id: '1', subject: 'Task 1', projectId: 'p1', projectName: 'Alpha', assignedToId: null, statusId: 1, lockVersion: 0, editable: true, rowIndex: 0, hasChildren: false }
+            ] as never,
+            filterOptions: {
+                projects: [{ id: 'p1', name: 'Alpha' }],
+                assignees: [
+                    { id: null, name: null, projectIds: ['p1'] },
+                    { id: 10, name: 'User A', projectIds: ['p1'] }
+                ]
+            },
+            versions: [
+                { id: 'v1', name: 'Version 1', projectId: 'p1', status: 'open' }
+            ],
+            selectedAssigneeIds: [],
+            selectedProjectIds: ['p1'],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [],
+            relations: [],
+            versions: [
+                { id: 'v1', name: 'Version 1', projectId: 'p1', status: 'open' }
+            ],
+            filterOptions: {
+                projects: [{ id: 'p1', name: 'Alpha' }],
+                assignees: [
+                    { id: null, name: null, projectIds: ['p1'] },
+                    { id: 10, name: 'User A', projectIds: ['p1'] }
+                ]
+            },
+            statuses: [],
+            customFields: [],
+            project: { id: '1', name: 'Project' },
+            permissions: { editable: true, viewable: true, baselineEditable: true },
+            initialState: {
+                selectedAssigneeIds: [null],
+                selectedProjectIds: ['p1']
+            }
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Assignee Filter'));
+        fireEvent.click(screen.getByText('Unassigned'));
+
+        await waitFor(() => {
+            expect(useTaskStore.getState().selectedAssigneeIds).toEqual([null]);
+        });
+
+        expect(screen.getByLabelText('Unassigned')).toBeChecked();
+    });
+
+    it('keeps select-all checked after a refresh round-trip', async () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [
+                { id: '1', subject: 'Task 1', projectId: 'p1', projectName: 'Alpha', assignedToId: null, statusId: 1, lockVersion: 0, editable: true, rowIndex: 0, hasChildren: false },
+                { id: '2', subject: 'Task 2', projectId: 'p1', projectName: 'Alpha', assignedToId: 10, assignedToName: 'User A', statusId: 1, lockVersion: 0, editable: true, rowIndex: 1, hasChildren: false }
+            ] as never,
+            filterOptions: {
+                projects: [{ id: 'p1', name: 'Alpha' }],
+                assignees: [
+                    { id: null, name: null, projectIds: ['p1'] },
+                    { id: 10, name: 'User A', projectIds: ['p1'] }
+                ]
+            },
+            versions: [
+                { id: 'v1', name: 'Version 1', projectId: 'p1', status: 'open' }
+            ],
+            selectedAssigneeIds: [null, 10],
+            selectedProjectIds: ['p1'],
+            selectedVersionIds: ['_none', 'v1'],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [],
+            relations: [],
+            versions: [
+                { id: 'v1', name: 'Version 1', projectId: 'p1', status: 'open' }
+            ],
+            filterOptions: {
+                projects: [{ id: 'p1', name: 'Alpha' }],
+                assignees: [
+                    { id: null, name: null, projectIds: ['p1'] },
+                    { id: 10, name: 'User A', projectIds: ['p1'] }
+                ]
+            },
+            statuses: [],
+            customFields: [],
+            project: { id: '1', name: 'Project' },
+            permissions: { editable: true, viewable: true, baselineEditable: true },
+            initialState: {
+                selectedAssigneeIds: [null, 10],
+                selectedVersionIds: ['_none', 'v1'],
+                selectedProjectIds: ['p1']
+            }
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Assignee Filter'));
+        expect(screen.getByLabelText('Select All')).toBeChecked();
+        expect(screen.getByLabelText('Unassigned')).toBeChecked();
+
+        fireEvent.click(screen.getByTitle('Assignee Filter'));
+        fireEvent.click(screen.getByTitle('Filter by version'));
+
+        expect(screen.getByLabelText('Select All')).toBeChecked();
+        expect(screen.getByLabelText('(No version)')).toBeChecked();
+
+    });
+
+    it('keeps no-version checked after a refresh round-trip', async () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [
+                { id: '1', subject: 'Task 1', projectId: 'p1', projectName: 'Alpha', assignedToId: 10, assignedToName: 'User A', statusId: 1, lockVersion: 0, editable: true, rowIndex: 0, hasChildren: false }
+            ] as never,
+            filterOptions: {
+                projects: [{ id: 'p1', name: 'Alpha' }],
+                assignees: [{ id: 10, name: 'User A', projectIds: ['p1'] }]
+            },
+            versions: [
+                { id: 'v1', name: 'Version 1', projectId: 'p1', status: 'open' }
+            ],
+            selectedAssigneeIds: [],
+            selectedProjectIds: ['p1'],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        vi.mocked(apiClient.fetchData).mockResolvedValue({
+            tasks: [],
+            relations: [],
+            versions: [
+                { id: 'v1', name: 'Version 1', projectId: 'p1', status: 'open' }
+            ],
+            filterOptions: {
+                projects: [{ id: 'p1', name: 'Alpha' }],
+                assignees: [{ id: 10, name: 'User A', projectIds: ['p1'] }]
+            },
+            statuses: [],
+            customFields: [],
+            project: { id: '1', name: 'Project' },
+            permissions: { editable: true, viewable: true, baselineEditable: true },
+            initialState: {
+                selectedProjectIds: ['p1'],
+                selectedVersionIds: ['_none']
+            }
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Filter by version'));
+        fireEvent.click(screen.getByLabelText('(No version)'));
+
+        await waitFor(() => {
+            expect(useTaskStore.getState().selectedVersionIds).toEqual(['_none']);
+        });
+
+        expect(screen.getByLabelText('(No version)')).toBeChecked();
+    });
+
+    it('keeps all descendant projects visible in the project filter menu after a project is selected', () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [
+                { id: '1', subject: 'Task 1', projectId: 'p1', projectName: 'Alpha', statusId: 1, lockVersion: 0, editable: true, rowIndex: 0, hasChildren: false }
+            ] as never,
+            filterOptions: {
+                projects: [
+                    { id: 'p1', name: 'Alpha' },
+                    { id: 'p2', name: 'Beta' }
+                ],
+                assignees: []
+            },
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: ['p1'],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Filter by project'));
+
+        expect(screen.getByText('Alpha')).toBeInTheDocument();
+        expect(screen.getByText('Beta')).toBeInTheDocument();
+    });
+
+    it('scopes assignee and version options by selected projects while keeping selected out-of-scope entries visible', () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [
+                {
+                    id: '1',
+                    subject: 'Task 1',
+                    projectId: 'p1',
+                    projectName: 'Alpha',
+                    assignedToId: 10,
+                    assignedToName: 'User A',
+                    fixedVersionId: 'v1',
+                    statusId: 1,
+                    lockVersion: 0,
+                    editable: true,
+                    rowIndex: 0,
+                    hasChildren: false
+                }
+            ] as never,
+            filterOptions: {
+                projects: [
+                    { id: 'p1', name: 'Alpha' },
+                    { id: 'p2', name: 'Beta' }
+                ],
+                assignees: [
+                    { id: 10, name: 'User A', projectIds: ['p1'] },
+                    { id: 20, name: 'User B', projectIds: ['p2'] },
+                    { id: 30, name: 'User C', projectIds: ['p2'] }
+                ]
+            },
+            versions: [
+                { id: 'v1', name: 'Version 1', projectId: 'p1', status: 'open' },
+                { id: 'v2', name: 'Version 2', projectId: 'p2', status: 'open' },
+                { id: 'v3', name: 'Version 3', projectId: 'p2', status: 'open' }
+            ],
+            selectedAssigneeIds: [20],
+            selectedProjectIds: ['p1'],
+            selectedVersionIds: ['v2'],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Assignee Filter'));
+        expect(screen.getByText('User A')).toBeInTheDocument();
+        expect(screen.getByText('User B')).toBeInTheDocument();
+        expect(screen.queryByText('User C')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByTitle('Filter by version'));
+        expect(screen.getByText('Version 1')).toBeInTheDocument();
+        expect(screen.getByText('Version 2')).toBeInTheDocument();
+        expect(screen.queryByText('Version 3')).not.toBeInTheDocument();
+    });
+
+    it('toggles the project select-all checkbox between all projects and no explicit project selection after refresh', async () => {
+        useTaskStore.setState({
+            filterText: '',
+            allTasks: [] as never,
+            filterOptions: {
+                projects: [
+                    { id: 'p1', name: 'Alpha' },
+                    { id: 'p2', name: 'Beta' }
+                ],
+                assignees: []
+            },
+            versions: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: ['p1', 'p2'],
+            selectedVersionIds: [],
+            taskStatuses: [],
+            selectedStatusIds: [],
+            modifiedTaskIds: new Set(),
+            autoSave: true
+        });
+
+        vi.mocked(apiClient.fetchData)
+            .mockResolvedValueOnce({
+                tasks: [],
+                relations: [],
+                versions: [],
+                filterOptions: {
+                    projects: [
+                        { id: 'p1', name: 'Alpha' },
+                        { id: 'p2', name: 'Beta' }
+                    ],
+                    assignees: []
+                },
+                statuses: [],
+                customFields: [],
+                project: { id: '1', name: 'Project' },
+                permissions: { editable: true, viewable: true, baselineEditable: true },
+                initialState: { selectedProjectIds: [] }
+            })
+            .mockResolvedValueOnce({
+                tasks: [],
+                relations: [],
+                versions: [],
+                filterOptions: {
+                    projects: [
+                        { id: 'p1', name: 'Alpha' },
+                        { id: 'p2', name: 'Beta' }
+                    ],
+                    assignees: []
+                },
+                statuses: [],
+                customFields: [],
+                project: { id: '1', name: 'Project' },
+                permissions: { editable: true, viewable: true, baselineEditable: true },
+                initialState: { selectedProjectIds: ['p1', 'p2'] }
+            });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+
+        fireEvent.click(screen.getByTitle('Filter by project'));
+
+        const selectAll = screen.getByLabelText('Select All') as HTMLInputElement;
+
+        await waitFor(() => {
+            expect(selectAll.checked).toBe(true);
+        });
+
+        fireEvent.click(selectAll);
+
+        await waitFor(() => {
+            expect(useTaskStore.getState().selectedProjectIds).toEqual([]);
+        });
+
+        expect(selectAll.checked).toBe(false);
+
+        fireEvent.click(selectAll);
+
+        await waitFor(() => {
+            expect(useTaskStore.getState().selectedProjectIds).toEqual(['p1', 'p2']);
+        });
+
+        expect(selectAll.checked).toBe(true);
     });
 
     it('toggles completed and incomplete status groups', () => {

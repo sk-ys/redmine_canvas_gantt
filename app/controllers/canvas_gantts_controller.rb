@@ -305,6 +305,8 @@ class CanvasGanttsController < ApplicationController
         permissions: @permissions,
         project_ids: project_ids,
         issues: resolved_query[:issues],
+        filter_option_projects: filter_option_projects(project_ids),
+        filter_option_issues: filter_option_issues(project_ids),
         initial_state: resolved_query[:initial_state],
         warnings: resolved_query[:warnings] + baseline_load.warnings,
         baseline: baseline_load.snapshot
@@ -557,6 +559,14 @@ class CanvasGanttsController < ApplicationController
       issue_scope: Issue.visible,
       issue_includes: ISSUE_INCLUDES
     )
+  end
+
+  def filter_option_projects(project_ids)
+    Project.visible.where(id: project_ids).to_a
+  end
+
+  def filter_option_issues(project_ids)
+    Issue.visible.where(project_id: project_ids).includes(:assigned_to, :project).to_a
   end
 
   def ensure_issue_in_scope(issue)

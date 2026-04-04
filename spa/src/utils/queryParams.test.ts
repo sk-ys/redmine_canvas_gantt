@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildIssueQueryParams,
     buildRedmineIssueQueryParams,
     hasSharedQueryStateInUrl,
     normalizeResolvedQueryState,
@@ -18,7 +19,6 @@ describe('parseResolvedQueryState', () => {
             selected_status_ids: [1, 2],
             selected_assignee_ids: [7, null],
             selected_project_ids: ['1'],
-            selected_version_ids: ['2'],
             sort_config: { key: 'subject', direction: 'desc' },
             group_by_assignee: true,
             show_subprojects: false
@@ -29,7 +29,6 @@ describe('parseResolvedQueryState', () => {
             selectedStatusIds: [1, 2],
             selectedAssigneeIds: [7, null],
             selectedProjectIds: ['1'],
-            selectedVersionIds: ['2'],
             sortConfig: { key: 'subject', direction: 'desc' },
             groupBy: 'assignee',
             showSubprojects: false
@@ -45,6 +44,24 @@ describe('parseResolvedQueryState', () => {
         expect(parsed).toEqual({
             selectedStatusIds: [1],
             groupBy: null
+        });
+    });
+
+    it('normalizes none sentinels from backend payloads', () => {
+        const parsed = parseResolvedQueryState({
+            selected_assignee_ids: ['none', 7],
+            selected_version_ids: ['none', '_none']
+        });
+
+        expect(parsed).toEqual({
+            queryId: undefined,
+            selectedStatusIds: undefined,
+            selectedAssigneeIds: [null, 7],
+            selectedProjectIds: undefined,
+            selectedVersionIds: ['_none'],
+            sortConfig: undefined,
+            groupBy: null,
+            showSubprojects: undefined
         });
     });
 });
@@ -280,6 +297,45 @@ describe('replaceIssueQueryParamsInUrl', () => {
         expect(url.searchParams.get('op[status_id]')).toBeNull();
         expect(url.searchParams.getAll('v[status_id][]')).toEqual([]);
         expect(url.searchParams.getAll('status_ids[]')).toEqual(['2']);
+    });
+});
+
+describe('query parameter round-trips for special selections', () => {
+    it('preserves unassigned assignee and no-version selections through URL round-trips', () => {
+        const params = buildIssueQueryParams({
+            selectedAssigneeIds: [null],
+            selectedVersionIds: ['_none']
+        });
+
+        expect(readIssueQueryParamsFromUrl(`?${params.toString()}`)).toEqual({
+            queryId: undefined,
+            selectedStatusIds: undefined,
+            selectedAssigneeIds: [null],
+            selectedProjectIds: undefined,
+            selectedVersionIds: ['_none'],
+            sortConfig: undefined,
+            groupBy: null,
+            showSubprojects: undefined
+        });
+    });
+
+    it('preserves an explicitly empty project selection through URL round-trips', () => {
+        const params = buildIssueQueryParams({
+            selectedProjectIds: []
+        });
+
+        expect(params.toString()).toContain('project_ids%5B%5D=none');
+
+        expect(readIssueQueryParamsFromUrl(`?${params.toString()}`)).toEqual({
+            queryId: undefined,
+            selectedStatusIds: undefined,
+            selectedAssigneeIds: undefined,
+            selectedProjectIds: [],
+            selectedVersionIds: undefined,
+            sortConfig: undefined,
+            groupBy: null,
+            showSubprojects: undefined
+        });
     });
 });
 

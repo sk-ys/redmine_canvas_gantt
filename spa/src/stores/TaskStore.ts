@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Task, Relation, DraftRelation, Viewport, ViewMode, ZoomLevel, LayoutRow, Version, TaskStatus } from '../types';
+import type { FilterOptions, Task, Relation, DraftRelation, Viewport, ViewMode, ZoomLevel, LayoutRow, Version, TaskStatus } from '../types';
 import { ZOOM_SCALES } from '../utils/grid';
 import { TaskLogicService } from '../services/TaskLogicService';
 import { loadPreferences, savePreferences } from '../utils/preferences';
@@ -57,6 +57,7 @@ interface TaskState {
     criticalPathMetrics: Record<string, CriticalPathTaskMetrics>;
     criticalPathProjectFinish?: number;
     versions: Version[];
+    filterOptions: FilterOptions;
     taskStatuses: TaskStatus[];
     customFields: CustomFieldMeta[];
     activeQueryId: number | null;
@@ -99,6 +100,7 @@ interface TaskState {
     setTasks: (tasks: Task[]) => void;
     setRelations: (relations: Relation[]) => void;
     setVersions: (versions: Version[]) => void;
+    setFilterOptions: (filterOptions: FilterOptions) => void;
     setTaskStatuses: (statuses: TaskStatus[]) => void;
     setCustomFields: (fields: CustomFieldMeta[]) => void;
     setPermissions: (permissions: { editable: boolean; viewable: boolean; baselineEditable: boolean }) => void;
@@ -397,6 +399,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     criticalPathMetrics: {},
     criticalPathProjectFinish: undefined,
     versions: [],
+    filterOptions: { projects: [], assignees: [] },
     taskStatuses: [],
     customFields: [],
     permissions: { editable: false, viewable: false, baselineEditable: false },
@@ -474,6 +477,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             ...toDerivedTaskStatePatch(derived)
         };
     }),
+    setFilterOptions: (filterOptions) => set(() => ({ filterOptions })),
     setTaskStatuses: (statuses) => set(() => ({ taskStatuses: statuses })),
     setPermissions: (permissions) => set(() => ({ permissions })),
     applyResolvedQueryState: (resolved) => set((state) => {
@@ -1187,8 +1191,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             query: toResolvedQueryStateFromStore(state)
         });
         if (!data) return;
-        const { setTasks, setRelations, setVersions, setTaskStatuses, setCustomFields, setPermissions, applyResolvedQueryState } = state;
+        const { setTasks, setRelations, setVersions, setFilterOptions, setTaskStatuses, setCustomFields, setPermissions, applyResolvedQueryState } = state;
         applyResolvedQueryState(data.initialState);
+        setFilterOptions(data.filterOptions);
         setTasks(data.tasks);
         setRelations(data.relations);
         setVersions(data.versions);

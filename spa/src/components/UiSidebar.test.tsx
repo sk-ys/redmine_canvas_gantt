@@ -295,6 +295,117 @@ describe('UiSidebar', () => {
         expect(useTaskStore.getState().modifiedTaskIds.has(taskId)).toBe(true);
     });
 
+    it('shows the version inline edit empty option using the version-specific unset label', async () => {
+        const taskId = '124';
+
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key',
+            i18n: {
+                button_edit: 'Edit',
+                field_version: 'Target Version',
+                label_none: '未設定',
+                label_unassigned: '担当なし'
+            }
+        };
+
+        useUIStore.setState({
+            visibleColumns: ['id', 'version'],
+            columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'version'])
+        });
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 32
+            },
+            groupByProject: false,
+            selectedTaskId: null,
+            customFields: []
+        });
+        useEditMetaStore.setState({
+            metaByTaskId: {
+                [taskId]: {
+                    task: {
+                        id: taskId,
+                        subject: 'Version task',
+                        assignedToId: null,
+                        statusId: 1,
+                        doneRatio: 0,
+                        dueDate: '2025-01-01',
+                        startDate: '2025-01-01',
+                        priorityId: 1,
+                        categoryId: null,
+                        estimatedHours: null,
+                        projectId: 1,
+                        trackerId: 1,
+                        fixedVersionId: null,
+                        lockVersion: 1
+                    },
+                    editable: {
+                        subject: true,
+                        assignedToId: true,
+                        statusId: true,
+                        doneRatio: true,
+                        dueDate: true,
+                        startDate: true,
+                        priorityId: true,
+                        categoryId: true,
+                        estimatedHours: true,
+                        projectId: true,
+                        trackerId: true,
+                        fixedVersionId: true,
+                        customFieldValues: true
+                    },
+                    options: {
+                        statuses: [],
+                        assignees: [],
+                        priorities: [],
+                        categories: [],
+                        projects: [],
+                        trackers: [],
+                        versions: [{ id: 7, name: 'Release 1' }],
+                        customFields: []
+                    },
+                    customFieldValues: {}
+                }
+            },
+            loadingTaskId: null,
+            error: null
+        });
+
+        const task: Task = {
+            id: taskId,
+            subject: 'Version task',
+            startDate: new Date('2025-01-01').getTime(),
+            dueDate: new Date('2025-01-05').getTime(),
+            ratioDone: 0,
+            statusId: 1,
+            lockVersion: 1,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+        useTaskStore.getState().setTasks([task]);
+
+        render(<UiSidebar />);
+
+        const cell = await screen.findByTestId(`cell-${taskId}-version`);
+        fireEvent.doubleClick(cell);
+
+        const select = await screen.findByRole('combobox');
+        expect(screen.getByRole('option', { name: '未設定' })).toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: '担当なし' })).not.toBeInTheDocument();
+        expect(select).toBeInTheDocument();
+    });
+
     it('shows tooltip on task subject hover', () => {
         useUIStore.setState({ visibleColumns: ['subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']) });
 

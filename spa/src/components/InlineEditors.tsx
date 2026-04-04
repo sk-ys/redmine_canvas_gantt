@@ -109,10 +109,11 @@ export const SelectEditor: React.FC<{
     value: number | null;
     options: { id: number; name: string }[];
     includeUnassigned?: boolean;
+    emptyOptionLabel?: string;
     onCommit: (value: number | null) => Promise<void>;
     onCancel: () => void;
     controlHeight?: number;
-}> = ({ value, options, includeUnassigned, onCommit, onCancel, controlHeight }) => {
+}> = ({ value, options, includeUnassigned, emptyOptionLabel, onCommit, onCancel, controlHeight }) => {
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [filter, setFilter] = React.useState('');
@@ -168,13 +169,13 @@ export const SelectEditor: React.FC<{
                     }
                 }}
                 disabled={saving}
-                style={buildControlStyle({
-                    controlHeight,
-                    padding: '0 24px 0 8px',
-                    border: error ? '1px solid #d32f2f' : '1px solid #ccc'
-                })}
-            >
-                {includeUnassigned ? <option value="">{i18n.t('label_unassigned') || 'Unassigned'}</option> : null}
+            style={buildControlStyle({
+                controlHeight,
+                padding: '0 24px 0 8px',
+                border: error ? '1px solid #d32f2f' : '1px solid #ccc'
+            })}
+        >
+                {includeUnassigned ? <option value="">{emptyOptionLabel || i18n.t('label_unassigned') || 'Unassigned'}</option> : null}
                 {filtered.map((o) => (
                     <option key={o.id} value={String(o.id)}>{o.name}</option>
                 ))}

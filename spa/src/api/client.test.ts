@@ -54,6 +54,16 @@ describe('apiClient.fetchData', () => {
                     }
                 ],
                 relations: [{ id: 99, from: 10, to: 11, type: 'precedes' }],
+                filter_options: {
+                    projects: [
+                        { id: 1, name: 'P' },
+                        { id: 2, name: 'Child' }
+                    ],
+                    assignees: [
+                        { id: 7, name: 'Alice', project_ids: [1] },
+                        { id: null, name: null, project_ids: [2] }
+                    ]
+                },
                 project: { id: 1, name: 'P' },
                 permissions: { editable: true, viewable: true, baseline_editable: true },
                 initial_state: {
@@ -81,6 +91,16 @@ describe('apiClient.fetchData', () => {
             groupBy: 'project',
             sortConfig: { key: 'startDate', direction: 'desc' }
         });
+        expect(data.filterOptions).toEqual({
+            projects: [
+                { id: '1', name: 'P' },
+                { id: '2', name: 'Child' }
+            ],
+            assignees: [
+                { id: 7, name: 'Alice', projectIds: ['1'] },
+                { id: null, name: null, projectIds: ['2'] }
+            ]
+        });
         expect(data.warnings).toEqual(['Invalid query_id ignored']);
         expect(fetchMock).toHaveBeenCalledWith(
             'http://localhost:3000/projects/1/canvas_gantt/data.json?query_id=7&status_ids%5B%5D=1',
@@ -103,6 +123,10 @@ describe('apiClient.fetchData', () => {
                 tasks: [],
                 relations: [],
                 versions: [],
+                filter_options: {
+                    projects: [{ id: 1, name: 'P' }],
+                    assignees: []
+                },
                 statuses: [],
                 project: { id: 1, name: 'P' },
                 permissions: { editable: true, viewable: true, baseline_editable: true },

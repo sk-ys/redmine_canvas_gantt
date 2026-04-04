@@ -79,11 +79,11 @@ const DEFAULT_RELATION_TYPE = RelationType.Precedes;
 const defaultColumnSettings = buildColumnSettingsFromVisibleKeys(COLUMN_DEFINITIONS, getDefaultVisibleColumnKeys());
 export const DEFAULT_COLUMN_SETTINGS = defaultColumnSettings;
 
-const persistColumnSettings = (columnSettings: ColumnConfig[]) => {
-    savePreferences({ columnSettings });
-};
-
 const toVisibleColumns = (columnSettings: ColumnConfig[]) => columnSettings.filter((entry) => entry.visible).map((entry) => entry.key);
+
+const persistColumnSettings = (columnSettings: ColumnConfig[]) => {
+    savePreferences({ columnSettings, visibleColumns: toVisibleColumns(columnSettings) });
+};
 
 export const useUIStore = create<UIState>((set, get) => ({
     notifications: [],

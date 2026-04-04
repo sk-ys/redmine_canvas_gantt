@@ -4,7 +4,7 @@ import { useUIStore } from '../../stores/UIStore';
 import { useBaselineStore } from '../../stores/BaselineStore';
 import { getMinFiniteStartDate } from '../../utils/taskRange';
 import type { CustomFieldMeta } from '../../types/editMeta';
-import type { Relation, Task, Version, Viewport } from '../../types';
+import type { FilterOptions, Relation, Task, Version, Viewport } from '../../types';
 import { replaceIssueQueryParamsInUrl, resolveInitialSharedQueryState } from '../../utils/queryParams';
 import { loadLastUsedSharedQueryState } from '../../utils/sharedQueryState';
 
@@ -13,6 +13,7 @@ type Params = {
     setTasks: (tasks: Task[]) => void;
     setRelations: (relations: Relation[]) => void;
     setVersions: (versions: Version[]) => void;
+    setFilterOptions: (filterOptions: FilterOptions) => void;
     setCustomFields: (fields: CustomFieldMeta[]) => void;
     updateViewport: (updates: Partial<Viewport>) => void;
 };
@@ -22,6 +23,7 @@ export const useInitialGanttData = ({
     setTasks,
     setRelations,
     setVersions,
+    setFilterOptions,
     setCustomFields,
     updateViewport
 }: Params): void => {
@@ -46,6 +48,7 @@ export const useInitialGanttData = ({
                 query: initialSharedQueryState.state
             }).then(data => {
                 useTaskStore.getState().applyResolvedQueryState(data.initialState);
+                setFilterOptions(data.filterOptions);
                 setTasks(data.tasks);
                 setRelations(data.relations);
                 setVersions(data.versions);
@@ -70,5 +73,5 @@ export const useInitialGanttData = ({
                 }
             }).catch(err => console.error('Failed to load Gantt data', err));
         });
-    }, [setCustomFields, setRelations, setTasks, setVersions, updateViewport, viewportFromStorage]);
+    }, [setCustomFields, setFilterOptions, setRelations, setTasks, setVersions, updateViewport, viewportFromStorage]);
 };

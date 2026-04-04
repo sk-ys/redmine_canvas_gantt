@@ -41,7 +41,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         filterText, setFilterText, allTasks, versions, selectedAssigneeIds, setSelectedAssigneeIds,
         selectedProjectIds, setSelectedProjectIds, selectedVersionIds, setSelectedVersionIds,
         setRowHeight, taskStatuses, selectedStatusIds, setSelectedStatusFromServer, showVersions, setShowVersions,
-        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects, permissions
+        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects, permissions, filterOptions
     } = useTaskStore();
     const {
         showProgressLine,
@@ -356,64 +356,105 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     });
     const effectiveVisibleColumns = effectiveColumnSettings.filter((entry) => entry.visible).map((entry) => entry.key);
 
-    const assignees = React.useMemo(() => {
-        const map = new Map<number | null, string>();
-        // 未割当を明示的に追加
-        map.set(null, i18n.t('label_unassigned') || 'Unassigned');
-        allTasks.forEach(task => {
-            if (task.assignedToId !== undefined && task.assignedToId !== null) {
-                map.set(task.assignedToId, task.assignedToName || (i18n.t('field_assigned_to') || 'Assignee') + ` #${task.assignedToId}`);
+    const fallbackProjects = React.useMemo(() => {
+        const map = new Map<string, string>();
+        allTasks.forEach((task) => {
+            if (task.projectId && task.projectName) {
+                map.set(task.projectId, task.projectName);
             }
         });
-        return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => {
-            // 未割当(null)は一番上に表示
-            if (a.id === null) return -1;
-            if (b.id === null) return 1;
-            return a.name.localeCompare(b.name);
-        });
+        return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
     }, [allTasks]);
+
+    const fallbackAssignees = React.useMemo(() => {
+        const map = new Map<number | null, { name: string | null; projectIds: Set<string> }>();
+        allTasks.forEach((task) => {
+            const assigneeId = task.assignedToId ?? null;
+            const entry = map.get(assigneeId) ?? {
+                name: assigneeId === null ? null : (task.assignedToName ?? null),
+                projectIds: new Set<string>()
+            };
+            if (assigneeId !== null && entry.name === null && task.assignedToName) {
+                entry.name = task.assignedToName;
+            }
+            if (task.projectId) {
+                entry.projectIds.add(task.projectId);
+            }
+            map.set(assigneeId, entry);
+        });
+        return Array.from(map.entries()).map(([id, entry]) => ({
+            id,
+            name: entry.name,
+            projectIds: Array.from(entry.projectIds)
+        }));
+    }, [allTasks]);
+
+    const projectOptions = filterOptions.projects.length > 0 ? filterOptions.projects : fallbackProjects;
+    const assigneeOptions = filterOptions.assignees.length > 0 ? filterOptions.assignees : fallbackAssignees;
+
+    const projects = React.useMemo(() => (
+        [...projectOptions].sort((a, b) => a.name.localeCompare(b.name))
+    ), [projectOptions]);
+
+    const scopedProjectIds = React.useMemo(() => (
+        new Set(selectedProjectIds.length > 0 ? selectedProjectIds : projects.map((project) => project.id))
+    ), [projects, selectedProjectIds]);
+
+    const assignees = React.useMemo(() => {
+        const selectedAssigneeIdSet = new Set(selectedAssigneeIds);
+        return assigneeOptions
+            .filter((assignee) => (
+                selectedAssigneeIdSet.has(assignee.id) ||
+                assignee.projectIds.some((projectId) => scopedProjectIds.has(projectId))
+            ))
+            .map((assignee) => ({
+                id: assignee.id,
+                name: assignee.id === null
+                    ? (i18n.t('label_unassigned') || 'Unassigned')
+                    : (assignee.name || `${i18n.t('field_assigned_to') || 'Assignee'} #${assignee.id}`)
+            }))
+            .sort((a, b) => {
+                if (a.id === null) return -1;
+                if (b.id === null) return 1;
+                return a.name.localeCompare(b.name);
+            });
+    }, [assigneeOptions, scopedProjectIds, selectedAssigneeIds]);
 
     const toggleAssignee = (id: number | null) => {
         setSelectedAssigneeIds(toggleSelectionValue(selectedAssigneeIds, id));
     };
 
-    const isAllAssigneesSelected = assignees.length > 0 && selectedAssigneeIds.length === assignees.length;
+    const isAllAssigneesSelected = assignees.length > 0 && assignees.every((assignee) => selectedAssigneeIds.includes(assignee.id));
 
     const toggleAllAssignees = () => {
         setSelectedAssigneeIds(toggleAllSelectionValues(isAllAssigneesSelected, assignees.map(a => a.id)));
     };
 
-    const projects = React.useMemo(() => {
-        const map = new Map<string, string>();
-        allTasks.forEach(t => {
-            if (t.projectId && t.projectName) {
-                map.set(t.projectId, t.projectName);
-            }
-        });
-        return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-    }, [allTasks]);
-
     const toggleProject = (id: string) => {
         setSelectedProjectIds(toggleSelectionValue(selectedProjectIds, id));
     };
 
-    const isAllProjectsSelected = projects.length > 0 && selectedProjectIds.length === projects.length;
+    const isAllProjectsSelected = projects.length > 0 && projects.every((project) => selectedProjectIds.includes(project.id));
 
     const toggleAllProjects = () => {
         setSelectedProjectIds(toggleAllSelectionValues(isAllProjectsSelected, projects.map(p => p.id)));
     };
 
-    const versionsList = React.useMemo(() => {
-        const currentProjects = new Set(projects.map(p => p.id));
-        return versions.filter(v => currentProjects.has(v.projectId) && v.status !== 'closed').sort((a, b) => a.name.localeCompare(b.name));
-    }, [versions, projects]);
+    const versionsList = React.useMemo(() => (
+        versions
+            .filter((version) => (
+                (version.status !== 'closed' && scopedProjectIds.has(version.projectId)) ||
+                selectedVersionIds.includes(version.id)
+            ))
+            .sort((a, b) => a.name.localeCompare(b.name))
+    ), [scopedProjectIds, selectedVersionIds, versions]);
 
     const toggleVersion = (id: string) => {
         setSelectedVersionIds(toggleSelectionValue(selectedVersionIds, id));
     };
 
     const allVersionIdsWithNone = ['_none', ...versionsList.map(v => v.id)];
-    const isAllVersionsSelected = versionsList.length > 0 && selectedVersionIds.length === allVersionIdsWithNone.length && selectedVersionIds.includes('_none');
+    const isAllVersionsSelected = allVersionIdsWithNone.length > 1 && allVersionIdsWithNone.every((id) => selectedVersionIds.includes(id));
 
     const toggleAllVersions = () => {
         setSelectedVersionIds(toggleAllSelectionValues(isAllVersionsSelected, allVersionIdsWithNone));

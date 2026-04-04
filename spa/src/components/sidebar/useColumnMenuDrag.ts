@@ -18,9 +18,9 @@ type UseColumnMenuDragResult = {
     orderedColumnOptions: ColumnOption[];
     draggingColumnKey: string | null;
     dropBeforeColumnKey: string | null;
-    handleColumnDragStart: (key: string, event: React.DragEvent<HTMLDivElement>) => void;
-    handleColumnDragOver: (key: string, event: React.DragEvent<HTMLDivElement>) => void;
-    handleColumnDrop: (key: string, event: React.DragEvent<HTMLDivElement>) => void;
+    handleColumnDragStart: (key: string, event: React.DragEvent<HTMLElement>) => void;
+    handleColumnDragOver: (key: string, event: React.DragEvent<HTMLElement>) => void;
+    handleColumnDrop: (key: string, event: React.DragEvent<HTMLElement>) => void;
     handleColumnMenuDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
     clearColumnDragState: () => void;
     reorderColumnByDrag: (sourceKey: string, targetKey: string) => void;
@@ -76,7 +76,7 @@ export const useColumnMenuDrag = ({
         });
     }, [effectiveColumnSettings]);
 
-    const handleColumnDragStart = React.useCallback((key: string, event: React.DragEvent<HTMLDivElement>) => {
+    const handleColumnDragStart = React.useCallback((key: string, event: React.DragEvent<HTMLElement>) => {
         setDraggingColumnKey(key);
         setDropBeforeColumnKey(key);
         if (event.dataTransfer) {
@@ -85,7 +85,7 @@ export const useColumnMenuDrag = ({
         }
     }, []);
 
-    const handleColumnDragOver = React.useCallback((key: string, event: React.DragEvent<HTMLDivElement>) => {
+    const handleColumnDragOver = React.useCallback((key: string, event: React.DragEvent<HTMLElement>) => {
         event.preventDefault();
         if (event.dataTransfer) {
             event.dataTransfer.dropEffect = 'move';
@@ -110,7 +110,7 @@ export const useColumnMenuDrag = ({
         }
     }, [menuContentRef]);
 
-    const handleColumnDrop = React.useCallback((key: string, event: React.DragEvent<HTMLDivElement>) => {
+    const handleColumnDrop = React.useCallback((key: string, event: React.DragEvent<HTMLElement>) => {
         event.preventDefault();
         const sourceKey = draggingColumnKey || event.dataTransfer?.getData('text/plain');
         if (!sourceKey) return;
