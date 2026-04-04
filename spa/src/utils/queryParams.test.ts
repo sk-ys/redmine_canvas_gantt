@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildIssueQueryParams,
     buildRedmineIssueQueryParams,
+    hasSharedQueryStateInUrl,
+    normalizeResolvedQueryState,
     parseResolvedQueryState,
     readIssueQueryParamsFromUrl,
     replaceIssueQueryParamsInUrl,
+    resolveInitialSharedQueryState,
     toBusinessQueryState,
     toResolvedQueryStateFromStore
 } from './queryParams';
@@ -15,7 +19,6 @@ describe('parseResolvedQueryState', () => {
             selected_status_ids: [1, 2],
             selected_assignee_ids: [7, null],
             selected_project_ids: ['1'],
-            selected_version_ids: ['2'],
             sort_config: { key: 'subject', direction: 'desc' },
             group_by_assignee: true,
             show_subprojects: false
@@ -26,7 +29,6 @@ describe('parseResolvedQueryState', () => {
             selectedStatusIds: [1, 2],
             selectedAssigneeIds: [7, null],
             selectedProjectIds: ['1'],
-            selectedVersionIds: ['2'],
             sortConfig: { key: 'subject', direction: 'desc' },
             groupBy: 'assignee',
             showSubprojects: false
@@ -42,6 +44,24 @@ describe('parseResolvedQueryState', () => {
         expect(parsed).toEqual({
             selectedStatusIds: [1],
             groupBy: null
+        });
+    });
+
+    it('normalizes none sentinels from backend payloads', () => {
+        const parsed = parseResolvedQueryState({
+            selected_assignee_ids: ['none', 7],
+            selected_version_ids: ['none', '_none']
+        });
+
+        expect(parsed).toEqual({
+            queryId: undefined,
+            selectedStatusIds: undefined,
+            selectedAssigneeIds: [null, 7],
+            selectedProjectIds: undefined,
+            selectedVersionIds: ['_none'],
+            sortConfig: undefined,
+            groupBy: null,
+            showSubprojects: undefined
         });
     });
 });
@@ -91,6 +111,85 @@ describe('readIssueQueryParamsFromUrl', () => {
             sortConfig: undefined,
             groupBy: null,
             showSubprojects: undefined
+        });
+    });
+});
+
+describe('normalizeResolvedQueryState', () => {
+    it('drops default-equivalent values', () => {
+        expect(normalizeResolvedQueryState({
+            queryId: null,
+            selectedStatusIds: [],
+            selectedAssigneeIds: [],
+            selectedProjectIds: [],
+            selectedVersionIds: [],
+            sortConfig: { key: 'startDate', direction: 'asc' },
+            groupBy: 'project',
+            showSubprojects: true
+        })).toBeUndefined();
+    });
+
+    it('keeps meaningful shared state values', () => {
+        expect(normalizeResolvedQueryState({
+            queryId: 12,
+            selectedStatusIds: [1],
+            groupBy: 'assignee',
+            showSubprojects: false
+        })).toEqual({
+            queryId: 12,
+            selectedStatusIds: [1],
+            groupBy: 'assignee',
+            showSubprojects: false
+        });
+    });
+});
+
+describe('hasSharedQueryStateInUrl', () => {
+    it('returns false for a bare Canvas Gantt URL', () => {
+        expect(hasSharedQueryStateInUrl('')).toBe(false);
+    });
+
+    it('treats explicit standard filter params as shared URL input even when they clear filters', () => {
+        expect(hasSharedQueryStateInUrl('?set_filter=1&f[]=status_id&op[status_id]=*')).toBe(true);
+    });
+
+    it('returns true for a persisted query id', () => {
+        expect(hasSharedQueryStateInUrl('?query_id=7')).toBe(true);
+    });
+});
+
+describe('resolveInitialSharedQueryState', () => {
+    it('uses stored state for a bare Canvas Gantt URL', () => {
+        expect(resolveInitialSharedQueryState('', {
+            queryId: 12,
+            selectedStatusIds: [1],
+            groupBy: 'assignee'
+        })).toEqual({
+            state: {
+                queryId: 12,
+                selectedStatusIds: [1],
+                groupBy: 'assignee'
+            },
+            source: 'storage'
+        });
+    });
+
+    it('prefers explicit URL state over stored state', () => {
+        expect(resolveInitialSharedQueryState('?query_id=9', {
+            queryId: 12,
+            selectedStatusIds: [1]
+        })).toEqual({
+            state: {
+                queryId: 9,
+                selectedStatusIds: undefined,
+                selectedAssigneeIds: undefined,
+                selectedProjectIds: undefined,
+                selectedVersionIds: undefined,
+                sortConfig: undefined,
+                groupBy: null,
+                showSubprojects: undefined
+            },
+            source: 'url'
         });
     });
 });
@@ -198,6 +297,45 @@ describe('replaceIssueQueryParamsInUrl', () => {
         expect(url.searchParams.get('op[status_id]')).toBeNull();
         expect(url.searchParams.getAll('v[status_id][]')).toEqual([]);
         expect(url.searchParams.getAll('status_ids[]')).toEqual(['2']);
+    });
+});
+
+describe('query parameter round-trips for special selections', () => {
+    it('preserves unassigned assignee and no-version selections through URL round-trips', () => {
+        const params = buildIssueQueryParams({
+            selectedAssigneeIds: [null],
+            selectedVersionIds: ['_none']
+        });
+
+        expect(readIssueQueryParamsFromUrl(`?${params.toString()}`)).toEqual({
+            queryId: undefined,
+            selectedStatusIds: undefined,
+            selectedAssigneeIds: [null],
+            selectedProjectIds: undefined,
+            selectedVersionIds: ['_none'],
+            sortConfig: undefined,
+            groupBy: null,
+            showSubprojects: undefined
+        });
+    });
+
+    it('preserves an explicitly empty project selection through URL round-trips', () => {
+        const params = buildIssueQueryParams({
+            selectedProjectIds: []
+        });
+
+        expect(params.toString()).toContain('project_ids%5B%5D=none');
+
+        expect(readIssueQueryParamsFromUrl(`?${params.toString()}`)).toEqual({
+            queryId: undefined,
+            selectedStatusIds: undefined,
+            selectedAssigneeIds: undefined,
+            selectedProjectIds: [],
+            selectedVersionIds: undefined,
+            sortConfig: undefined,
+            groupBy: null,
+            showSubprojects: undefined
+        });
     });
 });
 

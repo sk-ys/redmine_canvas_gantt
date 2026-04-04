@@ -20,7 +20,7 @@ RSpec.describe CanvasGanttsController, type: :controller do
   describe 'GET #data' do
     it 'returns forbidden when view permission is missing' do
       allow(controller).to receive(:set_permissions) do
-        controller.instance_variable_set(:@permissions, { editable: false, viewable: false })
+        controller.instance_variable_set(:@permissions, { editable: false, viewable: false, baseline_editable: false })
       end
 
       get :data, params: { project_id: 'demo' }, format: :json
@@ -31,44 +31,212 @@ RSpec.describe CanvasGanttsController, type: :controller do
 
     it 'returns data payload with expected top-level keys' do
       payload_builder = instance_double(RedmineCanvasGantt::DataPayloadBuilder)
+      baseline_repository = instance_double(RedmineCanvasGantt::BaselineRepository)
       resolver = instance_double(RedmineCanvasGantt::QueryStateResolver)
+      baseline_snapshot = instance_double(RedmineCanvasGantt::BaselineSnapshot, to_payload_hash: {
+        snapshot_id: 'baseline-1',
+        project_id: 1,
+        captured_at: '2026-04-01T00:00:00Z',
+        captured_by_id: 7,
+        captured_by_name: 'Alice',
+        scope: 'filtered',
+        tasks_by_issue_id: {}
+      })
       allow(controller).to receive(:set_permissions) do
-        controller.instance_variable_set(:@permissions, { editable: true, viewable: true })
+        controller.instance_variable_set(:@permissions, { editable: true, viewable: true, baseline_editable: true })
       end
       allow(controller).to receive(:descendant_project_ids).and_return([1, 2])
+      filter_option_project = double('ProjectOption', id: 1, name: 'Demo')
+      filter_option_issue = double('FilterOptionIssue')
+      allow(controller).to receive(:filter_option_projects).with([1, 2]).and_return([filter_option_project])
+      allow(controller).to receive(:filter_option_issues).with([1, 2]).and_return([filter_option_issue])
       allow(controller).to receive(:query_state_resolver).and_return(resolver)
+      allow(controller).to receive(:baseline_repository).and_return(baseline_repository)
       issue = double('Issue', project_id: 1)
       allow(resolver).to receive(:resolve).and_return({
         issues: [issue],
         initial_state: { query_id: 7 },
         warnings: ['Invalid query_id ignored']
       })
+      allow(baseline_repository).to receive(:load).and_return(
+        RedmineCanvasGantt::BaselineRepository::LoadResult.new(
+          snapshot: baseline_snapshot,
+          warnings: ['Baseline warning']
+        )
+      )
       allow(controller).to receive(:data_payload_builder).and_return(payload_builder)
-      allow(payload_builder).to receive(:build).and_return({
+      expect(payload_builder).to receive(:build).with(hash_including(
+        project: project,
+        permissions: { editable: true, viewable: true, baseline_editable: true },
+        project_ids: [1, 2],
+        issues: [issue],
+        filter_option_projects: [filter_option_project],
+        filter_option_issues: [filter_option_issue],
+        initial_state: { query_id: 7 },
+        warnings: ['Invalid query_id ignored', 'Baseline warning'],
+        baseline: baseline_snapshot
+      )).and_return({
         tasks: [{ id: 10 }],
         custom_fields: [{ id: 15 }],
         relations: [{ id: 20 }],
         versions: [{ id: 30 }],
+        filter_options: {
+          projects: [{ id: 1, name: 'Demo' }],
+          assignees: [{ id: 7, name: 'Alice', project_ids: ['1'] }]
+        },
         statuses: [{ id: 40 }],
         project: { id: 1, name: 'Demo' },
-        permissions: { editable: true, viewable: true },
+        permissions: { editable: true, viewable: true, baseline_editable: true },
         initial_state: { query_id: 7 },
-        warnings: ['Invalid query_id ignored']
+        baseline: baseline_snapshot.to_payload_hash,
+        warnings: ['Invalid query_id ignored', 'Baseline warning']
       })
 
       get :data, params: { project_id: 'demo' }, format: :json
 
       expect(response).to have_http_status(:ok)
       body = JSON.parse(response.body)
-      expect(body.keys).to contain_exactly('tasks', 'custom_fields', 'relations', 'versions', 'statuses', 'project', 'permissions', 'initial_state', 'warnings')
-      expect(body['permissions']).to eq('editable' => true, 'viewable' => true)
+      expect(body.keys).to contain_exactly('tasks', 'custom_fields', 'relations', 'versions', 'filter_options', 'statuses', 'project', 'permissions', 'initial_state', 'baseline', 'warnings')
+      expect(body['permissions']).to eq('editable' => true, 'viewable' => true, 'baseline_editable' => true)
+      expect(body['filter_options']).to eq(
+        'projects' => [{ 'id' => 1, 'name' => 'Demo' }],
+        'assignees' => [{ 'id' => 7, 'name' => 'Alice', 'project_ids' => ['1'] }]
+      )
+      expect(body['baseline']).to include('snapshot_id' => 'baseline-1', 'project_id' => 1)
+      expect(body['warnings']).to contain_exactly('Invalid query_id ignored', 'Baseline warning')
+    end
+  end
+
+  describe 'POST #save_baseline' do
+    let(:baseline_repository) { instance_double(RedmineCanvasGantt::BaselineRepository) }
+    let(:resolver) { instance_double(RedmineCanvasGantt::QueryStateResolver) }
+    let(:current_user) { instance_double(User, id: 7, name: 'Alice') }
+    let(:baseline_snapshot) do
+      RedmineCanvasGantt::BaselineSnapshot.new(
+        snapshot_id: 'baseline-1',
+        project_id: 1,
+        captured_at: Time.utc(2026, 4, 1, 12, 0, 0),
+        captured_by_id: 7,
+        captured_by_name: 'Alice',
+        scope: 'filtered',
+        task_states: [
+          RedmineCanvasGantt::BaselineTaskState.new(
+            issue_id: 10,
+            baseline_start_date: Date.new(2026, 4, 10),
+            baseline_due_date: Date.new(2026, 4, 15)
+          )
+        ]
+      )
+    end
+
+    before do
+      allow(controller).to receive(:baseline_repository).and_return(baseline_repository)
+      allow(controller).to receive(:query_state_resolver).and_return(resolver)
+      allow(controller).to receive(:descendant_project_ids).and_return([1])
+      allow(User).to receive(:current).and_return(current_user)
+      allow(current_user).to receive(:allowed_to?).with(:edit_canvas_gantt, project).and_return(true)
+      allow(controller).to receive(:set_permissions) do
+        controller.instance_variable_set(:@permissions, { editable: true, viewable: true, baseline_editable: true })
+      end
+    end
+
+    it 'saves a baseline snapshot and returns its payload' do
+      issue = double('Issue', id: 10, start_date: Date.new(2026, 4, 10), due_date: Date.new(2026, 4, 15))
+      allow(resolver).to receive(:resolve).and_return({
+        issues: [issue],
+        initial_state: nil,
+        warnings: ['query warning']
+      })
+      expect(baseline_repository).to receive(:build_snapshot).with(
+        project: project,
+        issues: [issue],
+        current_user: current_user,
+        scope: 'filtered'
+      ).and_return(baseline_snapshot)
+      allow(baseline_repository).to receive(:replace).with(project_id: 1, snapshot: baseline_snapshot).and_return(baseline_snapshot)
+
+      post :save_baseline, params: { project_id: 'demo', scope: 'filtered' }, format: :json
+
+      expect(response).to have_http_status(:ok)
+      body = JSON.parse(response.body)
+      expect(body['status']).to eq('ok')
+      expect(body['baseline']).to include(
+        'snapshot_id' => 'baseline-1',
+        'project_id' => 1,
+        'captured_by_name' => 'Alice',
+        'scope' => 'filtered'
+      )
+      expect(body['baseline']['tasks_by_issue_id']['10']).to include(
+        'issue_id' => 10,
+        'baseline_start_date' => '2026-04-10',
+        'baseline_due_date' => '2026-04-15'
+      )
+      expect(body['warnings']).to eq(['query warning'])
+    end
+
+    it 'can save a whole-project baseline snapshot' do
+      filtered_issue = double('Issue', id: 10, start_date: Date.new(2026, 4, 10), due_date: Date.new(2026, 4, 15))
+      project_issue = double('Issue', id: 11, start_date: Date.new(2026, 4, 11), due_date: Date.new(2026, 4, 16))
+      project_snapshot = RedmineCanvasGantt::BaselineSnapshot.new(
+        snapshot_id: 'baseline-2',
+        project_id: 1,
+        captured_at: Time.utc(2026, 4, 2, 12, 0, 0),
+        captured_by_id: 7,
+        captured_by_name: 'Alice',
+        scope: 'project',
+        task_states: [
+          RedmineCanvasGantt::BaselineTaskState.new(
+            issue_id: 11,
+            baseline_start_date: Date.new(2026, 4, 11),
+            baseline_due_date: Date.new(2026, 4, 16)
+          )
+        ]
+      )
+
+      allow(resolver).to receive(:resolve).and_return({
+        issues: [filtered_issue],
+        initial_state: nil,
+        warnings: ['query warning']
+      })
+      allow(controller).to receive(:baseline_project_issues).with([1]).and_return([project_issue])
+      expect(baseline_repository).to receive(:build_snapshot).with(
+        project: project,
+        issues: [project_issue],
+        current_user: current_user,
+        scope: 'project'
+      ).and_return(project_snapshot)
+      allow(baseline_repository).to receive(:replace).with(project_id: 1, snapshot: project_snapshot).and_return(project_snapshot)
+
+      post :save_baseline, params: { project_id: 'demo', scope: 'project' }, format: :json
+
+      expect(response).to have_http_status(:ok)
+      body = JSON.parse(response.body)
+      expect(body['baseline']).to include('scope' => 'project')
+      expect(body['baseline']['tasks_by_issue_id'].keys).to eq(['11'])
+      expect(body['warnings']).to eq([])
+    end
+
+    it 'returns unprocessable entity for an invalid baseline scope' do
+      post :save_baseline, params: { project_id: 'demo', scope: 'unexpected' }, format: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)).to eq('error' => 'scope is invalid')
+    end
+
+    it 'returns forbidden when edit permission is missing' do
+      allow(current_user).to receive(:allowed_to?).with(:edit_canvas_gantt, project).and_return(false)
+
+      post :save_baseline, params: { project_id: 'demo' }, format: :json
+
+      expect(response).to have_http_status(:forbidden)
+      expect(JSON.parse(response.body)).to eq('error' => 'Permission denied')
     end
   end
 
   describe 'GET #index' do
     before do
       allow(controller).to receive(:set_permissions) do
-        controller.instance_variable_set(:@permissions, { editable: false, viewable: true })
+        controller.instance_variable_set(:@permissions, { editable: false, viewable: true, baseline_editable: false })
       end
       allow(controller).to receive(:plugin_settings).and_return({})
       allow(Setting).to receive(:non_working_week_days).and_return([0, 6])
@@ -91,6 +259,9 @@ RSpec.describe CanvasGanttsController, type: :controller do
       expect(i18n_payload['label_leaf_issues_only']).to eq(I18n.t(:label_leaf_issues_only))
       expect(i18n_payload['label_include_closed_issues']).to eq(I18n.t(:label_include_closed_issues))
       expect(i18n_payload['label_today_onward_only']).to eq(I18n.t(:label_today_onward_only))
+      expect(i18n_payload['label_save_baseline_filtered']).to eq(I18n.t(:label_save_baseline_filtered))
+      expect(i18n_payload['label_save_baseline_project']).to eq(I18n.t(:label_save_baseline_project))
+      expect(i18n_payload['label_baseline_scope']).to eq(I18n.t(:label_baseline_scope))
     end
 
     it 'includes localized help labels in Japanese frontend i18n payload' do
@@ -112,6 +283,8 @@ RSpec.describe CanvasGanttsController, type: :controller do
         expect(i18n_payload['label_total']).to eq(I18n.t(:label_total))
         expect(i18n_payload['label_workload']).to eq(I18n.t(:label_workload))
         expect(i18n_payload['label_show_workload']).to eq(I18n.t(:label_show_workload))
+        expect(i18n_payload['label_unassigned']).to eq(I18n.t(:label_unassigned))
+        expect(i18n_payload['label_none']).to eq('(未設定)')
         expect(i18n_payload['label_capacity_threshold']).to eq(I18n.t(:label_capacity_threshold))
         expect(i18n_payload['label_leaf_issues_only']).to eq(I18n.t(:label_leaf_issues_only))
         expect(i18n_payload['label_include_closed_issues']).to eq(I18n.t(:label_include_closed_issues))

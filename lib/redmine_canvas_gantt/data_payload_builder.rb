@@ -1,3 +1,5 @@
+require 'set'
+
 module RedmineCanvasGantt
   class DataPayloadBuilder
     def initialize(custom_field_extractor:, current_user:)
@@ -5,16 +7,18 @@ module RedmineCanvasGantt
       @current_user = current_user
     end
 
-    def build(project:, permissions:, project_ids:, issues:, initial_state: nil, warnings: [])
+    def build(project:, permissions:, project_ids:, issues:, filter_option_projects:, filter_option_issues:, initial_state: nil, warnings: [], baseline: nil)
       {
         tasks: build_tasks(issues),
         custom_fields: @custom_field_extractor.build_project_custom_fields(project_ids, issues),
         relations: build_relations(issues),
         versions: build_versions(project_ids),
+        filter_options: build_filter_options(projects: filter_option_projects, issues: filter_option_issues),
         statuses: build_statuses,
         project: build_project_payload(project),
         permissions: permissions,
         initial_state: initial_state,
+        baseline: build_baseline_payload(baseline),
         warnings: warnings.presence
       }.compact
     end
@@ -76,6 +80,44 @@ module RedmineCanvasGantt
       end
     end
 
+    def build_filter_options(projects:, issues:)
+      {
+        projects: build_project_options(projects),
+        assignees: build_assignee_options(issues)
+      }
+    end
+
+    def build_project_options(projects)
+      projects
+        .map { |entry| { id: entry.id, name: entry.name } }
+        .sort_by { |entry| entry[:name].to_s.downcase }
+    end
+
+    def build_assignee_options(issues)
+      grouped = {}
+
+      issues.each do |issue|
+        assignee_id = issue.assigned_to_id
+        grouped[assignee_id] ||= {
+          id: assignee_id,
+          name: assignee_id.nil? ? nil : issue.assigned_to&.name,
+          project_ids: Set.new
+        }
+        grouped[assignee_id][:name] ||= issue.assigned_to&.name if assignee_id
+        grouped[assignee_id][:project_ids] << issue.project_id.to_s if issue.project_id.present?
+      end
+
+      grouped.values.map do |entry|
+        {
+          id: entry[:id],
+          name: entry[:name],
+          project_ids: entry[:project_ids].to_a.sort
+        }
+      end.sort_by do |entry|
+        [entry[:id].nil? ? 0 : 1, entry[:name].to_s.downcase]
+      end
+    end
+
     def build_statuses
       IssueStatus.sorted.map { |status| { id: status.id, name: status.name, is_closed: status.is_closed? } }
     end
@@ -97,6 +139,16 @@ module RedmineCanvasGantt
         type: relation.relation_type,
         delay: relation.delay
       }
+    end
+
+    def build_baseline_payload(baseline)
+      return nil if baseline.nil?
+
+      if baseline.respond_to?(:to_payload_hash)
+        baseline.to_payload_hash
+      elsif baseline.is_a?(Hash)
+        baseline
+      end
     end
   end
 end

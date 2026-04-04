@@ -3,6 +3,7 @@ import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
 import { InteractionEngine } from '../engines/InteractionEngine';
 import { BackgroundRenderer } from '../renderers/BackgroundRenderer';
+import { BaselineRenderer } from '../renderers/BaselineRenderer';
 import { TaskRenderer } from '../renderers/TaskRenderer';
 import { OverlayRenderer, type OverlayRenderState } from '../renderers/OverlayRenderer';
 import { A11yLayer } from './A11yLayer';
@@ -25,6 +26,7 @@ import { exportSnapshotAsPng } from '../export/png';
 import type { GanttExportHandle, GanttExportSnapshot } from '../export/types';
 import type { TimelineHeaderHandle } from './TimelineHeader';
 import { i18n } from '../utils/i18n';
+import { useBaselineStore } from '../stores/BaselineStore';
 
 import { ONE_DAY_MS, MAX_SCROLL_AREA_PX, BOTTOM_PADDING_PX, SIDEBAR_RESIZE_HANDLE_TOTAL_WIDTH, SIDEBAR_RESIZE_CURSOR } from '../constants';
 
@@ -41,6 +43,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
     const timelineHeaderRef = useRef<TimelineHeaderHandle>(null);
 
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
+    const baselineCanvasRef = useRef<HTMLCanvasElement>(null);
     const taskCanvasRef = useRef<HTMLCanvasElement>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -51,7 +54,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         previousUserSelect: string;
     } | null>(null);
 
-    const { viewport, tasks, relations, selectedTaskId, selectedRelationId, draftRelation, rowCount, zoomLevel, viewportFromStorage, layoutRows, showVersions, updateViewport, setTasks, setRelations, setVersions, setCustomFields, customFields } = useTaskStore();
+    const { viewport, tasks, relations, selectedTaskId, selectedRelationId, draftRelation, rowCount, zoomLevel, viewportFromStorage, layoutRows, showVersions, updateViewport, setTasks, setRelations, setVersions, setFilterOptions, setCustomFields, customFields } = useTaskStore();
     const {
         sidebarWidth,
         setSidebarWidth,
@@ -63,6 +66,8 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         setSidebarResizing
     } = useUIStore();
     const { workloadPaneVisible } = useWorkloadStore();
+    const baselineSnapshot = useBaselineStore(state => state.snapshot);
+    const showBaseline = useUIStore(state => state.showBaseline);
     const isSplitView = leftPaneVisible && rightPaneVisible;
     const [workloadPaneRatio, setWorkloadPaneRatio] = useState(WORKLOAD_DEFAULT_RATIO);
     const [workloadScrollTop, setWorkloadScrollTop] = useState(0);
@@ -94,6 +99,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         setTasks,
         setRelations,
         setVersions,
+        setFilterOptions,
         setCustomFields,
         updateViewport
     });
@@ -172,6 +178,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
     const engines = useRef<{
         interaction?: InteractionEngine;
         bg?: BackgroundRenderer;
+        baseline?: BaselineRenderer;
         task?: TaskRenderer;
         overlay?: OverlayRenderer;
     }>({});
@@ -197,11 +204,12 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
     ]);
 
     useEffect(() => {
-        if (!mainPaneRef.current || !bgCanvasRef.current || !taskCanvasRef.current || !overlayCanvasRef.current) return;
+        if (!mainPaneRef.current || !bgCanvasRef.current || !baselineCanvasRef.current || !taskCanvasRef.current || !overlayCanvasRef.current) return;
 
         const interaction = new InteractionEngine(mainPaneRef.current);
         engines.current.interaction = interaction;
         engines.current.bg = new BackgroundRenderer(bgCanvasRef.current);
+        engines.current.baseline = new BaselineRenderer(baselineCanvasRef.current);
         engines.current.task = new TaskRenderer(taskCanvasRef.current);
         engines.current.overlay = new OverlayRenderer(overlayCanvasRef.current);
 
@@ -223,7 +231,7 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
                     continue;
                 }
 
-                [bgCanvasRef.current, taskCanvasRef.current, overlayCanvasRef.current].forEach(canvas => {
+                [bgCanvasRef.current, baselineCanvasRef.current, taskCanvasRef.current, overlayCanvasRef.current].forEach(canvas => {
                     if (canvas) {
                         canvas.width = width;
                         canvas.height = height;
@@ -240,8 +248,18 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         if (engines.current.bg) {
             engines.current.bg.render(viewport, zoomLevel, selectedTaskId, tasks);
         }
+        if (engines.current.baseline) {
+            engines.current.baseline.render({
+                viewport,
+                tasks,
+                rowCount,
+                zoomLevel,
+                showBaseline,
+                snapshot: baselineSnapshot
+            });
+        }
         if (engines.current.task) {
-            engines.current.task.render(viewport, tasks, rowCount, zoomLevel, relations, layoutRows, showPointsOrphans);
+            engines.current.task.render(viewport, tasks, rowCount, zoomLevel, relations, layoutRows, showPointsOrphans, baselineSnapshot, showBaseline);
         }
         if (engines.current.overlay) {
             engines.current.overlay.render(overlayRenderState);
@@ -253,6 +271,8 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
         tasks,
         viewport,
         zoomLevel,
+        baselineSnapshot,
+        showBaseline,
         overlayRenderState,
         relations,
         rowCount
@@ -264,13 +284,14 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
 
     const captureSnapshot = useCallback((): GanttExportSnapshot => {
         const headerCanvas = timelineHeaderRef.current?.getCanvas();
-        if (!rightPaneVisible || !headerCanvas || !bgCanvasRef.current || !taskCanvasRef.current || !overlayCanvasRef.current) {
+        if (!rightPaneVisible || !headerCanvas || !bgCanvasRef.current || !baselineCanvasRef.current || !taskCanvasRef.current || !overlayCanvasRef.current) {
             throw new Error(i18n.t('label_export_unavailable') || 'Export is unavailable in the current layout');
         }
 
         return {
             headerCanvas,
             backgroundCanvas: bgCanvasRef.current,
+            baselineCanvas: baselineCanvasRef.current,
             taskCanvas: taskCanvasRef.current,
             overlayCanvas: overlayCanvasRef.current,
             viewport,
@@ -408,8 +429,9 @@ export const GanttContainer = React.forwardRef<GanttExportHandle>((_, ref) => {
                                         }}
                                     >
                                         <canvas ref={bgCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 1 }} />
-                                        <canvas ref={taskCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 2 }} />
-                                        <canvas ref={overlayCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 3 }} />
+                                        <canvas ref={baselineCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 2 }} />
+                                        <canvas ref={taskCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 3 }} />
+                                        <canvas ref={overlayCanvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 4 }} />
                                         <HtmlOverlay />
                                         <A11yLayer />
                                     </div>

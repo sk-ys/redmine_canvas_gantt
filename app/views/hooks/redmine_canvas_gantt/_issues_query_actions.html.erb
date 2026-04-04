@@ -3,31 +3,27 @@
 <% can_open_canvas_gantt = project.present? && User.current.allowed_to?(:view_canvas_gantt, project) %>
 
 <% if can_open_canvas_gantt %>
-  <% canvas_gantt_path = "#{project_path(project)}/canvas_gantt" %>
+  <% canvas_gantt_url = ::RedmineCanvasGantt::QueryLinkHelper.canvas_gantt_query_action_url(
+    base_path: project_canvas_gantt_path(project),
+    query: query,
+    request_query_parameters: request.query_parameters
+  ) %>
   <div id="canvas-gantt-query-action-source" style="display:none;">
-    <% if query&.persisted? %>
-      <%= link_to(
-        l(:label_open_in_canvas_gantt),
-        "#{canvas_gantt_path}?query_id=#{query.id}",
-        class: 'canvas-gantt-query-action',
-        id: 'canvas-gantt-query-action-link',
-        title: l(:label_open_in_canvas_gantt_tooltip),
-        style: 'margin-left: 0.75em;'
-      ) %>
-    <% else %>
-      <%= content_tag(
-        :span,
-        l(:label_canvas_gantt_query_requires_save),
-        class: 'canvas-gantt-query-action',
-        id: 'canvas-gantt-query-action-notice',
-        title: l(:label_canvas_gantt_query_requires_save),
-        style: 'margin-left: 0.75em;'
-      ) %>
-    <% end %>
+    <%= link_to(
+      l(:label_open_in_canvas_gantt),
+      canvas_gantt_url,
+      class: 'canvas-gantt-query-action',
+      id: 'canvas-gantt-query-action-link',
+      title: l(:label_open_in_canvas_gantt_tooltip),
+      style: 'margin-left: 0.75em;'
+    ) %>
   </div>
 
   <script>
     (function() {
+      var body = document.body;
+      if (!body || !body.classList.contains('controller-issues') || !body.classList.contains('action-index')) return;
+
       var source = document.getElementById('canvas-gantt-query-action-source');
       if (!source) return;
 
@@ -43,6 +39,34 @@
       }
 
       target.appendChild(action);
+
+      var candidateSelectors = ['#main-menu a[href*="/canvas_gantt"]', '#project-menu a[href*="/canvas_gantt"]'];
+      var menuLink = null;
+
+      for (var i = 0; i < candidateSelectors.length && !menuLink; i += 1) {
+        var candidate = document.querySelector(candidateSelectors[i]);
+        if (!candidate) continue;
+
+        try {
+          var parsed = new URL(candidate.href, window.location.origin);
+          if (parsed.pathname.indexOf('/canvas_gantt') === -1) continue;
+          menuLink = candidate;
+        } catch (error) {
+          continue;
+        }
+      }
+
+      if (!menuLink) return;
+
+      try {
+        var currentActionUrl = new URL(action.href, window.location.origin);
+        var currentMenuUrl = new URL(menuLink.href, window.location.origin);
+        currentMenuUrl.pathname = currentActionUrl.pathname;
+        currentMenuUrl.search = currentActionUrl.search;
+        menuLink.href = currentMenuUrl.toString();
+      } catch (error) {
+        menuLink.href = action.href;
+      }
     })();
   </script>
 <% end %>

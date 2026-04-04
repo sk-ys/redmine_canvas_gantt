@@ -1,9 +1,20 @@
 import { create } from 'zustand';
 import { AutoScheduleMoveMode, RelationType, type AutoScheduleMoveMode as AutoScheduleMoveModeValue, type DefaultRelationType } from '../types/constraints';
-import { loadPreferences } from '../utils/preferences';
+import { loadPreferences, savePreferences } from '../utils/preferences';
 import { buildRedmineUrl } from '../utils/redmineUrl';
+import {
+    buildColumnSettingsFromVisibleKeys,
+    moveColumnSetting,
+    normalizeColumnSettings,
+    resetColumnSettings,
+    toggleColumnSetting,
+    type ColumnConfig
+} from '../components/sidebar/sidebarColumnSettings';
+import { getColumnDefinitions, getDefaultVisibleColumnKeys } from '../components/sidebar/sidebarColumnCatalog';
 
 export const DEFAULT_COLUMNS = ['notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'];
+
+const COLUMN_DEFINITIONS = getColumnDefinitions();
 const preferences = loadPreferences();
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
@@ -17,7 +28,9 @@ interface Notification {
 interface UIState {
     notifications: Notification[];
     showProgressLine: boolean;
+    showBaseline: boolean;
     visibleColumns: string[];
+    columnSettings: ColumnConfig[];
     columnWidths: Record<string, number>;
     sidebarWidth: number;
     leftPaneVisible: boolean;
@@ -34,11 +47,17 @@ interface UIState {
     addNotification: (message: string, type?: NotificationType) => void;
     removeNotification: (id: string) => void;
     toggleProgressLine: () => void;
+    toggleBaseline: () => void;
+    setShowBaseline: (value: boolean) => void;
     togglePointsOrphans: () => void;
     toggleLeftPane: () => void;
     toggleRightPane: () => void;
     showPointsOrphans: boolean;
     setVisibleColumns: (cols: string[]) => void;
+    toggleColumnVisibility: (key: string) => void;
+    moveColumnUp: (key: string) => void;
+    moveColumnDown: (key: string) => void;
+    resetColumns: () => void;
     setColumnWidth: (key: string, width: number) => void;
     setSidebarWidth: (width: number) => void;
     setActiveInlineEdit: (value: { taskId: string; field: string; source?: 'cell' | 'panel' } | null) => void;
@@ -57,16 +76,26 @@ interface UIState {
 }
 
 const DEFAULT_RELATION_TYPE = RelationType.Precedes;
+const defaultColumnSettings = buildColumnSettingsFromVisibleKeys(COLUMN_DEFINITIONS, getDefaultVisibleColumnKeys());
+export const DEFAULT_COLUMN_SETTINGS = defaultColumnSettings;
 
-export const useUIStore = create<UIState>((set) => ({
+const toVisibleColumns = (columnSettings: ColumnConfig[]) => columnSettings.filter((entry) => entry.visible).map((entry) => entry.key);
+
+const persistColumnSettings = (columnSettings: ColumnConfig[]) => {
+    savePreferences({ columnSettings, visibleColumns: toVisibleColumns(columnSettings) });
+};
+
+export const useUIStore = create<UIState>((set, get) => ({
     notifications: [],
     showProgressLine: preferences.showProgressLine ?? false,
+    showBaseline: preferences.showBaseline ?? false,
     showPointsOrphans: preferences.showPointsOrphans ?? true,
     leftPaneVisible: true,
     rightPaneVisible: true,
-    visibleColumns: preferences.visibleColumns
-        ? preferences.visibleColumns
-        : ['id', ...DEFAULT_COLUMNS],
+    visibleColumns: preferences.visibleColumns ?? ['id', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'],
+    columnSettings: preferences.columnSettings
+        ? normalizeColumnSettings(COLUMN_DEFINITIONS, preferences.columnSettings)
+        : defaultColumnSettings,
     columnWidths: preferences.columnWidths ?? {
         id: 72,
         notification: 44,
@@ -104,6 +133,8 @@ export const useUIStore = create<UIState>((set) => ({
             notifications: state.notifications.filter((n) => n.id !== id)
         })),
     toggleProgressLine: () => set((state) => ({ showProgressLine: !state.showProgressLine })),
+    toggleBaseline: () => set((state) => ({ showBaseline: !state.showBaseline })),
+    setShowBaseline: (value) => set(() => ({ showBaseline: value })),
     togglePointsOrphans: () => set((state) => ({ showPointsOrphans: !state.showPointsOrphans })),
     toggleLeftPane: () => set((state) => {
         if (state.leftPaneVisible && state.rightPaneVisible) {
@@ -123,7 +154,31 @@ export const useUIStore = create<UIState>((set) => ({
         }
         return { leftPaneVisible: true, rightPaneVisible: false };
     }),
-    setVisibleColumns: (cols) => set(() => ({ visibleColumns: cols })),
+    setVisibleColumns: (cols) => {
+        const next = buildColumnSettingsFromVisibleKeys(COLUMN_DEFINITIONS, cols);
+        set(() => ({ visibleColumns: cols, columnSettings: next }));
+        persistColumnSettings(next);
+    },
+    toggleColumnVisibility: (key) => {
+        const next = toggleColumnSetting(get().columnSettings, key);
+        set(() => ({ visibleColumns: toVisibleColumns(next), columnSettings: next }));
+        persistColumnSettings(next);
+    },
+    moveColumnUp: (key) => {
+        const next = moveColumnSetting(get().columnSettings, key, 'up');
+        set(() => ({ visibleColumns: toVisibleColumns(next), columnSettings: next }));
+        persistColumnSettings(next);
+    },
+    moveColumnDown: (key) => {
+        const next = moveColumnSetting(get().columnSettings, key, 'down');
+        set(() => ({ visibleColumns: toVisibleColumns(next), columnSettings: next }));
+        persistColumnSettings(next);
+    },
+    resetColumns: () => {
+        const next = resetColumnSettings(COLUMN_DEFINITIONS);
+        set(() => ({ visibleColumns: ['id', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'], columnSettings: next }));
+        persistColumnSettings(next);
+    },
     setColumnWidth: (key, width) => set((state) => ({ columnWidths: { ...state.columnWidths, [key]: width } })),
     setSidebarWidth: (width) => set(() => ({ sidebarWidth: width })),
     setActiveInlineEdit: (value) => set(() => ({ activeInlineEdit: value })),

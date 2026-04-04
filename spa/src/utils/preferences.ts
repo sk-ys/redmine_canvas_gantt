@@ -1,5 +1,6 @@
 import type { ViewMode, Viewport, ZoomLevel } from '../types';
 import type { AutoScheduleMoveMode } from '../types/constraints';
+import type { ColumnConfig } from '../components/sidebar/sidebarColumnSettings';
 
 type StoredViewport = Pick<Viewport, 'startDate' | 'scrollX' | 'scrollY' | 'scale'>;
 
@@ -10,9 +11,11 @@ export interface StoredPreferences {
     showProgressLine?: boolean;
     showPointsOrphans?: boolean;
     showVersions?: boolean;
+    showBaseline?: boolean;
     selectedStatusIds?: number[];
     selectedProjectIds?: string[];
     visibleColumns?: string[];
+    columnSettings?: ColumnConfig[];
     organizeByDependency?: boolean;
     columnWidths?: Record<string, number>;
     sidebarWidth?: number;
@@ -37,7 +40,9 @@ const sanitizePreferences = (prefs: StoredPreferences): StoredPreferences => Obj
         showProgressLine: prefs.showProgressLine,
         showPointsOrphans: prefs.showPointsOrphans,
         showVersions: prefs.showVersions,
+        showBaseline: prefs.showBaseline,
         visibleColumns: prefs.visibleColumns,
+        columnSettings: prefs.columnSettings,
         columnWidths: prefs.columnWidths,
         sidebarWidth: prefs.sidebarWidth,
         customScales: prefs.customScales,
@@ -56,20 +61,20 @@ const sanitizePreferences = (prefs: StoredPreferences): StoredPreferences => Obj
 ) as StoredPreferences;
 
 const STORAGE_KEY = 'canvasGantt:preferences';
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 3;
 const GLOBAL_PROJECT_KEY = 'project:global';
 
 const isBrowser = typeof window !== 'undefined';
 
-type PreferencesEnvelopeV2 = {
-    version: 2;
+type PreferencesEnvelopeV3 = {
+    version: 3;
     projects: Record<string, StoredPreferences>;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
 
-const isPreferencesEnvelopeV2 = (value: unknown): value is PreferencesEnvelopeV2 => {
+const isPreferencesEnvelopeV3 = (value: unknown): value is PreferencesEnvelopeV3 => {
     if (!isRecord(value)) return false;
     if (value.version !== STORAGE_VERSION) return false;
     if (!isRecord(value.projects)) return false;
@@ -82,11 +87,11 @@ const resolveProjectKey = (projectId?: string | number | null): string => {
     return `project:${String(id)}`;
 };
 
-const persistEnvelope = (envelope: PreferencesEnvelopeV2) => {
+const persistEnvelope = (envelope: PreferencesEnvelopeV3) => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
 };
 
-const toEnvelope = (value: StoredPreferences, projectKey: string): PreferencesEnvelopeV2 => ({
+const toEnvelope = (value: StoredPreferences, projectKey: string): PreferencesEnvelopeV3 => ({
     version: STORAGE_VERSION,
     projects: {
         [projectKey]: value
@@ -103,11 +108,11 @@ export const loadPreferences = (projectId?: string | number | null): StoredPrefe
         const parsed = JSON.parse(raw) as unknown;
         const projectKey = resolveProjectKey(projectId);
 
-        if (isPreferencesEnvelopeV2(parsed)) {
+        if (isPreferencesEnvelopeV3(parsed)) {
             return sanitizePreferences(parsed.projects[projectKey] ?? {});
         }
 
-        // V1 migration: apply old shared preferences to current project only.
+        // Legacy shared payload migration: apply old preferences to the current project only.
         if (isRecord(parsed)) {
             const migrated = toEnvelope(sanitizePreferences(parsed as StoredPreferences), projectKey);
             persistEnvelope(migrated);
@@ -136,10 +141,10 @@ export const savePreferences = (prefs: StoredPreferences, projectId?: string | n
 
     try {
         const parsed = JSON.parse(raw) as unknown;
-        const baseEnvelope = isPreferencesEnvelopeV2(parsed)
+        const baseEnvelope = isPreferencesEnvelopeV3(parsed)
             ? parsed
             : toEnvelope(sanitizePreferences(parsed as StoredPreferences), projectKey);
-        const nextEnvelope: PreferencesEnvelopeV2 = {
+        const nextEnvelope: PreferencesEnvelopeV3 = {
             version: STORAGE_VERSION,
             projects: {
                 ...baseEnvelope.projects,
@@ -152,3 +157,4 @@ export const savePreferences = (prefs: StoredPreferences, projectId?: string | n
         persistEnvelope(toEnvelope(nextProjectPrefs, projectKey));
     }
 };
+

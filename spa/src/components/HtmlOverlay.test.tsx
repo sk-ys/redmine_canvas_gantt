@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { HtmlOverlay } from './HtmlOverlay';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
+import { useBaselineStore } from '../stores/BaselineStore';
 import { LayoutEngine } from '../engines/LayoutEngine';
 import type { Relation, Task, Viewport } from '../types';
 import { RelationType } from '../types/constraints';
@@ -99,6 +100,11 @@ describe('HtmlOverlay', () => {
             draftRelation: null,
             hoveredTaskId: null,
             contextMenu: null
+        });
+        useBaselineStore.getState().reset();
+        useUIStore.setState({
+            ...useUIStore.getState(),
+            showBaseline: false
         });
     });
 
@@ -233,6 +239,38 @@ describe('HtmlOverlay', () => {
         expect(screen.getByTestId('task-resize-handle-end-1')).toBeInTheDocument();
         expect(startHandle.getAttribute('style')).toContain('background: rgba(26, 115, 232, 0.24)');
         expect(startHandle.getAttribute('style')).toContain('border: 1px solid rgba(26, 115, 232, 0.82)');
+    });
+
+    it('shows baseline comparison details for the selected task', async () => {
+        act(() => {
+            useTaskStore.getState().setTasks([task1, task2]);
+            useTaskStore.getState().selectTask('1');
+            useTaskStore.setState({ permissions: { editable: true, viewable: true, baselineEditable: true } });
+            useUIStore.setState({ showBaseline: true });
+            useBaselineStore.getState().setSnapshot({
+                snapshotId: 'baseline-1',
+                projectId: 'p1',
+                capturedAt: '2026-04-01T00:00:00.000Z',
+                capturedById: 1,
+                capturedByName: 'Alice',
+                scope: 'project',
+                tasksByIssueId: {
+                    '1': {
+                        issueId: '1',
+                        baselineStartDate: -DAY_MS,
+                        baselineDueDate: 0
+                    }
+                }
+            });
+        });
+
+        render(<HtmlOverlay />);
+
+        expect(await screen.findByTestId('baseline-diff-popover')).toBeInTheDocument();
+        expect(screen.getByText('Baseline comparison')).toBeInTheDocument();
+        expect(screen.getByText(/Task 1/)).toBeInTheDocument();
+        expect(screen.getByText('Scope: Whole project')).toBeInTheDocument();
+        expect(screen.getAllByText('+1d')).toHaveLength(2);
     });
 
     it('hides resize handles while dragging a dependency and restores them on mouseup', () => {

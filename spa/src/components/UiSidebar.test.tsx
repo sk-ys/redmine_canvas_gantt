@@ -6,6 +6,9 @@ import { useUIStore } from '../stores/UIStore';
 import type { Task } from '../types';
 import { useEditMetaStore } from '../stores/EditMetaStore';
 import { SIDEBAR_RESIZE_CURSOR } from '../constants';
+import { resetCanvasGanttTestState } from '../test/testSetup';
+import { buildColumnSettingsFromVisibleKeys } from '../components/sidebar/sidebarColumnSettings';
+import { getColumnDefinitions } from '../components/sidebar/sidebarColumnCatalog';
 
 describe('UiSidebar', () => {
     const initialUpdateViewport = useTaskStore.getState().updateViewport;
@@ -77,6 +80,7 @@ describe('UiSidebar', () => {
     beforeEach(() => {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        resetCanvasGanttTestState();
     });
 
     afterEach(() => {
@@ -86,7 +90,8 @@ describe('UiSidebar', () => {
     });
 
     it('shows task id column', () => {
-        useUIStore.setState({ visibleColumns: ['id'] });
+        const columnSettings = buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id']);
+        useUIStore.setState({ visibleColumns: ['id'], columnSettings });
 
         useTaskStore.setState({
             viewport: {
@@ -123,7 +128,8 @@ describe('UiSidebar', () => {
     });
 
     it('keeps task rows draggable while using pointer cursor', () => {
-        useUIStore.setState({ visibleColumns: ['id', 'status'] });
+        const columnSettings = buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'status'], columnSettings });
 
         useTaskStore.setState({
             viewport: {
@@ -162,7 +168,8 @@ describe('UiSidebar', () => {
     });
 
     it('uses ew-resize and restores previous body styles during column resize', async () => {
-        useUIStore.setState({ visibleColumns: ['id', 'status'] });
+        const columnSettings = buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'status']);
+        useUIStore.setState({ visibleColumns: ['id', 'status'], columnSettings });
 
         useTaskStore.setState({
             viewport: {
@@ -228,7 +235,7 @@ describe('UiSidebar', () => {
             settings: { inline_edit_start_date: '1' }
         };
 
-        useUIStore.setState({ visibleColumns: ['id', 'startDate'] });
+        useUIStore.setState({ visibleColumns: ['id', 'startDate'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'startDate']) });
         useEditMetaStore.setState({ metaByTaskId: {}, loadingTaskId: null, error: null });
 
         useTaskStore.setState({
@@ -288,8 +295,119 @@ describe('UiSidebar', () => {
         expect(useTaskStore.getState().modifiedTaskIds.has(taskId)).toBe(true);
     });
 
+    it('shows the version inline edit empty option using the version-specific unset label', async () => {
+        const taskId = '124';
+
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key',
+            i18n: {
+                button_edit: 'Edit',
+                field_version: 'Target Version',
+                label_none: '未設定',
+                label_unassigned: '担当なし'
+            }
+        };
+
+        useUIStore.setState({
+            visibleColumns: ['id', 'version'],
+            columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'version'])
+        });
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 32
+            },
+            groupByProject: false,
+            selectedTaskId: null,
+            customFields: []
+        });
+        useEditMetaStore.setState({
+            metaByTaskId: {
+                [taskId]: {
+                    task: {
+                        id: taskId,
+                        subject: 'Version task',
+                        assignedToId: null,
+                        statusId: 1,
+                        doneRatio: 0,
+                        dueDate: '2025-01-01',
+                        startDate: '2025-01-01',
+                        priorityId: 1,
+                        categoryId: null,
+                        estimatedHours: null,
+                        projectId: 1,
+                        trackerId: 1,
+                        fixedVersionId: null,
+                        lockVersion: 1
+                    },
+                    editable: {
+                        subject: true,
+                        assignedToId: true,
+                        statusId: true,
+                        doneRatio: true,
+                        dueDate: true,
+                        startDate: true,
+                        priorityId: true,
+                        categoryId: true,
+                        estimatedHours: true,
+                        projectId: true,
+                        trackerId: true,
+                        fixedVersionId: true,
+                        customFieldValues: true
+                    },
+                    options: {
+                        statuses: [],
+                        assignees: [],
+                        priorities: [],
+                        categories: [],
+                        projects: [],
+                        trackers: [],
+                        versions: [{ id: 7, name: 'Release 1' }],
+                        customFields: []
+                    },
+                    customFieldValues: {}
+                }
+            },
+            loadingTaskId: null,
+            error: null
+        });
+
+        const task: Task = {
+            id: taskId,
+            subject: 'Version task',
+            startDate: new Date('2025-01-01').getTime(),
+            dueDate: new Date('2025-01-05').getTime(),
+            ratioDone: 0,
+            statusId: 1,
+            lockVersion: 1,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+        useTaskStore.getState().setTasks([task]);
+
+        render(<UiSidebar />);
+
+        const cell = await screen.findByTestId(`cell-${taskId}-version`);
+        fireEvent.doubleClick(cell);
+
+        const select = await screen.findByRole('combobox');
+        expect(screen.getByRole('option', { name: '未設定' })).toBeInTheDocument();
+        expect(screen.queryByRole('option', { name: '担当なし' })).not.toBeInTheDocument();
+        expect(select).toBeInTheDocument();
+    });
+
     it('shows tooltip on task subject hover', () => {
-        useUIStore.setState({ visibleColumns: ['subject'] });
+        useUIStore.setState({ visibleColumns: ['subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']) });
 
         useTaskStore.setState({
             viewport: {
@@ -339,7 +457,7 @@ describe('UiSidebar', () => {
             redmineBase: '/redmine'
         };
 
-        useUIStore.setState({ visibleColumns: ['subject'] });
+        useUIStore.setState({ visibleColumns: ['subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']) });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,
@@ -381,7 +499,7 @@ describe('UiSidebar', () => {
     });
 
     it('renders notification column for unscheduled tasks when enabled in visibleColumns', () => {
-        useUIStore.setState({ visibleColumns: ['notification', 'subject'] });
+        useUIStore.setState({ visibleColumns: ['notification', 'subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['notification', 'subject']) });
 
         useTaskStore.setState({
             viewport: {
@@ -431,7 +549,7 @@ describe('UiSidebar', () => {
     });
 
     it('hides notification column when it is not enabled in visibleColumns', () => {
-        useUIStore.setState({ visibleColumns: ['subject'] });
+        useUIStore.setState({ visibleColumns: ['subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']) });
 
         useTaskStore.setState({
             viewport: {
@@ -476,7 +594,7 @@ describe('UiSidebar', () => {
     });
 
     it('shows conflicted scheduling warnings in the dedicated notification column when enabled', () => {
-        useUIStore.setState({ visibleColumns: ['notification', 'subject'] });
+        useUIStore.setState({ visibleColumns: ['notification', 'subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['notification', 'subject']) });
 
         useTaskStore.setState({
             viewport: {
@@ -524,7 +642,7 @@ describe('UiSidebar', () => {
     });
 
     it('shows critical path badge in the notification column when there is no scheduling warning', () => {
-        useUIStore.setState({ visibleColumns: ['notification', 'subject'] });
+        useUIStore.setState({ visibleColumns: ['notification', 'subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['notification', 'subject']) });
 
         useTaskStore.setState({
             viewport: {
@@ -592,7 +710,7 @@ describe('UiSidebar', () => {
             settings: { inline_edit_custom_fields: '1' }
         };
 
-        useUIStore.setState({ visibleColumns: ['id', `cf:${customFieldId}`] });
+        useUIStore.setState({ visibleColumns: ['id', `cf:${customFieldId}`], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', `cf:${customFieldId}`]) });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,
@@ -673,7 +791,7 @@ describe('UiSidebar', () => {
             settings: { inline_edit_custom_fields: '0' }
         };
 
-        useUIStore.setState({ visibleColumns: ['id', `cf:${customFieldId}`] });
+        useUIStore.setState({ visibleColumns: ['id', `cf:${customFieldId}`], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', `cf:${customFieldId}`]) });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,
@@ -757,7 +875,7 @@ describe('UiSidebar', () => {
             settings: { inline_edit_status: '1' }
         };
 
-        useUIStore.setState({ visibleColumns: ['id', 'status'], activeInlineEdit: null });
+        useUIStore.setState({ visibleColumns: ['id', 'status'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'status']), activeInlineEdit: null });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,
@@ -862,7 +980,7 @@ describe('UiSidebar', () => {
             settings: { inline_edit_estimated_hours: '1' }
         };
 
-        useUIStore.setState({ visibleColumns: ['id', 'estimatedHours'], activeInlineEdit: null });
+        useUIStore.setState({ visibleColumns: ['id', 'estimatedHours'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['id', 'estimatedHours']), activeInlineEdit: null });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,
@@ -962,7 +1080,7 @@ describe('UiSidebar', () => {
             realUpdateViewport(updates);
         });
 
-        useUIStore.setState({ visibleColumns: ['subject'] });
+        useUIStore.setState({ visibleColumns: ['subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']) });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,
@@ -1040,7 +1158,7 @@ describe('UiSidebar', () => {
             realUpdateViewport(updates);
         });
 
-        useUIStore.setState({ visibleColumns: ['subject'] });
+        useUIStore.setState({ visibleColumns: ['subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']) });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,
@@ -1125,7 +1243,7 @@ describe('UiSidebar', () => {
     it('stops the scheduled auto-scroll when dragging ends', async () => {
         const { callbacks, cancelAnimationFrame } = stubAnimationFrames();
 
-        useUIStore.setState({ visibleColumns: ['subject'] });
+        useUIStore.setState({ visibleColumns: ['subject'], columnSettings: buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']) });
         useTaskStore.setState({
             viewport: {
                 startDate: 0,

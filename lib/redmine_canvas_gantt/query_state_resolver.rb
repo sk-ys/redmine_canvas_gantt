@@ -142,7 +142,7 @@ module RedmineCanvasGantt
         selected_status_ids: extract_filter_ids(filters['status_id']),
         selected_assignee_ids: extract_filter_ids(filters['assigned_to_id'], allow_none: true),
         selected_project_ids: extract_filter_ids(filters['project_id']).map(&:to_s),
-        selected_version_ids: extract_filter_ids(filters['fixed_version_id']).map(&:to_s),
+        selected_version_ids: extract_filter_ids(filters['fixed_version_id'], allow_none: true).map { |id| id.nil? ? '_none' : id.to_s },
         sort_config: extract_sort_config(query) || DEFAULT_STATE[:sort_config].deep_dup,
         group_by_project: query.group_by.to_s == 'project',
         group_by_assignee: query.group_by.to_s == 'assigned_to',
@@ -171,13 +171,17 @@ module RedmineCanvasGantt
 
       case operator
       when '='
-        values.filter_map do |value|
+        values.map do |value|
           if allow_none && value.to_s == 'none'
             nil
           elsif value.to_s.match?(/\A-?\d+\z/)
             value.to_i
           end
-        end
+        end.compact.tap do |results|
+          if allow_none && values.any? { |value| value.to_s == 'none' }
+            results << nil
+          end
+        end.uniq
       when 'o'
         IssueStatus.where(is_closed: false).pluck(:id)
       when 'c'
@@ -217,7 +221,7 @@ module RedmineCanvasGantt
     end
 
     def apply_version_override!(state)
-      version_ids = parse_string_list(url_filter_values('fixed_version_id'))
+      version_ids = parse_version_list(url_filter_values('fixed_version_id'))
       state[:selected_version_ids] = version_ids if version_ids.present?
     end
 
@@ -330,7 +334,7 @@ module RedmineCanvasGantt
       scope = @issue_scope.where(project_id: project_scope_ids(project_ids, selected_project_ids))
       scope = scope.where(id: base_issue_ids) if base_issue_ids
       scope = scope.where(status_id: state[:selected_status_ids]) if state[:selected_status_ids].present?
-      scope = scope.where(fixed_version_id: state[:selected_version_ids]) if state[:selected_version_ids].present?
+      scope = apply_version_filter(scope, state[:selected_version_ids]) if state[:selected_version_ids].present?
       scope = apply_assignee_filter(scope, state[:selected_assignee_ids]) if state[:selected_assignee_ids].present?
       scope.includes(*@issue_includes)
     end
@@ -346,6 +350,16 @@ module RedmineCanvasGantt
       return scope.where(assigned_to_id: numeric_ids) unless include_none
 
       scope.where(assigned_to_id: numeric_ids).or(scope.where(assigned_to_id: nil))
+    end
+
+    def apply_version_filter(scope, selected_version_ids)
+      include_none = selected_version_ids.include?('_none')
+      numeric_ids = selected_version_ids.filter_map { |id| Integer(id, exception: false) }
+
+      return scope.where(fixed_version_id: nil) if include_none && numeric_ids.empty?
+      return scope.where(fixed_version_id: numeric_ids) unless include_none
+
+      scope.where(fixed_version_id: numeric_ids).or(scope.where(fixed_version_id: nil))
     end
 
     def preserve_query_order(issues, base_issue_ids)
@@ -423,14 +437,14 @@ module RedmineCanvasGantt
     end
 
     def parse_integer_or_none_list(values)
-      Array(values).flat_map { |value| value.to_s.split(/[|,]/) }.filter_map do |value|
+      Array(values).flat_map { |value| value.to_s.split(/[|,]/) }.each_with_object([]) do |value, parsed|
         stripped = value.strip
         if %w[_none none].include?(stripped)
-          nil
+          parsed << nil
         elsif stripped.match?(/\A-?\d+\z/)
-          stripped.to_i
+          parsed << stripped.to_i
         end
-      end
+      end.uniq
     end
 
     def parse_version_list(values)

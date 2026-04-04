@@ -56,7 +56,7 @@ describe('Preferences storage', () => {
 
         const raw = window.localStorage.getItem('canvasGantt:preferences');
         const parsed = raw ? JSON.parse(raw) : null;
-        expect(parsed?.version).toBe(2);
+        expect(parsed?.version).toBe(3);
         expect(parsed?.projects?.['project:1']?.selectedProjectIds).toBeUndefined();
     });
 
@@ -73,6 +73,46 @@ describe('Preferences storage', () => {
         expect(loaded.autoCalculateDelay).toBe(false);
         expect(loaded.autoApplyDefaultRelation).toBe(false);
         expect(loaded.autoScheduleMoveMode).toBe('off');
+    });
+
+    it('saves and loads baseline visibility preference', () => {
+        savePreferences({ showBaseline: true }, 1);
+
+        expect(loadPreferences(1).showBaseline).toBe(true);
+        expect(loadPreferences(2).showBaseline).toBeUndefined();
+    });
+
+    it('store modules restore persisted filter preferences on reload', async () => {
+        savePreferences({
+            showProgressLine: true,
+            showBaseline: true,
+            showPointsOrphans: false,
+            visibleColumns: ['id', 'category'],
+            columnSettings: [
+                { key: 'id', visible: true },
+                { key: 'subject', visible: false },
+                { key: 'category', visible: true }
+            ],
+            showVersions: false,
+            organizeByDependency: true
+        }, 1);
+
+        const { vi } = await import('vitest');
+        vi.resetModules();
+
+        const [{ useUIStore }, { useTaskStore }] = await Promise.all([
+            import('../stores/UIStore'),
+            import('../stores/TaskStore')
+        ]);
+
+        expect(useUIStore.getState().showProgressLine).toBe(true);
+        expect(useUIStore.getState().showBaseline).toBe(true);
+        expect(useUIStore.getState().showPointsOrphans).toBe(false);
+        expect(useUIStore.getState().visibleColumns).toEqual(['id', 'category']);
+        expect(useUIStore.getState().columnSettings.find((entry) => entry.key === 'category')?.visible).toBe(true);
+
+        expect(useTaskStore.getState().showVersions).toBe(false);
+        expect(useTaskStore.getState().organizeByDependency).toBe(true);
     });
 
 });

@@ -2,9 +2,12 @@ import React from 'react';
 
 import type { TaskStatus, ZoomLevel } from '../types';
 import { AutoScheduleMoveMode, RelationType, type AutoScheduleMoveMode as AutoScheduleMoveModeValue, type DefaultRelationType } from '../types/constraints';
+import type { BaselineSaveScope } from '../types/baseline';
 import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore, DEFAULT_COLUMNS } from '../stores/UIStore';
+import { useBaselineStore } from '../stores/BaselineStore';
 import { i18n } from '../utils/i18n';
+import { apiClient } from '../api/client';
 import { getRelationTypeLabel } from '../utils/relationEditing';
 import { savePreferences } from '../utils/preferences';
 import { buildRedmineUrl } from '../utils/redmineUrl';
@@ -13,6 +16,7 @@ import { buildRedmineIssueQueryParams, toResolvedQueryStateFromStore } from '../
 import { useToolbarMenuState } from './gantt/useToolbarMenuState';
 import { useWorkloadStore } from '../stores/WorkloadStore';
 import type { GanttExportHandle } from '../export/types';
+import { BaselineControls } from './BaselineControls';
 import {
     applyIndeterminateState,
     isCheckboxChecked,
@@ -21,6 +25,9 @@ import {
     toggleAllSelectionValues,
     toggleSelectionValue,
 } from './gantt/toolbarSelection';
+import { COLUMN_CATALOG } from './sidebar/sidebarColumnCatalog';
+import { ColumnMenuItem } from './sidebar/ColumnMenuItem';
+import { useColumnMenuDrag } from './sidebar/useColumnMenuDrag';
 
 interface GanttToolbarProps {
     zoomLevel: ZoomLevel;
@@ -34,13 +41,17 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         filterText, setFilterText, allTasks, versions, selectedAssigneeIds, setSelectedAssigneeIds,
         selectedProjectIds, setSelectedProjectIds, selectedVersionIds, setSelectedVersionIds,
         setRowHeight, taskStatuses, selectedStatusIds, setSelectedStatusFromServer, showVersions, setShowVersions,
-        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects
+        modifiedTaskIds, saveChanges, discardChanges, autoSave, setAutoSave, customFields, activeQueryId, sortConfig, showSubprojects, permissions, filterOptions
     } = useTaskStore();
     const {
         showProgressLine,
         toggleProgressLine,
+        showBaseline,
+        toggleBaseline,
         visibleColumns,
-        setVisibleColumns,
+        columnSettings,
+        toggleColumnVisibility,
+        resetColumns,
         toggleLeftPane,
         toggleRightPane,
         leftPaneVisible,
@@ -60,6 +71,8 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         setAutoScheduleMoveMode,
         resetRelationPreferences
     } = useUIStore();
+    const baselineSaveStatus = useBaselineStore(state => state.saveStatus);
+    const hasBaseline = useBaselineStore(state => state.hasBaseline);
     const isRightPaneMaximized = !leftPaneVisible && rightPaneVisible;
     const isLeftPaneMaximized = leftPaneVisible && !rightPaneVisible;
     const {
@@ -73,6 +86,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         relationSettingsMenuRef,
         exportMenuRef,
         workloadMenuRef,
+        baselineSaveMenuRef,
         isMenuOpen,
         toggleMenu,
         openMenuByKey,
@@ -95,8 +109,8 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     const [draftAutoCalculateDelay, setDraftAutoCalculateDelay] = React.useState<boolean>(autoCalculateDelay);
     const [draftAutoApplyDefaultRelation, setDraftAutoApplyDefaultRelation] = React.useState<boolean>(autoApplyDefaultRelation);
     const [draftAutoScheduleMoveMode, setDraftAutoScheduleMoveMode] = React.useState<AutoScheduleMoveModeValue>(autoScheduleMoveMode);
-
     const filterInputRef = React.useRef<HTMLInputElement>(null);
+    const columnMenuContentRef = React.useRef<HTMLDivElement>(null);
     const selectAllStatusesRef = React.useRef<HTMLInputElement>(null);
     const completedStatusesRef = React.useRef<HTMLInputElement>(null);
     const incompleteStatusesRef = React.useRef<HTMLInputElement>(null);
@@ -110,6 +124,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     const showRelationSettingsMenu = isMenuOpen('relationSettings');
     const showExportMenu = isMenuOpen('export');
     const showWorkloadMenu = isMenuOpen('workload');
+    const showBaselineSaveMenu = isMenuOpen('baselineSave');
 
     React.useEffect(() => {
         if (!showFilterMenu) return;
@@ -197,6 +212,52 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         }
     };
 
+    const handleSaveBaseline = async (scope: BaselineSaveScope) => {
+        if (!permissions.baselineEditable || baselineSaveStatus === 'saving') {
+            return;
+        }
+
+        const baselineStore = useBaselineStore.getState();
+        baselineStore.setSaveStatus('saving');
+        baselineStore.setLastError(null);
+
+        try {
+            if (modifiedTaskIds.size > 0) {
+                const failures = await saveChanges();
+                if (failures.size > 0) {
+                    baselineStore.setSaveStatus('error');
+                    return;
+                }
+            }
+
+            const result = await apiClient.saveBaseline({
+                query: scope === 'filtered' ? toResolvedQueryStateFromStore(useTaskStore.getState()) : undefined,
+                scope
+            });
+
+            if (result.status === 'error') {
+                throw new Error(result.error || 'Failed to save baseline');
+            }
+            if (!result.baseline) {
+                throw new Error('Failed to save baseline');
+            }
+
+            baselineStore.setSnapshot(result.baseline, result.warnings ?? []);
+            baselineStore.setSaveStatus('ready');
+            closeMenu('baselineSave');
+
+            if (result.warnings?.length) {
+                result.warnings.forEach((warning) => useUIStore.getState().addNotification(warning, 'warning'));
+            }
+
+            useUIStore.getState().addNotification(i18n.t('label_baseline_saved') || 'Baseline saved', 'success');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : (i18n.t('label_baseline_save_failed') || 'Failed to save baseline');
+            baselineStore.setLastError(message);
+            useUIStore.getState().addNotification(message, 'error');
+        }
+    };
+
     const handleTodayClick = () => {
         const now = Date.now();
         let newStartDate = viewport.startDate;
@@ -223,13 +284,6 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         updateViewport({ startDate: leftDate.getTime(), scrollX: 0 });
     };
 
-    const toggleColumn = (key: string) => {
-        const next = visibleColumns.includes(key)
-            ? visibleColumns.filter(k => k !== key)
-            : [...visibleColumns, key];
-        setVisibleColumns(next);
-    };
-
     const openRedmineQueryEditor = () => {
         const issueListPath = window.RedmineCanvasGantt?.issueListPath;
         const projectId = window.RedmineCanvasGantt?.projectId;
@@ -252,89 +306,155 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         navigateToRedminePath(`${issueListPath ?? `/projects/${projectId}/issues`}${query ? `?${query}` : ''}`);
     };
 
-    const baseColumnOptions = [
-        { key: 'id', label: 'ID' },
-        { key: 'notification', label: i18n.t('label_notifications') || 'Notifications' },
-        { key: 'project', label: i18n.t('field_project') || 'Project' },
-        { key: 'tracker', label: i18n.t('field_tracker') || 'Tracker' },
-        { key: 'status', label: i18n.t('field_status') || 'Status' },
-        { key: 'priority', label: i18n.t('field_priority') || 'Priority' },
-        { key: 'assignee', label: i18n.t('field_assigned_to') || 'Assignee' },
-        { key: 'author', label: i18n.t('field_author') || 'Author' },
-        { key: 'startDate', label: i18n.t('field_start_date') || 'Start Date' },
-        { key: 'dueDate', label: i18n.t('field_due_date') || 'Due Date' },
-        { key: 'estimatedHours', label: i18n.t('field_estimated_hours') || 'Estimated Time' },
-        { key: 'ratioDone', label: i18n.t('field_done_ratio') || 'Progress' },
-        { key: 'spentHours', label: i18n.t('field_spent_hours') || 'Spent Time' },
-        { key: 'version', label: i18n.t('field_version') || 'Target Version' },
-        { key: 'category', label: i18n.t('field_category') || 'Category' },
-        { key: 'createdOn', label: i18n.t('field_created_on') || 'Created' },
-        { key: 'updatedOn', label: i18n.t('field_updated_on') || 'Updated' }
-    ];
+    const getColumnLabel = (key: string, fallback: string) => {
+        const localizedLabel: Record<string, string> = {
+            subject: i18n.t('field_subject') || fallback,
+            notification: i18n.t('label_notifications') || fallback,
+            project: i18n.t('field_project') || fallback,
+            tracker: i18n.t('field_tracker') || fallback,
+            status: i18n.t('field_status') || fallback,
+            priority: i18n.t('field_priority') || fallback,
+            assignee: i18n.t('field_assigned_to') || fallback,
+            author: i18n.t('field_author') || fallback,
+            startDate: i18n.t('field_start_date') || fallback,
+            dueDate: i18n.t('field_due_date') || fallback,
+            estimatedHours: i18n.t('field_estimated_hours') || fallback,
+            ratioDone: i18n.t('field_done_ratio') || fallback,
+            spentHours: i18n.t('field_spent_hours') || fallback,
+            version: i18n.t('field_version') || fallback,
+            category: i18n.t('field_category') || fallback,
+            createdOn: i18n.t('field_created_on') || fallback,
+            updatedOn: i18n.t('field_updated_on') || fallback
+        };
+        return localizedLabel[key] ?? fallback;
+    };
+
+    const baseColumnOptions = COLUMN_CATALOG.map((column) => ({
+        key: column.key,
+        label: getColumnLabel(column.key, column.label)
+    }));
     const customFieldColumnOptions = customFields.map((cf) => ({
         key: `cf:${cf.id}`,
         label: cf.name
     }));
     const columnOptions = [...baseColumnOptions, ...customFieldColumnOptions];
+    const {
+        effectiveColumnSettings,
+        orderedColumnOptions,
+        draggingColumnKey,
+        dropBeforeColumnKey,
+        handleColumnDragStart,
+        handleColumnDragOver,
+        handleColumnDrop,
+        handleColumnMenuDragOver,
+        clearColumnDragState
+    } = useColumnMenuDrag({
+        columnSettings,
+        visibleColumns,
+        columnOptions,
+        menuContentRef: columnMenuContentRef
+    });
+    const effectiveVisibleColumns = effectiveColumnSettings.filter((entry) => entry.visible).map((entry) => entry.key);
 
-    const assignees = React.useMemo(() => {
-        const map = new Map<number | null, string>();
-        // 未割当を明示的に追加
-        map.set(null, i18n.t('label_unassigned') || 'Unassigned');
-        allTasks.forEach(task => {
-            if (task.assignedToId !== undefined && task.assignedToId !== null) {
-                map.set(task.assignedToId, task.assignedToName || (i18n.t('field_assigned_to') || 'Assignee') + ` #${task.assignedToId}`);
+    const fallbackProjects = React.useMemo(() => {
+        const map = new Map<string, string>();
+        allTasks.forEach((task) => {
+            if (task.projectId && task.projectName) {
+                map.set(task.projectId, task.projectName);
             }
         });
-        return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => {
-            // 未割当(null)は一番上に表示
-            if (a.id === null) return -1;
-            if (b.id === null) return 1;
-            return a.name.localeCompare(b.name);
-        });
+        return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
     }, [allTasks]);
+
+    const fallbackAssignees = React.useMemo(() => {
+        const map = new Map<number | null, { name: string | null; projectIds: Set<string> }>();
+        allTasks.forEach((task) => {
+            const assigneeId = task.assignedToId ?? null;
+            const entry = map.get(assigneeId) ?? {
+                name: assigneeId === null ? null : (task.assignedToName ?? null),
+                projectIds: new Set<string>()
+            };
+            if (assigneeId !== null && entry.name === null && task.assignedToName) {
+                entry.name = task.assignedToName;
+            }
+            if (task.projectId) {
+                entry.projectIds.add(task.projectId);
+            }
+            map.set(assigneeId, entry);
+        });
+        return Array.from(map.entries()).map(([id, entry]) => ({
+            id,
+            name: entry.name,
+            projectIds: Array.from(entry.projectIds)
+        }));
+    }, [allTasks]);
+
+    const projectOptions = filterOptions.projects.length > 0 ? filterOptions.projects : fallbackProjects;
+    const assigneeOptions = filterOptions.assignees.length > 0 ? filterOptions.assignees : fallbackAssignees;
+
+    const projects = React.useMemo(() => (
+        [...projectOptions].sort((a, b) => a.name.localeCompare(b.name))
+    ), [projectOptions]);
+
+    const scopedProjectIds = React.useMemo(() => (
+        new Set(selectedProjectIds.length > 0 ? selectedProjectIds : projects.map((project) => project.id))
+    ), [projects, selectedProjectIds]);
+
+    const assignees = React.useMemo(() => {
+        const selectedAssigneeIdSet = new Set(selectedAssigneeIds);
+        return assigneeOptions
+            .filter((assignee) => (
+                selectedAssigneeIdSet.has(assignee.id) ||
+                assignee.projectIds.some((projectId) => scopedProjectIds.has(projectId))
+            ))
+            .map((assignee) => ({
+                id: assignee.id,
+                name: assignee.id === null
+                    ? (i18n.t('label_unassigned') || 'Unassigned')
+                    : (assignee.name || `${i18n.t('field_assigned_to') || 'Assignee'} #${assignee.id}`)
+            }))
+            .sort((a, b) => {
+                if (a.id === null) return -1;
+                if (b.id === null) return 1;
+                return a.name.localeCompare(b.name);
+            });
+    }, [assigneeOptions, scopedProjectIds, selectedAssigneeIds]);
 
     const toggleAssignee = (id: number | null) => {
         setSelectedAssigneeIds(toggleSelectionValue(selectedAssigneeIds, id));
     };
 
-    const isAllAssigneesSelected = assignees.length > 0 && selectedAssigneeIds.length === assignees.length;
+    const isAllAssigneesSelected = assignees.length > 0 && assignees.every((assignee) => selectedAssigneeIds.includes(assignee.id));
 
     const toggleAllAssignees = () => {
         setSelectedAssigneeIds(toggleAllSelectionValues(isAllAssigneesSelected, assignees.map(a => a.id)));
     };
 
-    const projects = React.useMemo(() => {
-        const map = new Map<string, string>();
-        allTasks.forEach(t => {
-            if (t.projectId && t.projectName) {
-                map.set(t.projectId, t.projectName);
-            }
-        });
-        return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-    }, [allTasks]);
-
     const toggleProject = (id: string) => {
         setSelectedProjectIds(toggleSelectionValue(selectedProjectIds, id));
     };
 
-    const isAllProjectsSelected = projects.length > 0 && selectedProjectIds.length === projects.length;
+    const isAllProjectsSelected = projects.length > 0 && projects.every((project) => selectedProjectIds.includes(project.id));
 
     const toggleAllProjects = () => {
         setSelectedProjectIds(toggleAllSelectionValues(isAllProjectsSelected, projects.map(p => p.id)));
     };
 
-    const versionsList = React.useMemo(() => {
-        const currentProjects = new Set(projects.map(p => p.id));
-        return versions.filter(v => currentProjects.has(v.projectId) && v.status !== 'closed').sort((a, b) => a.name.localeCompare(b.name));
-    }, [versions, projects]);
+    const versionsList = React.useMemo(() => (
+        versions
+            .filter((version) => (
+                (version.status !== 'closed' && scopedProjectIds.has(version.projectId)) ||
+                selectedVersionIds.includes(version.id)
+            ))
+            .sort((a, b) => a.name.localeCompare(b.name))
+    ), [scopedProjectIds, selectedVersionIds, versions]);
 
     const toggleVersion = (id: string) => {
         setSelectedVersionIds(toggleSelectionValue(selectedVersionIds, id));
     };
 
     const allVersionIdsWithNone = ['_none', ...versionsList.map(v => v.id)];
-    const isAllVersionsSelected = versionsList.length > 0 && selectedVersionIds.length === allVersionIdsWithNone.length && selectedVersionIds.includes('_none');
+    const isAllVersionsSelected = allVersionIdsWithNone.length > 1 && allVersionIdsWithNone.every((id) => selectedVersionIds.includes(id));
 
     const toggleAllVersions = () => {
         setSelectedVersionIds(toggleAllSelectionValues(isAllVersionsSelected, allVersionIdsWithNone));
@@ -604,8 +724,8 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             padding: '0',
                             borderRadius: '6px',
                             border: '1px solid #e0e0e0',
-                            backgroundColor: visibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#e8f0fe' : '#fff',
-                            color: visibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#1a73e8' : '#333',
+                            backgroundColor: effectiveVisibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#e8f0fe' : '#fff',
+                            color: effectiveVisibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') ? '#1a73e8' : '#333',
                             cursor: 'pointer',
                             height: '32px',
                             width: '32px',
@@ -617,7 +737,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             <line x1="9" y1="3" x2="9" y2="21" />
                             <line x1="15" y1="3" x2="15" y2="21" />
                         </svg>
-                        {visibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') && (
+                        {effectiveVisibleColumns.join(',') !== DEFAULT_COLUMNS.join(',') && (
                             <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, backgroundColor: '#1a73e8', borderRadius: '50%' }} />
                         )}
                     </button>
@@ -639,20 +759,34 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                 maxHeight: '300px',
                                 overflowY: 'auto'
                             }}
+                            onDragOver={handleColumnMenuDragOver}
+                            ref={columnMenuContentRef}
                         >
                             <div style={{ fontWeight: 600, marginBottom: '8px', color: '#333' }}>{i18n.t('label_column_plural') || 'Columns'}</div>
-                            {columnOptions.map(option => (
-                                <label key={option.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#444' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={visibleColumns.includes(option.key)}
-                                        onChange={() => toggleColumn(option.key)}
+                            {orderedColumnOptions.map(option => {
+                                const setting = effectiveColumnSettings.find((entry) => entry.key === option.key);
+                                if (!setting) return null;
+
+                                return (
+                                    <ColumnMenuItem
+                                        key={option.key}
+                                        columnKey={option.key}
+                                        label={option.label}
+                                        visible={setting.visible}
+                                        draggable={true}
+                                        isDragging={draggingColumnKey === option.key}
+                                        isDropBefore={dropBeforeColumnKey === option.key}
+                                        isPinned={option.key === 'subject'}
+                                        onToggle={toggleColumnVisibility}
+                                        onDragStart={handleColumnDragStart}
+                                        onDragOver={handleColumnDragOver}
+                                        onDrop={handleColumnDrop}
+                                        onDragEnd={clearColumnDragState}
                                     />
-                                    {option.label}
-                                </label>
-                            ))}
+                                );
+                            })}
                             <button
-                                onClick={() => setVisibleColumns(DEFAULT_COLUMNS)}
+                                onClick={() => resetColumns()}
                                 style={{
                                     marginTop: '8px',
                                     border: 'none',
@@ -1651,9 +1785,8 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
 
                 {modifiedTaskIds.size > 0 && !autoSave && (
                     <>
-                        <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
                         <button
-                            onClick={() => saveChanges()}
+                            onClick={() => void saveChanges()}
                             title="Save changes"
                             style={{
                                 display: 'flex',
@@ -1673,7 +1806,7 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             {i18n.t('button_save') || "Save"}
                         </button>
                         <button
-                            onClick={() => discardChanges()}
+                            onClick={() => void discardChanges()}
                             title="Discard changes"
                             style={{
                                 display: 'flex',
@@ -1695,7 +1828,18 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                     </>
                 )}
 
-                <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
+                <BaselineControls
+                    baselineSaveStatus={baselineSaveStatus}
+                    hasBaseline={hasBaseline}
+                    showBaseline={showBaseline}
+                    baselineEditable={permissions.baselineEditable}
+                    baselineSaveMenuRef={baselineSaveMenuRef}
+                    showBaselineSaveMenu={showBaselineSaveMenu}
+                    onToggleSaveMenu={() => toggleMenu('baselineSave')}
+                    onSaveBaseline={(scope) => void handleSaveBaseline(scope)}
+                    onToggleBaseline={() => toggleBaseline()}
+                />
+
                 <button
                     onClick={() => setAutoSave(!autoSave)}
                     title={autoSave ? (i18n.t('tooltip_auto_save_on') || "Auto Save: ON (Changes saved immediately)") : (i18n.t('tooltip_auto_save_off') || "Auto Save: OFF (Use Save button)")}
@@ -1716,8 +1860,6 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                     </svg>
                 </button>
-
-                <div style={{ width: 1, height: 20, backgroundColor: '#e0e0e0', margin: '0 4px' }} />
 
                 <button
                     onClick={openHelpDialog}

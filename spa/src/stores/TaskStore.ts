@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import type { Task, Relation, DraftRelation, Viewport, ViewMode, ZoomLevel, LayoutRow, Version, TaskStatus } from '../types';
+import type { FilterOptions, Task, Relation, DraftRelation, Viewport, ViewMode, ZoomLevel, LayoutRow, Version, TaskStatus } from '../types';
 import { ZOOM_SCALES } from '../utils/grid';
 import { TaskLogicService } from '../services/TaskLogicService';
 import { loadPreferences, savePreferences } from '../utils/preferences';
 import { getMaxFiniteDueDate } from '../utils/taskRange';
 import { i18n } from '../utils/i18n';
 import { useUIStore } from './UIStore';
+import { useBaselineStore } from './BaselineStore';
 import type { MoveTaskAsChildResult } from '../types';
 import type { CustomFieldMeta } from '../types/editMeta';
 import type { LayoutState, SortConfig } from './taskStore/types';
@@ -16,12 +17,12 @@ import { computeCenteredViewport } from './taskStore/viewport';
 import { buildMoveTaskResult, saveModifiedTasks } from './taskStore/taskPersistence';
 import { runParentMove } from './taskStore/parentMove';
 import { buildUniformExpansionMaps, initializeExpansionMaps } from './taskStore/expansion';
+import { syncSharedQueryState } from './taskStore/querySync';
 import type { SchedulingStateInfo } from '../scheduling/constraintGraph';
 import type { CriticalPathTaskMetrics } from '../scheduling/criticalPath';
 import { AutoScheduleMoveMode } from '../types/constraints';
 import {
     readIssueQueryParamsFromUrl,
-    replaceIssueQueryParamsInUrl,
     toBusinessQueryState,
     toResolvedQueryStateFromStore,
     type ResolvedQueryState
@@ -48,6 +49,7 @@ const queueRefreshData = (refreshData: () => Promise<void>) => {
 };
 
 interface TaskState {
+    permissions: { editable: boolean; viewable: boolean; baselineEditable: boolean };
     allTasks: Task[];
     tasks: Task[];
     relations: Relation[];
@@ -55,6 +57,7 @@ interface TaskState {
     criticalPathMetrics: Record<string, CriticalPathTaskMetrics>;
     criticalPathProjectFinish?: number;
     versions: Version[];
+    filterOptions: FilterOptions;
     taskStatuses: TaskStatus[];
     customFields: CustomFieldMeta[];
     activeQueryId: number | null;
@@ -97,8 +100,10 @@ interface TaskState {
     setTasks: (tasks: Task[]) => void;
     setRelations: (relations: Relation[]) => void;
     setVersions: (versions: Version[]) => void;
+    setFilterOptions: (filterOptions: FilterOptions) => void;
     setTaskStatuses: (statuses: TaskStatus[]) => void;
     setCustomFields: (fields: CustomFieldMeta[]) => void;
+    setPermissions: (permissions: { editable: boolean; viewable: boolean; baselineEditable: boolean }) => void;
     applyResolvedQueryState: (state?: ResolvedQueryState) => void;
     setSelectedStatusFromServer: (ids: number[]) => void;
     setShowVersions: (show: boolean) => void;
@@ -141,7 +146,7 @@ interface TaskState {
     canDropToRoot: (sourceTaskId: string) => boolean;
     moveTaskAsChild: (sourceTaskId: string, targetTaskId: string) => Promise<MoveTaskAsChildResult>;
     moveTaskToRoot: (sourceTaskId: string) => Promise<MoveTaskAsChildResult>;
-    saveChanges: () => Promise<void>;
+    saveChanges: () => Promise<Map<string, string>>;
     discardChanges: () => Promise<void>;
 }
 
@@ -236,12 +241,6 @@ const buildDerivedTaskState = (
         rowCount: layout.rowCount,
         ...schedulingSummary
     };
-};
-
-type QuerySyncState = Pick<TaskState, 'activeQueryId' | 'selectedStatusIds' | 'selectedAssigneeIds' | 'selectedProjectIds' | 'selectedVersionIds' | 'sortConfig' | 'groupByProject' | 'groupByAssignee' | 'showSubprojects'>;
-
-const syncQueryStateUrl = (state: QuerySyncState) => {
-    replaceIssueQueryParamsInUrl(toResolvedQueryStateFromStore(state));
 };
 
 const buildAllExpandedStates = (state: TaskState, expanded: boolean) => {
@@ -400,8 +399,10 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     criticalPathMetrics: {},
     criticalPathProjectFinish: undefined,
     versions: [],
+    filterOptions: { projects: [], assignees: [] },
     taskStatuses: [],
     customFields: [],
+    permissions: { editable: false, viewable: false, baselineEditable: false },
     activeQueryId: initialUrlState.queryId ?? null,
     selectedStatusIds: [],
     viewport: DEFAULT_VIEWPORT,
@@ -476,7 +477,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             ...toDerivedTaskStatePatch(derived)
         };
     }),
+    setFilterOptions: (filterOptions) => set(() => ({ filterOptions })),
     setTaskStatuses: (statuses) => set(() => ({ taskStatuses: statuses })),
+    setPermissions: (permissions) => set(() => ({ permissions })),
     applyResolvedQueryState: (resolved) => set((state) => {
         const queryState = toBusinessQueryState(resolved);
         const groupByProject = queryState.groupByProject;
@@ -512,7 +515,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl(nextState);
+        syncSharedQueryState(nextState);
         return nextState;
     }),
     setCustomFields: (customFields) => set((state) => {
@@ -524,7 +527,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }),
     setSelectedStatusFromServer: (ids) => {
         set({ selectedStatusIds: ids });
-        syncQueryStateUrl(get());
+        syncSharedQueryState(get());
         void get().refreshData().catch((error) => console.error('Failed to refresh data', error));
     },
     setShowVersions: (show) => set((state) => {
@@ -883,7 +886,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         return nextState;
     }),
     setGroupByAssignee: (grouped) => set((state) => {
@@ -902,7 +905,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         return nextState;
     }),
     setOrganizeByDependency: (enabled) => set((state) => {
@@ -1036,7 +1039,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         queueRefreshData(get().refreshData);
         return nextState;
     }),
@@ -1049,7 +1052,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         queueRefreshData(get().refreshData);
         return nextState;
     }),
@@ -1061,7 +1064,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         queueRefreshData(get().refreshData);
         return nextState;
     }),
@@ -1178,7 +1181,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             layoutRows: layout.layoutRows,
             rowCount: layout.rowCount
         };
-        syncQueryStateUrl({ ...state, ...nextState });
+        syncSharedQueryState({ ...state, ...nextState });
         return nextState;
     }),
     refreshData: async () => {
@@ -1188,13 +1191,16 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             query: toResolvedQueryStateFromStore(state)
         });
         if (!data) return;
-        const { setTasks, setRelations, setVersions, setTaskStatuses, setCustomFields, applyResolvedQueryState } = state;
+        const { setTasks, setRelations, setVersions, setFilterOptions, setTaskStatuses, setCustomFields, setPermissions, applyResolvedQueryState } = state;
         applyResolvedQueryState(data.initialState);
+        setFilterOptions(data.filterOptions);
         setTasks(data.tasks);
         setRelations(data.relations);
         setVersions(data.versions);
         setTaskStatuses(data.statuses);
         setCustomFields(data.customFields);
+        setPermissions(data.permissions ?? { editable: false, viewable: false, baselineEditable: false });
+        useBaselineStore.getState().setSnapshot(data.baseline ?? null, data.warnings ?? []);
         set({ modifiedTaskIds: new Set() });
         (data.warnings ?? []).forEach((warning) => useUIStore.getState().addNotification(warning, 'warning'));
     },
@@ -1212,7 +1218,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         );
 
         await state.refreshData();
-
         if (failures.size > 0) {
             const [failedTaskId, failedReason] = failures.entries().next().value as [string, string];
             useUIStore.getState().addNotification(
@@ -1220,6 +1225,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                 'error'
             );
         }
+        return failures;
     },
 
     discardChanges: async () => {

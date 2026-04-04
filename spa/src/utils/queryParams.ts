@@ -23,6 +23,11 @@ export interface QueryUrlStateSource {
     showSubprojects: boolean;
 }
 
+type ResolveInitialSharedQueryStateResult = {
+    state: ResolvedQueryState;
+    source: 'url' | 'storage' | 'default';
+};
+
 const SORT_FIELD_TO_REDMINE: Record<string, string> = {
     id: 'id',
     subject: 'subject',
@@ -164,6 +169,13 @@ const parseAssigneeList = (params: URLSearchParams): (number | null)[] | undefin
     });
 };
 
+const parseProjectList = (params: URLSearchParams): string[] | undefined => {
+    const values = parseStringList(params, ['project_ids[]', 'project_ids']);
+    if (!values) return undefined;
+    if (values.every((value) => value === 'none' || value === '_none')) return [];
+    return values.filter((value) => value !== 'none' && value !== '_none');
+};
+
 const parseVersionList = (params: URLSearchParams): string[] | undefined => {
     const values = parseStringList(params, ['fixed_version_ids[]', 'fixed_version_ids', 'fixed_version_id[]', 'fixed_version_id']);
     if (!values) return undefined;
@@ -214,6 +226,8 @@ const parseSortConfig = (rawSort: string | null): BusinessQueryState['sortConfig
 const toRedmineSortField = (key: string): string | null => SORT_FIELD_TO_REDMINE[key] ?? null;
 const DEFAULT_SORT_KEY = 'startDate';
 const DEFAULT_SORT_DIRECTION = 'asc';
+const hasValueForAnyParam = (params: URLSearchParams, keys: string[]): boolean =>
+    keys.some((key) => params.getAll(key).length > 0);
 
 export const toBusinessQueryState = (state: Partial<ResolvedQueryState> = {}): BusinessQueryState => ({
     queryId: state.queryId ?? null,
@@ -226,6 +240,41 @@ export const toBusinessQueryState = (state: Partial<ResolvedQueryState> = {}): B
     groupByAssignee: state.groupBy === 'assignee',
     showSubprojects: state.showSubprojects ?? true
 });
+
+export const normalizeResolvedQueryState = (state?: Partial<ResolvedQueryState>): ResolvedQueryState | undefined => {
+    if (!state) return undefined;
+
+    const normalized: ResolvedQueryState = {};
+
+    if (isPersistedQueryId(state.queryId ?? undefined)) normalized.queryId = state.queryId;
+    if (state.selectedStatusIds?.length) normalized.selectedStatusIds = [...state.selectedStatusIds];
+    if (state.selectedAssigneeIds?.length) normalized.selectedAssigneeIds = [...state.selectedAssigneeIds];
+    if (state.selectedProjectIds?.length) normalized.selectedProjectIds = [...state.selectedProjectIds];
+    if (state.selectedVersionIds?.length) normalized.selectedVersionIds = [...state.selectedVersionIds];
+    if (state.sortConfig?.key && !(state.sortConfig.key === DEFAULT_SORT_KEY && state.sortConfig.direction === DEFAULT_SORT_DIRECTION)) {
+        normalized.sortConfig = { ...state.sortConfig };
+    }
+    if (state.groupBy === 'assignee') normalized.groupBy = 'assignee';
+    if (state.showSubprojects === false) normalized.showSubprojects = false;
+
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+export const hasSharedQueryStateInUrl = (search: string = window.location.search): boolean => {
+    const params = new URLSearchParams(search);
+    const queryIdRaw = params.get('query_id');
+    const parsedQueryId = queryIdRaw && /^-?\d+$/.test(queryIdRaw) ? Number(queryIdRaw) : undefined;
+
+    if (isPersistedQueryId(parsedQueryId)) return true;
+    if (params.has('group_by') || params.has('sort') || params.has('show_subprojects')) return true;
+    if (hasValueForAnyParam(params, ['status_ids[]', 'status_ids', 'status_id[]', 'status_id'])) return true;
+    if (hasValueForAnyParam(params, ['assigned_to_ids[]', 'assigned_to_ids', 'assigned_to_id[]', 'assigned_to_id'])) return true;
+    if (hasValueForAnyParam(params, ['project_ids[]', 'project_ids'])) return true;
+    if (hasValueForAnyParam(params, ['fixed_version_ids[]', 'fixed_version_ids', 'fixed_version_id[]', 'fixed_version_id'])) return true;
+
+    const standardFields = params.getAll('f[]').concat(params.getAll('f'));
+    return params.get('set_filter') === '1' && standardFields.length > 0;
+};
 
 export const toResolvedQueryStateFromStore = (state: QueryUrlStateSource): ResolvedQueryState => ({
     queryId: state.activeQueryId ?? undefined,
@@ -249,12 +298,30 @@ export const readIssueQueryParamsFromUrl = (search: string = window.location.sea
         queryId: isPersistedQueryId(parsedQueryId) ? parsedQueryId : undefined,
         selectedStatusIds: standardState.selectedStatusIds ?? parseIntegerList(params, ['status_ids[]', 'status_ids', 'status_id[]', 'status_id']),
         selectedAssigneeIds: standardState.selectedAssigneeIds ?? parseAssigneeList(params),
-        selectedProjectIds: standardState.selectedProjectIds ?? parseStringList(params, ['project_ids[]', 'project_ids']),
+        selectedProjectIds: standardState.selectedProjectIds ?? parseProjectList(params),
         selectedVersionIds: standardState.selectedVersionIds ?? parseVersionList(params),
         sortConfig: parseSortConfig(params.get('sort')),
         groupBy: groupBy === 'assigned_to' || groupBy === 'assignee' ? 'assignee' : (groupBy === 'project' ? 'project' : null),
         showSubprojects: params.get('show_subprojects') === null ? standardState.showSubprojects : params.get('show_subprojects') !== '0'
     };
+};
+
+export const resolveInitialSharedQueryState = (
+    search: string,
+    storedState?: Partial<ResolvedQueryState>
+): ResolveInitialSharedQueryStateResult => {
+    const urlState = readIssueQueryParamsFromUrl(search);
+
+    if (hasSharedQueryStateInUrl(search)) {
+        return { state: urlState, source: 'url' };
+    }
+
+    const normalizedStoredState = normalizeResolvedQueryState(storedState);
+    if (normalizedStoredState) {
+        return { state: normalizedStoredState, source: 'storage' };
+    }
+
+    return { state: urlState, source: 'default' };
 };
 
 export const buildIssueQueryParams = (state: Partial<ResolvedQueryState>): URLSearchParams => {
@@ -264,7 +331,11 @@ export const buildIssueQueryParams = (state: Partial<ResolvedQueryState>): URLSe
     if (isPersistedQueryId(businessState.queryId)) params.set('query_id', String(businessState.queryId));
     businessState.selectedStatusIds.forEach((id) => params.append('status_ids[]', String(id)));
     businessState.selectedAssigneeIds.forEach((id) => params.append('assigned_to_ids[]', id === null ? 'none' : String(id)));
-    businessState.selectedProjectIds.forEach((id) => params.append('project_ids[]', id));
+    if (state.selectedProjectIds !== undefined && businessState.selectedProjectIds.length === 0) {
+        params.append('project_ids[]', 'none');
+    } else {
+        businessState.selectedProjectIds.forEach((id) => params.append('project_ids[]', id));
+    }
     businessState.selectedVersionIds.forEach((id) => params.append('fixed_version_ids[]', id === '_none' ? 'none' : id));
     if (state.groupBy === 'project') params.set('group_by', 'project');
     if (state.groupBy === 'assignee') params.set('group_by', 'assigned_to');
@@ -375,17 +446,21 @@ export const parseResolvedQueryState = (value: unknown): ResolvedQueryState | un
             ? record.selected_status_ids.map((entry) => Number(entry)).filter(Number.isFinite)
             : undefined,
         selectedAssigneeIds: Array.isArray(record.selected_assignee_ids)
-            ? record.selected_assignee_ids.flatMap((entry) => {
-                if (entry === null) return [null];
+            ? Array.from(new Set(record.selected_assignee_ids.flatMap((entry) => {
+                if (entry === null || entry === 'none' || entry === '_none') return [null];
                 const parsed = Number(entry);
                 return Number.isFinite(parsed) ? [parsed] : [];
-            })
+            })))
             : undefined,
         selectedProjectIds: Array.isArray(record.selected_project_ids)
             ? record.selected_project_ids.map((entry) => String(entry))
             : undefined,
         selectedVersionIds: Array.isArray(record.selected_version_ids)
-            ? record.selected_version_ids.map((entry) => String(entry))
+            ? Array.from(new Set(record.selected_version_ids.flatMap((entry) => {
+                const normalized = String(entry);
+                if (normalized === 'none' || normalized === '_none') return ['_none'];
+                return normalized.match(/^-?\d+$/) ? [normalized] : [];
+            })))
             : undefined,
         sortConfig: sortRecord && sortRecord.key
             ? { key: String(sortRecord.key), direction: sortRecord.direction === 'desc' ? 'desc' : 'asc' }

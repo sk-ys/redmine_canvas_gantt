@@ -136,6 +136,183 @@ RSpec.describe RedmineCanvasGantt::QueryStateResolver do
     expect(result[:warnings]).to include('Ignored unsupported field tracker_id')
   end
 
+  it 'preserves unassigned assignee selections from saved queries' do
+    query = instance_double(
+      IssueQuery,
+      id: 99,
+      visible?: true,
+      filters: {
+        'assigned_to_id' => { operator: '=', values: ['none'] }
+      },
+      sort_criteria: nil,
+      group_by: nil
+    )
+    working_query = instance_double(
+      IssueQuery,
+      filters: {},
+      sort_criteria: nil,
+      group_by: nil,
+      issue_ids: []
+    )
+
+    allow(IssueQuery).to receive(:find_by).with(id: '99').and_return(query)
+    allow(query).to receive(:dup).and_return(working_query)
+    allow(working_query).to receive(:filters=)
+
+    resolver = described_class.new(
+      project: project,
+      params: ActionController::Parameters.new(query_id: '99'),
+      current_user: current_user,
+      issue_scope: issue_scope,
+      issue_includes: issue_includes
+    )
+
+    result = resolver.resolve(project_ids: [1, 2])
+
+    expect(result[:initial_state][:selected_assignee_ids]).to eq([nil])
+  end
+
+  it 'preserves no-version selections from saved queries as _none' do
+    query = instance_double(
+      IssueQuery,
+      id: 100,
+      visible?: true,
+      filters: {
+        'fixed_version_id' => { operator: '=', values: ['none'] }
+      },
+      sort_criteria: nil,
+      group_by: nil
+    )
+    working_query = instance_double(
+      IssueQuery,
+      filters: {},
+      sort_criteria: nil,
+      group_by: nil,
+      issue_ids: []
+    )
+
+    allow(IssueQuery).to receive(:find_by).with(id: '100').and_return(query)
+    allow(query).to receive(:dup).and_return(working_query)
+    allow(working_query).to receive(:filters=)
+
+    resolver = described_class.new(
+      project: project,
+      params: ActionController::Parameters.new(query_id: '100'),
+      current_user: current_user,
+      issue_scope: issue_scope,
+      issue_includes: issue_includes
+    )
+
+    result = resolver.resolve(project_ids: [1, 2])
+
+    expect(result[:initial_state][:selected_version_ids]).to eq(['_none'])
+  end
+
+  it 'normalizes version none overrides to _none' do
+    params = ActionController::Parameters.new(fixed_version_id: ['none'])
+
+    resolver = described_class.new(
+      project: project,
+      params: params,
+      current_user: current_user,
+      issue_scope: issue_scope,
+      issue_includes: issue_includes
+    )
+
+    result = resolver.resolve(project_ids: [1, 2])
+
+    expect(result[:initial_state][:selected_version_ids]).to eq(['_none'])
+  end
+
+  it 'preserves assignee none overrides as nil' do
+    params = ActionController::Parameters.new(assigned_to_id: ['none'])
+
+    resolver = described_class.new(
+      project: project,
+      params: params,
+      current_user: current_user,
+      issue_scope: issue_scope,
+      issue_includes: issue_includes
+    )
+
+    result = resolver.resolve(project_ids: [1, 2])
+
+    expect(result[:initial_state][:selected_assignee_ids]).to eq([nil])
+  end
+
+  it 'preserves assignee none overrides from Canvas plural params as nil' do
+    params = ActionController::Parameters.new(assigned_to_ids: ['none'])
+
+    resolver = described_class.new(
+      project: project,
+      params: params,
+      current_user: current_user,
+      issue_scope: issue_scope,
+      issue_includes: issue_includes
+    )
+
+    result = resolver.resolve(project_ids: [1, 2])
+
+    expect(result[:initial_state][:selected_assignee_ids]).to eq([nil])
+  end
+
+  it 'normalizes version none overrides from Canvas plural params to _none' do
+    params = ActionController::Parameters.new(fixed_version_ids: ['none'])
+
+    resolver = described_class.new(
+      project: project,
+      params: params,
+      current_user: current_user,
+      issue_scope: issue_scope,
+      issue_includes: issue_includes
+    )
+
+    result = resolver.resolve(project_ids: [1, 2])
+
+    expect(result[:initial_state][:selected_version_ids]).to eq(['_none'])
+  end
+
+  it 'filters no-version selections with fixed_version_id nil' do
+    query = instance_double(
+      IssueQuery,
+      id: 100,
+      visible?: true,
+      filters: {
+        'fixed_version_id' => { operator: '=', values: ['none'] }
+      },
+      sort_criteria: nil,
+      group_by: nil
+    )
+    working_query = instance_double(
+      IssueQuery,
+      filters: {},
+      sort_criteria: nil,
+      group_by: nil,
+      issue_ids: [12]
+    )
+    filtered_scope = double('FilteredScope')
+
+    allow(IssueQuery).to receive(:find_by).with(id: '100').and_return(query)
+    allow(query).to receive(:dup).and_return(working_query)
+    allow(working_query).to receive(:filters=)
+
+    expect(issue_scope).to receive(:where).with(project_id: [1, 2]).and_return(issue_scope)
+    expect(issue_scope).to receive(:where).with(id: [12]).and_return(issue_scope)
+    expect(issue_scope).to receive(:where).with(fixed_version_id: nil).and_return(filtered_scope)
+    expect(filtered_scope).to receive(:includes).with(*issue_includes).and_return(filtered_scope)
+    allow(filtered_scope).to receive(:to_a).and_return([])
+
+    resolver = described_class.new(
+      project: project,
+      params: ActionController::Parameters.new(query_id: '100'),
+      current_user: current_user,
+      issue_scope: issue_scope,
+      issue_includes: issue_includes
+    )
+
+    resolver.resolve(project_ids: [1, 2])
+  end
+
   it 'lets supported standard filters clear saved-query filters' do
     params = ActionController::Parameters.new(
       query_id: '42',
