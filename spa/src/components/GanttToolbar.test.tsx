@@ -432,7 +432,7 @@ describe('GanttToolbar shortcuts', () => {
 
         await waitFor(() => {
             expect(useUIStore.getState().queryDialogUrl).toBe(
-                '/redmine/projects/ecookbook/issues?query_id=12&f%5B%5D=status_id&op%5Bstatus_id%5D=%3D&v%5Bstatus_id%5D%5B%5D=1&v%5Bstatus_id%5D%5B%5D=2&f%5B%5D=assigned_to_id&op%5Bassigned_to_id%5D=%3D&v%5Bassigned_to_id%5D%5B%5D=7&f%5B%5D=project_id&op%5Bproject_id%5D=%3D&v%5Bproject_id%5D%5B%5D=3&f%5B%5D=fixed_version_id&op%5Bfixed_version_id%5D=%3D&v%5Bfixed_version_id%5D%5B%5D=4&f%5B%5D=subproject_id&op%5Bsubproject_id%5D=%21*&set_filter=1&group_by=assigned_to&sort=start_date%3Adesc'
+                '/redmine/projects/ecookbook/issues?query_id=12&f%5B%5D=status_id&op%5Bstatus_id%5D=%3D&v%5Bstatus_id%5D%5B%5D=1&v%5Bstatus_id%5D%5B%5D=2&f%5B%5D=assigned_to_id&op%5Bassigned_to_id%5D=%3D&v%5Bassigned_to_id%5D%5B%5D=7&f%5B%5D=project_id&op%5Bproject_id%5D=%3D&v%5Bproject_id%5D%5B%5D=3&f%5B%5D=fixed_version_id&op%5Bfixed_version_id%5D=%3D&v%5Bfixed_version_id%5D%5B%5D=4&f%5B%5D=subproject_id&op%5Bsubproject_id%5D=%21*&set_filter=1&group_by=assigned_to&sort=start_date%3Adesc&c%5B%5D=id&c%5B%5D=subject&c%5B%5D=status&c%5B%5D=assigned_to&c%5B%5D=start_date&c%5B%5D=due_date&c%5B%5D=done_ratio'
             );
         });
     });
@@ -693,7 +693,7 @@ describe('GanttToolbar shortcuts', () => {
         expect(screen.getByLabelText('Notifications')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /reset/i }));
-        expect(useUIStore.getState().visibleColumns).toEqual(['id', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone']);
+        expect(useUIStore.getState().visibleColumns).toEqual(['id', 'subject', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone']);
     });
 
     it('toggles category column when clicking the row label text', () => {
@@ -800,7 +800,7 @@ describe('GanttToolbar shortcuts', () => {
         expect(useUIStore.getState().visibleColumns).not.toContain('category');
     });
 
-    it('does not toggle the pinned task name column when clicking its row label', () => {
+    it('toggles the task name column when clicking its row label', () => {
         const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
         useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
 
@@ -822,12 +822,12 @@ describe('GanttToolbar shortcuts', () => {
         fireEvent.click(screen.getByTitle('Columns'));
         fireEvent.click(screen.getByText('Task Name'));
 
-        expect(screen.getByLabelText('Task Name')).toBeDisabled();
-        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'subject')?.visible).toBe(true);
-        expect(useUIStore.getState().visibleColumns).toContain('subject');
+        expect(screen.getByLabelText('Task Name')).not.toBeDisabled();
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'subject')?.visible).toBe(false);
+        expect(useUIStore.getState().visibleColumns).not.toContain('subject');
     });
 
-    it('does not toggle the pinned task name column from keyboard interaction', () => {
+    it('toggles the task name column from keyboard interaction', () => {
         const { columnSettings } = setVisibleColumnsForTest(['id', 'subject', 'status']);
         useUIStore.setState({ visibleColumns: ['id', 'subject', 'status'], columnSettings });
 
@@ -852,8 +852,8 @@ describe('GanttToolbar shortcuts', () => {
 
         fireEvent.keyDown(taskNameRow!, { key: 'Enter' });
 
-        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'subject')?.visible).toBe(true);
-        expect(useUIStore.getState().visibleColumns).toContain('subject');
+        expect(useUIStore.getState().columnSettings.find((column) => column.key === 'subject')?.visible).toBe(false);
+        expect(useUIStore.getState().visibleColumns).not.toContain('subject');
     });
 
     it('drags category column to a new position', () => {

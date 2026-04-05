@@ -12,7 +12,7 @@ import {
 } from '../components/sidebar/sidebarColumnSettings';
 import { getColumnDefinitions, getDefaultVisibleColumnKeys } from '../components/sidebar/sidebarColumnCatalog';
 
-export const DEFAULT_COLUMNS = ['notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'];
+export const DEFAULT_COLUMNS = ['id', 'subject', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'];
 
 const COLUMN_DEFINITIONS = getColumnDefinitions();
 const preferences = loadPreferences();
@@ -96,7 +96,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     showPointsOrphans: preferences.showPointsOrphans ?? true,
     leftPaneVisible: true,
     rightPaneVisible: true,
-    visibleColumns: preferences.visibleColumns ?? ['id', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'],
+    visibleColumns: preferences.visibleColumns ?? DEFAULT_COLUMNS,
     columnSettings: preferences.columnSettings
         ? normalizeColumnSettings(COLUMN_DEFINITIONS, preferences.columnSettings)
         : defaultColumnSettings,
@@ -182,7 +182,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     },
     resetColumns: () => {
         const next = resetColumnSettings(COLUMN_DEFINITIONS);
-        set(() => ({ visibleColumns: ['id', 'notification', 'status', 'assignee', 'startDate', 'dueDate', 'ratioDone'], columnSettings: next }));
+        set(() => ({ visibleColumns: DEFAULT_COLUMNS, columnSettings: next }));
         persistColumnSettings(next);
     },
     setColumnWidth: (key, width) => set((state) => ({ columnWidths: { ...state.columnWidths, [key]: width } })),
