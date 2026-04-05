@@ -222,25 +222,25 @@ describe('GanttToolbar shortcuts', () => {
 
         render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
 
-        expect(screen.getByRole('button', { name: 'Save Baseline' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeDisabled();
+        const saveBaselineButton = screen.getByRole('button', { name: 'Save Baseline' });
+        const showBaselineButton = screen.getByRole('button', { name: 'Show Baseline' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save Baseline' }));
+        expect(saveBaselineButton).toBeInTheDocument();
+        expect(showBaselineButton).toBeInTheDocument();
+        expect(showBaselineButton).toBeDisabled();
+
+        fireEvent.click(saveBaselineButton);
         const baselineSaveMenu = await screen.findByTestId('baseline-save-menu');
-        fireEvent.click(within(baselineSaveMenu).getByRole('button', { name: 'Save whole project as baseline' }));
 
-        await waitFor(() => {
-            expect(saveBaselineMock).toHaveBeenCalledWith(expect.objectContaining({ scope: 'project' }));
+        await act(async () => {
+            fireEvent.click(within(baselineSaveMenu).getByRole('button', { name: 'Save whole project as baseline' }));
+            await Promise.resolve();
         });
 
-        await waitFor(() => {
-            expect(useBaselineStore.getState().hasBaseline).toBe(true);
-        });
+        expect(saveBaselineMock).toHaveBeenCalledWith(expect.objectContaining({ scope: 'project' }));
+        expect(useBaselineStore.getState().hasBaseline).toBe(true);
+        expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeEnabled();
 
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeEnabled();
-        });
         fireEvent.click(screen.getByRole('button', { name: 'Show Baseline' }));
         expect(useUIStore.getState().showBaseline).toBe(true);
     });
