@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { GanttToolbar } from './GanttToolbar';
 import { AutoScheduleMoveMode, RelationType } from '../types/constraints';
 import { useTaskStore } from '../stores/TaskStore';
@@ -227,7 +227,8 @@ describe('GanttToolbar shortcuts', () => {
         expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeDisabled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Save Baseline' }));
-        fireEvent.click(screen.getByText('Save whole project as baseline'));
+        const baselineSaveMenu = await screen.findByTestId('baseline-save-menu');
+        fireEvent.click(within(baselineSaveMenu).getByRole('button', { name: 'Save whole project as baseline' }));
 
         await waitFor(() => {
             expect(saveBaselineMock).toHaveBeenCalledWith(expect.objectContaining({ scope: 'project' }));
@@ -237,6 +238,9 @@ describe('GanttToolbar shortcuts', () => {
             expect(useBaselineStore.getState().hasBaseline).toBe(true);
         });
 
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Show Baseline' })).toBeEnabled();
+        });
         fireEvent.click(screen.getByRole('button', { name: 'Show Baseline' }));
         expect(useUIStore.getState().showBaseline).toBe(true);
     });
