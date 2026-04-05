@@ -1,4 +1,5 @@
 import type { BusinessQueryState } from '../types';
+import { i18n } from './i18n';
 
 export interface ResolvedQueryState {
     queryId?: number | null;
@@ -388,7 +389,7 @@ export const buildRedmineIssueQueryParams = (
         const includesNone = businessState.selectedAssigneeIds.includes(null);
 
         if (includesNone && numericIds.length > 0) {
-            notices.push('Unassigned assignee filter was omitted because Redmine URL export cannot combine it with specific assignees.');
+            notices.push(i18n.t('notice_unassigned_filter_omitted_in_redmine_url') || 'Unassigned assignee filter was omitted because Redmine URL export cannot combine it with specific assignees.');
         }
 
         if (numericIds.length > 0) {
@@ -409,7 +410,7 @@ export const buildRedmineIssueQueryParams = (
         const numericVersionIds = businessState.selectedVersionIds.filter((id) => id !== '_none');
 
         if (numericVersionIds.length !== businessState.selectedVersionIds.length) {
-            notices.push('No-version filter was omitted because Redmine URL export only supports explicit version IDs.');
+            notices.push(i18n.t('notice_no_version_filter_omitted_in_redmine_url') || 'No-version filter was omitted because Redmine URL export only supports explicit version IDs.');
         }
 
         if (numericVersionIds.length > 0) {
