@@ -220,7 +220,7 @@ export const IssueIframeDialog: React.FC = () => {
             }
             setDialogHeightPx(Math.floor(window.innerHeight * MAX_DIALOG_VIEWPORT_HEIGHT_RATIO));
         }
-    }, [bindIframeSizeObservers, handleClose, isSaving, measureDialogHeight]);
+    }, [bindIframeSizeObservers, handleClose, isQueryDialog, isSaving, measureDialogHeight]);
 
     const handleSave = React.useCallback(() => {
         const doc = iframeRef.current?.contentDocument;
