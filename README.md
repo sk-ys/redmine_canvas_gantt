@@ -32,6 +32,8 @@ Redmine Canvas Gantt provides a fast, interactive Gantt chart for Redmine by ren
 - Bulk subtask creation from multiple subject lines
 - Baseline snapshots for visual comparison, with filtered-view or whole-project save scope
 - Filters and grouping by project, assignee, status, version, and subject text
+- Synchronization of display columns and sorting when selecting a saved query
+- Visual indicators (blue badges) on the toolbar when a query or filter is active
 - Version headers, progress line, row height presets, and persistent UI preferences
 
 ## Demo
@@ -102,7 +104,8 @@ Redmine Canvas Gantt provides a fast, interactive Gantt chart for Redmine by ren
 Canvas Gantt separates shared business conditions from personal UI preferences.
 
 - Shared business conditions are resolved from the URL and optional `query_id`
-- Personal UI state such as zoom, viewport, sidebar width, and visible columns stays in `localStorage`
+- Personal UI state such as zoom, viewport, and sidebar width stays in `localStorage`
+- Display columns and sorting are treated as shared state that synchronizes with Redmine's standard queries
 - When the Canvas Gantt tab opens a bare `/canvas_gantt` URL, shared query conditions fall back to the last-used state stored in `localStorage` for that project
 - When the same shared condition is provided by multiple sources, the precedence is:
   URL parameters -> saved query (`query_id`) -> project-scoped last-used shared state -> defaults
@@ -123,45 +126,31 @@ Canvas Gantt does not reimplement Redmine's query editor. Query creation, editin
 
 The saved-query editor dialog also exposes **Open in new tab** as a fallback when the embedded Redmine page is not convenient to use.
 
-`query_id` alone is enough only when the current view exactly matches the saved query. If Canvas Gantt adds extra shared filters on top of that saved query, the toolbar sends `query_id` plus standard Redmine filter parameters so the issue list can reproduce the same view as closely as possible.
+`query_id` alone is enough only when the current view exactly matches the saved query. Display columns and sorting are also restored based on the saved query definition. If Canvas Gantt adds extra shared filters, visible columns, or sorting on top of that saved query, the toolbar sends `query_id` plus standard Redmine parameters so the issue list can reproduce the same view as closely as possible.
 
 When the project menu opens a bare `Canvas Gantt` URL with no shared query input, Canvas Gantt restores the last-used shared filter state for that project and rewrites the browser URL to the canonical shared query params.
 
-### Supported shared parameters
+### Supported Shared Parameters
 
-- `query_id`: use an existing Redmine saved issue query as the base condition. Only persisted query ids are supported
-- `status_ids[]`: filter by issue status ids
-- `assigned_to_ids[]`: filter by assignee ids, use `none` for unassigned issues
-- `project_ids[]`: narrow the visible projects inside the current project/subproject scope
-- `fixed_version_ids[]`: filter by target version ids, use `none` for issues without a version
-- `group_by`: `project` or `assigned_to`
-- `sort`: frontend sort key plus direction, for example `subject:asc` or `startDate:desc`
-- `show_subprojects`: `0` to hide subprojects, omit it or use `1` to include them
+| Parameter | Description |
+| :--- | :--- |
+| `query_id` | Use an existing Redmine saved issue query as the base condition |
+| `status_ids[]` | Filter by issue status IDs |
+| `assigned_to_ids[]` | Filter by assignee IDs. Use `none` for unassigned issues |
+| `project_ids[]` | Narrow the visible projects inside the current project/subproject scope |
+| `fixed_version_ids[]` | Filter by target version IDs. Use `none` for issues without a version |
+| `group_by` | Grouping criteria. `project` or `assigned_to` |
+| `sort` | Frontend sort key plus direction. e.g., `subject:asc`, `startDate:desc` |
+| `c[]` | Specify visible columns (compatible with Redmine's `c[]`). e.g., `c[]=subject&c[]=status` |
+| `show_subprojects` | Subproject visibility. `0` to hide, omit or `1` to include |
 
-Canvas Gantt also reads the following Redmine-standard issue list parameters:
+### Compatibility with Redmine Issue List
 
-- `set_filter=1`
-- `f[]`
-- `op[field]`
-- `v[field][]`
-- `group_by`
-- `sort`
-
-Supported Redmine-standard fields:
-
-- `status_id`
-- `assigned_to_id`
-- `project_id`
-- `fixed_version_id`
-- `subproject_id`
-
-Supported Redmine-standard operators:
-
-- `=`
-- `*`
-- `!*`
-- `o`
-- `c`
+| Category | Supported Items |
+| :--- | :--- |
+| **Parameters** | `set_filter=1`, `f[]`, `op[field]`, `v[field][]`, `c[]`, `group_by`, `sort` |
+| **Fields** | `status_id`, `assigned_to_id`, `project_id`, `fixed_version_id`, `subproject_id` |
+| **Operators** | `=` (equal), `*` (all), `!*` (none), `o` (open), `c` (closed) |
 
 Current compatibility limits:
 
@@ -206,7 +195,7 @@ Hide subprojects and show only unassigned issues:
 
 Configure the plugin from **Administration** -> **Plugins** -> **Canvas Gantt** -> **Configure**.
 
-- Inline edit toggles: `subject`, `assigned_to`, `status`, `done_ratio`, `due_date`, `custom_fields`
+- **Inline edit toggles**: `subject`, `assigned_to`, `status`, `done_ratio`, `due_date`, `custom_fields`
 - `row_height`: default row height
 - `use_vite_dev_server`: load frontend assets from `http://localhost:5173` during development
 
