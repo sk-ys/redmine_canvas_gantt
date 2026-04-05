@@ -11,7 +11,7 @@ Redmine::Plugin.register :redmine_canvas_gantt do
   author_url 'https://github.com/tiohsa/redmine_canvas_gantt'
 
   project_module :canvas_gantt do
-    permission :view_canvas_gantt, { canvas_gantts: [:index, :data] }
+    permission :view_canvas_gantt, { canvas_gantts: [:index, :data, :queries] }
     permission :edit_canvas_gantt, { canvas_gantts: [:update, :bulk_create_subtasks, :destroy_relation, :save_baseline] }
   end
 

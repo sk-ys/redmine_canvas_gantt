@@ -38,6 +38,8 @@ interface UIState {
     activeInlineEdit: { taskId: string; field: string; source?: 'cell' | 'panel' } | null;
     isFullScreen: boolean;
     issueDialogUrl: string | null;
+    queryDialogUrl: string | null;
+    savedQueriesReloadToken: number;
     isHelpDialogOpen: boolean;
     isSidebarResizing: boolean;
     defaultRelationType: DefaultRelationType;
@@ -65,6 +67,8 @@ interface UIState {
     toggleFullScreen: () => void;
     openIssueDialog: (url: string) => void;
     closeIssueDialog: () => void;
+    openQueryDialog: (url: string) => void;
+    closeQueryDialog: () => void;
     openHelpDialog: () => void;
     closeHelpDialog: () => void;
     setSidebarResizing: (value: boolean) => void;
@@ -110,6 +114,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     activeInlineEdit: null,
     isFullScreen: false,
     issueDialogUrl: null,
+    queryDialogUrl: null,
+    savedQueriesReloadToken: 0,
     isHelpDialogOpen: false,
     isSidebarResizing: false,
     defaultRelationType: preferences.defaultRelationType ?? DEFAULT_RELATION_TYPE,
@@ -186,6 +192,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     toggleFullScreen: () => set((state) => ({ isFullScreen: !state.isFullScreen })),
     openIssueDialog: (url) => set(() => ({ issueDialogUrl: buildRedmineUrl(url) })),
     closeIssueDialog: () => set(() => ({ issueDialogUrl: null })),
+    openQueryDialog: (url) => set(() => ({ queryDialogUrl: buildRedmineUrl(url) })),
+    closeQueryDialog: () => set((state) => ({
+        queryDialogUrl: null,
+        savedQueriesReloadToken: state.savedQueriesReloadToken + 1
+    })),
     openHelpDialog: () => set(() => ({ isHelpDialogOpen: true })),
     closeHelpDialog: () => set(() => ({ isHelpDialogOpen: false })),
     setSidebarResizing: (value) => set(() => ({ isSidebarResizing: value })),

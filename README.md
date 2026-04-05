@@ -111,11 +111,17 @@ Canvas Gantt separates shared business conditions from personal UI preferences.
 
 Canvas Gantt does not reimplement Redmine's query editor. Query creation, editing, and saving are done in the standard Redmine issue list, and Canvas Gantt consumes both saved queries and the supported subset of Redmine issue-list URL parameters.
 
-- Use **Edit Query in Redmine** in the Canvas Gantt toolbar to open the standard issue list for the current project
+- Use the **Saved Queries** menu in the Canvas Gantt toolbar to browse saved Redmine queries that are visible in the current project
+- Select a saved query to apply its `query_id` and reload Canvas Gantt from Redmine's saved query definition
+- Use **Clear saved query** to remove `query_id` while keeping the currently resolved shared filters in the URL
+- Use **Save custom query** to open the standard Redmine issue list inside an iframe dialog and save the current filter set without leaving Canvas Gantt
+- Use **Edit Query in Redmine** from the same menu to open the standard issue list in the current tab
 - Adjust filters in the Redmine issue list and save the query with Redmine's built-in **Save** action
 - Use **Open in Canvas Gantt** in the issue list to return to Canvas Gantt with the current issue-list URL state
 - When the issue list is showing a saved query, the return link includes `query_id`
 - When the issue list is showing an unsaved standard filter, the return link carries the supported Redmine-standard filter parameters directly
+
+The saved-query editor dialog also exposes **Open in new tab** as a fallback when the embedded Redmine page is not convenient to use.
 
 `query_id` alone is enough only when the current view exactly matches the saved query. If Canvas Gantt adds extra shared filters on top of that saved query, the toolbar sends `query_id` plus standard Redmine filter parameters so the issue list can reproduce the same view as closely as possible.
 
