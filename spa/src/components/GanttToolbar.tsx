@@ -1952,18 +1952,20 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
 
                 <button
                     onClick={toggleFullScreen}
+                    title={i18n.t('help_label_fullscreen') || "Full Screen"}
                     style={{
                         padding: '0',
                         borderRadius: '6px',
                         border: '1px solid #e0e0e0',
-                        backgroundColor: isFullScreen ? '#1a73e8' : '#fff',
-                        color: isFullScreen ? '#fff' : '#333',
+                        backgroundColor: isFullScreen ? '#e8f0fe' : '#fff',
+                        color: isFullScreen ? '#1a73e8' : '#333',
                         cursor: 'pointer',
                         height: '32px',
                         width: '32px',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        position: 'relative'
                     }}
                 >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1983,6 +1985,9 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                             </>
                         )}
                     </svg>
+                    {isFullScreen && (
+                        <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, backgroundColor: '#1a73e8', borderRadius: '50%' }} />
+                    )}
                 </button>
 
                 <button
