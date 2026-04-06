@@ -46,6 +46,7 @@ module RedmineCanvasGantt
           fixed_version_id: issue.fixed_version_id,
           priority_id: issue.priority_id,
           priority_name: issue.priority&.name,
+          priority_position: issue.priority&.position,
           author_id: issue.author_id,
           author_name: issue.author&.name,
           category_id: issue.category_id,

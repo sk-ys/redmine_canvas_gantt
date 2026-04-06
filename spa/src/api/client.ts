@@ -140,8 +140,13 @@ const parseEditOption = (value: unknown): EditOption | null => {
     if (!record) return null;
     const id = record.id;
     const name = record.name;
+    const position = record.position;
     if (typeof id !== 'number' || typeof name !== 'string') return null;
-    return { id, name };
+    return {
+        id,
+        name,
+        position: typeof position === 'number' ? position : undefined
+    };
 };
 
 const parseStatus = (value: unknown): TaskStatus | null => {
@@ -452,6 +457,7 @@ export const apiClient = {
                 fixedVersionId: t.fixed_version_id ? String(t.fixed_version_id) : undefined,
                 priorityId: typeof t.priority_id === 'number' ? t.priority_id : undefined,
                 priorityName: typeof t.priority_name === 'string' ? t.priority_name : undefined,
+                priorityPosition: typeof t.priority_position === 'number' ? t.priority_position : undefined,
                 authorId: typeof t.author_id === 'number' ? t.author_id : undefined,
                 authorName: typeof t.author_name === 'string' ? t.author_name : undefined,
                 categoryId: typeof t.category_id === 'number' ? t.category_id : undefined,

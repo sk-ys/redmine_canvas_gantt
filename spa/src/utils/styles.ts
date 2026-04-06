@@ -13,17 +13,19 @@ export const getStatusColor = (statusId: number) => {
     }
 };
 
-export const getPriorityColor = (priorityId: number, priorityName?: string) => {
-    const name = priorityName?.toLowerCase() || '';
+export const getPriorityColor = (priorityId: number, priorityPosition?: number) => {
+    const rank = typeof priorityPosition === 'number' && Number.isFinite(priorityPosition)
+        ? priorityPosition
+        : priorityId;
 
-    // Immediate / Urgent
-    if (name.includes('immediate') || name.includes('urgent') || priorityId >= 6) {
+    // Highest priorities
+    if (rank >= 4) {
         return { bg: '#ffebee', text: '#c62828' };
     }
-    // High
-    if (name.includes('high') || priorityId === 5) {
+    // Upper-mid priorities
+    if (rank === 3) {
         return { bg: '#fff3e0', text: '#ef6c00' };
     }
-    // Low or Normal (Normal and below)
+    // Normal and below
     return { bg: '#f5f5f5', text: '#616161' };
 };

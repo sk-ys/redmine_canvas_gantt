@@ -22,7 +22,9 @@ module RedmineCanvasGantt
         options: {
           statuses: statuses_for(issue),
           assignees: assignables_for(issue),
-          priorities: @issue_priority_class.active.map { |priority| { id: priority.id, name: priority.name } },
+          priorities: @issue_priority_class.active.sort_by(&:position).map do |priority|
+            { id: priority.id, name: priority.name, position: priority.position }
+          end,
           categories: issue.project.issue_categories.map { |category| { id: category.id, name: category.name } },
           projects: @project_class.allowed_to(:add_issues).active.map { |project| { id: project.id, name: project.name } },
           trackers: issue.project.trackers.map { |tracker| { id: tracker.id, name: tracker.name } },

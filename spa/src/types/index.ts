@@ -18,6 +18,7 @@ export interface Task {
     fixedVersionId?: string;
     priorityId?: number;
     priorityName?: string;
+    priorityPosition?: number;
     authorId?: number;
     authorName?: string;
     categoryId?: number;

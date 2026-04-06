@@ -70,6 +70,9 @@ describe('apiClient.fetchData', () => {
                         due_date: '2025-01-02',
                         ratio_done: 0,
                         status_id: 1,
+                        priority_id: 7,
+                        priority_name: '緊急',
+                        priority_position: 4,
                         assigned_to_id: null,
                         assigned_to_name: null,
                         parent_id: null,
@@ -125,6 +128,7 @@ describe('apiClient.fetchData', () => {
         });
 
         expect(data.relations).toEqual([{ id: '99', from: '10', to: '11', type: 'precedes', delay: undefined }]);
+        expect(data.tasks[0]?.priorityPosition).toBe(4);
         expect(data.initialState).toEqual({
             queryId: 7,
             selectedStatusIds: [1],
