@@ -315,13 +315,13 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         updateViewport({ startDate: leftDate.getTime(), scrollX: 0 });
     };
 
-    const buildQueryEditorPath = () => {
+    const buildQueryEditorPath = ({ includeActiveQueryId = true }: { includeActiveQueryId?: boolean } = {}) => {
         const issueListPath = window.RedmineCanvasGantt?.issueListPath;
         const projectId = window.RedmineCanvasGantt?.projectId;
         if (!issueListPath && !projectId) return null;
 
         const queryState = toResolvedQueryStateFromStore({
-            activeQueryId,
+            activeQueryId: includeActiveQueryId ? activeQueryId : null,
             selectedStatusIds,
             selectedAssigneeIds,
             selectedProjectIds,
@@ -339,14 +339,14 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
     };
 
     const openRedmineQueryEditor = () => {
-        const path = buildQueryEditorPath();
+        const path = buildQueryEditorPath({ includeActiveQueryId: true });
         if (!path) return;
 
         navigateToRedminePath(path);
     };
 
     const openSavedQueryEditorDialog = () => {
-        const path = buildQueryEditorPath();
+        const path = buildQueryEditorPath({ includeActiveQueryId: false });
         if (!path) return;
 
         closeMenu('query');

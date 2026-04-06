@@ -8,6 +8,7 @@ import { useUIStore } from '../stores/UIStore';
 import { useBaselineStore } from '../stores/BaselineStore';
 import type { GanttExportHandle } from '../export/types';
 import { apiClient } from '../api/client';
+import { navigateToRedminePath } from '../utils/navigation';
 import '../stores/preferencesWatcher';
 import { resetCanvasGanttTestState } from '../test/testSetup';
 import { setVisibleColumnsForTest } from '../test/columnTestHelpers';
@@ -447,7 +448,7 @@ describe('GanttToolbar shortcuts', () => {
         });
     });
 
-    it('opens the saved query editor in the iframe dialog from the query menu', async () => {
+    it('opens the save-custom-query dialog without query_id so Redmine treats it as a new query', async () => {
         const config = getCanvasGanttConfig();
         window.RedmineCanvasGantt = {
             ...config,
@@ -476,9 +477,37 @@ describe('GanttToolbar shortcuts', () => {
 
         await waitFor(() => {
             expect(useUIStore.getState().queryDialogUrl).toBe(
-                '/redmine/projects/ecookbook/issues?query_id=12&f%5B%5D=status_id&op%5Bstatus_id%5D=%3D&v%5Bstatus_id%5D%5B%5D=1&v%5Bstatus_id%5D%5B%5D=2&f%5B%5D=assigned_to_id&op%5Bassigned_to_id%5D=%3D&v%5Bassigned_to_id%5D%5B%5D=7&f%5B%5D=project_id&op%5Bproject_id%5D=%3D&v%5Bproject_id%5D%5B%5D=3&f%5B%5D=fixed_version_id&op%5Bfixed_version_id%5D=%3D&v%5Bfixed_version_id%5D%5B%5D=4&f%5B%5D=subproject_id&op%5Bsubproject_id%5D=%21*&set_filter=1&group_by=assigned_to&sort=start_date%3Adesc&c%5B%5D=id&c%5B%5D=subject&c%5B%5D=status&c%5B%5D=assigned_to&c%5B%5D=start_date&c%5B%5D=due_date&c%5B%5D=done_ratio'
+                '/redmine/projects/ecookbook/issues?f%5B%5D=status_id&op%5Bstatus_id%5D=%3D&v%5Bstatus_id%5D%5B%5D=1&v%5Bstatus_id%5D%5B%5D=2&f%5B%5D=assigned_to_id&op%5Bassigned_to_id%5D=%3D&v%5Bassigned_to_id%5D%5B%5D=7&f%5B%5D=project_id&op%5Bproject_id%5D=%3D&v%5Bproject_id%5D%5B%5D=3&f%5B%5D=fixed_version_id&op%5Bfixed_version_id%5D=%3D&v%5Bfixed_version_id%5D%5B%5D=4&f%5B%5D=subproject_id&op%5Bsubproject_id%5D=%21*&set_filter=1&group_by=assigned_to&sort=start_date%3Adesc&c%5B%5D=id&c%5B%5D=subject&c%5B%5D=status&c%5B%5D=assigned_to&c%5B%5D=start_date&c%5B%5D=due_date&c%5B%5D=done_ratio'
             );
         });
+    });
+
+    it('opens Redmine query edit with query_id preserved from the query menu', async () => {
+        const config = getCanvasGanttConfig();
+        window.RedmineCanvasGantt = {
+            ...config,
+            redmineBase: '/redmine'
+        };
+
+        useTaskStore.setState({
+            activeQueryId: 12,
+            selectedStatusIds: [1, 2],
+            selectedAssigneeIds: [7],
+            selectedProjectIds: ['3'],
+            selectedVersionIds: ['4'],
+            sortConfig: { key: 'startDate', direction: 'desc' },
+            groupByProject: false,
+            groupByAssignee: true,
+            showSubprojects: false
+        });
+
+        render(<GanttToolbar zoomLevel={1} onZoomChange={() => {}} exportRef={exportRef} />);
+        fireEvent.click(screen.getByTestId('query-menu-button'));
+        fireEvent.click(await screen.findByText('Edit Query in Redmine'));
+
+        expect(vi.mocked(navigateToRedminePath)).toHaveBeenCalledWith(
+            '/projects/ecookbook/issues?query_id=12&f%5B%5D=status_id&op%5Bstatus_id%5D=%3D&v%5Bstatus_id%5D%5B%5D=1&v%5Bstatus_id%5D%5B%5D=2&f%5B%5D=assigned_to_id&op%5Bassigned_to_id%5D=%3D&v%5Bassigned_to_id%5D%5B%5D=7&f%5B%5D=project_id&op%5Bproject_id%5D=%3D&v%5Bproject_id%5D%5B%5D=3&f%5B%5D=fixed_version_id&op%5Bfixed_version_id%5D=%3D&v%5Bfixed_version_id%5D%5B%5D=4&f%5B%5D=subproject_id&op%5Bsubproject_id%5D=%21*&set_filter=1&group_by=assigned_to&sort=start_date%3Adesc&c%5B%5D=id&c%5B%5D=subject&c%5B%5D=status&c%5B%5D=assigned_to&c%5B%5D=start_date&c%5B%5D=due_date&c%5B%5D=done_ratio'
+        );
     });
 
     it('reloads saved queries only once after the query dialog closes', async () => {
