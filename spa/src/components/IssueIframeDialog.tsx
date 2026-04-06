@@ -232,8 +232,10 @@ export const IssueIframeDialog: React.FC = () => {
 
         if (form) {
             setIsSaving(true);
-            const submitBtn = doc.querySelector('input[name="commit"]') as HTMLElement;
-            if (submitBtn) {
+            const submitBtn = form.querySelector('input[type="submit"], button[type="submit"]') as HTMLElement | null;
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+            } else if (submitBtn) {
                 submitBtn.click();
             } else {
                 form.submit();

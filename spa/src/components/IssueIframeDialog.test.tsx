@@ -396,4 +396,46 @@ describe('IssueIframeDialog', () => {
             expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
         });
     });
+
+    it('submits the issue form instead of the related-issue form when both are present', async () => {
+        const { container } = render(<IssueIframeDialog />);
+        const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+        const doc = document.implementation.createHTMLDocument('iframe');
+        doc.body.innerHTML = `
+            <form id="new-relation-form">
+              <input name="commit" type="submit" value="Add" />
+            </form>
+            <form id="issue-form">
+              <input name="commit" type="submit" value="Save" />
+            </form>
+        `;
+
+        vi.mocked(getIssueDialogErrorMessage).mockReturnValue(null);
+
+        Object.defineProperty(iframe, 'contentWindow', {
+            value: { location: { href: 'http://example.com/issues/123/edit' }, document: doc },
+            configurable: true
+        });
+        Object.defineProperty(iframe, 'contentDocument', { value: doc, configurable: true });
+
+        const relationForm = doc.querySelector('#new-relation-form') as HTMLFormElement;
+        const issueForm = doc.querySelector('#issue-form') as HTMLFormElement;
+        const relationSubmit = doc.querySelector('#new-relation-form input[name="commit"]') as HTMLInputElement;
+        const relationClick = vi.spyOn(relationSubmit, 'click');
+        const issueRequestSubmit = vi.fn();
+        Object.defineProperty(issueForm, 'requestSubmit', {
+            configurable: true,
+            value: issueRequestSubmit
+        });
+        Object.defineProperty(relationForm, 'requestSubmit', {
+            configurable: true,
+            value: vi.fn()
+        });
+
+        fireEvent.load(iframe);
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(issueRequestSubmit).toHaveBeenCalledTimes(1);
+        expect(relationClick).not.toHaveBeenCalled();
+    });
 });
