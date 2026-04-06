@@ -4,6 +4,7 @@ import type {
     FilterProjectOption,
     Relation,
     Project,
+    SavedQuery,
     Task,
     Version,
     TaskStatus
@@ -139,8 +140,13 @@ const parseEditOption = (value: unknown): EditOption | null => {
     if (!record) return null;
     const id = record.id;
     const name = record.name;
+    const position = record.position;
     if (typeof id !== 'number' || typeof name !== 'string') return null;
-    return { id, name };
+    return {
+        id,
+        name,
+        position: typeof position === 'number' ? position : undefined
+    };
 };
 
 const parseStatus = (value: unknown): TaskStatus | null => {
@@ -155,6 +161,28 @@ const parseStatus = (value: unknown): TaskStatus | null => {
         id: typeof idValue === 'number' ? idValue : Number(idValue),
         name: nameValue,
         isClosed: Boolean(isClosedValue)
+    };
+};
+
+const parseSavedQuery = (value: unknown): SavedQuery | null => {
+    const record = asRecord(value);
+    if (!record) return null;
+
+    const id = record.id;
+    const name = record.name;
+    const isPublic = record.is_public;
+    const projectId = record.project_id;
+
+    if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) return null;
+    if (typeof name !== 'string' || name.trim() === '') return null;
+    if (typeof isPublic !== 'boolean') return null;
+    if (projectId !== null && projectId !== undefined && !(typeof projectId === 'number' && Number.isInteger(projectId))) return null;
+
+    return {
+        id,
+        name,
+        isPublic,
+        projectId: projectId ?? null
     };
 };
 
@@ -354,6 +382,22 @@ const parseBaselineSnapshot = (value: unknown): { snapshot: BaselineSnapshot | n
 };
 
 export const apiClient = {
+    fetchQueries: async (): Promise<SavedQuery[]> => {
+        const config = getConfig();
+        const response = await fetch(new URL(`${config.apiBase}/queries.json`, window.location.origin).toString(), {
+            headers: buildJsonHeaders(config)
+        });
+
+        if (!response.ok) {
+            throw new Error(await parseErrorMessage(response));
+        }
+
+        const payload = await response.json();
+        const root = asRecord(payload);
+        const queries = Array.isArray(root?.queries) ? root.queries : [];
+        return queries.map(parseSavedQuery).filter((entry): entry is SavedQuery => entry !== null);
+    },
+
     fetchData: async (params?: { query?: ResolvedQueryState; rawSearch?: string }): Promise<ApiData> => {
         const config = getConfig();
 
@@ -413,6 +457,7 @@ export const apiClient = {
                 fixedVersionId: t.fixed_version_id ? String(t.fixed_version_id) : undefined,
                 priorityId: typeof t.priority_id === 'number' ? t.priority_id : undefined,
                 priorityName: typeof t.priority_name === 'string' ? t.priority_name : undefined,
+                priorityPosition: typeof t.priority_position === 'number' ? t.priority_position : undefined,
                 authorId: typeof t.author_id === 'number' ? t.author_id : undefined,
                 authorName: typeof t.author_name === 'string' ? t.author_name : undefined,
                 categoryId: typeof t.category_id === 'number' ? t.category_id : undefined,

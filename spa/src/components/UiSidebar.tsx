@@ -545,7 +545,7 @@ export const UiSidebar: React.FC = () => {
             width: columnWidths['priority'] ?? 90,
             render: (t: Task) => {
                 const priorityId = t.priorityId || 0;
-                const style = getPriorityColor(priorityId, t.priorityName);
+                const style = getPriorityColor(priorityId, t.priorityPosition);
                 return renderEditableCell(t, 'priorityId', (
                     <span style={{
                         backgroundColor: style.bg,
@@ -1113,7 +1113,7 @@ export const UiSidebar: React.FC = () => {
                                                                 const nextTs = new Date(next).getTime();
                                                                 if (!Number.isFinite(nextTs)) return;
                                                                 if (task.startDate !== undefined && Number.isFinite(task.startDate) && task.startDate! > nextTs) {
-                                                                    useUIStore.getState().addNotification('Invalid date range', 'warning');
+                                                                    useUIStore.getState().addNotification(i18n.t('label_invalid_date_range') || 'Invalid date range', 'warning');
                                                                     return;
                                                                 }
                                                                 // Update local state - will be saved with batch save or auto-save
@@ -1150,7 +1150,7 @@ export const UiSidebar: React.FC = () => {
                                                                 const nextTs = new Date(next).getTime();
                                                                 if (!Number.isFinite(nextTs)) return;
                                                                 if (task.dueDate !== undefined && Number.isFinite(task.dueDate) && nextTs > task.dueDate!) {
-                                                                    useUIStore.getState().addNotification('Invalid date range', 'warning');
+                                                                    useUIStore.getState().addNotification(i18n.t('label_invalid_date_range') || 'Invalid date range', 'warning');
                                                                     return;
                                                                 }
                                                                 // Update local state - will be saved with batch save or auto-save
@@ -1176,11 +1176,12 @@ export const UiSidebar: React.FC = () => {
                                                             onCancel={close}
                                                             onCommit={async (next) => {
                                                                 if (next === null) return;
-                                                                const nextName = meta.options.priorities?.find(s => s.id === next)?.name;
+                                                                const nextPriority = meta.options.priorities?.find(s => s.id === next);
+                                                                const nextName = nextPriority?.name;
                                                                 await save({
                                                                     taskId: task.id,
-                                                                    optimisticTaskUpdates: { priorityId: next, priorityName: nextName },
-                                                                    rollbackTaskUpdates: { priorityId: task.priorityId, priorityName: task.priorityName },
+                                                                    optimisticTaskUpdates: { priorityId: next, priorityName: nextName, priorityPosition: nextPriority?.position },
+                                                                    rollbackTaskUpdates: { priorityId: task.priorityId, priorityName: task.priorityName, priorityPosition: task.priorityPosition },
                                                                     fields: { priority_id: next }
                                                                 });
                                                                 close();

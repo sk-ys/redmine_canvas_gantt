@@ -1,6 +1,46 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from './client';
 
+describe('apiClient.fetchQueries', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        delete window.RedmineCanvasGantt;
+    });
+
+    it('normalizes saved query payloads', async () => {
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key'
+        };
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                queries: [
+                    { id: 12, name: 'Open issues', is_public: true, project_id: 5 },
+                    { id: 18, name: 'My team backlog', is_public: false, project_id: null },
+                    { id: 'skip-me', name: 1 }
+                ]
+            })
+        });
+        vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+        const queries = await apiClient.fetchQueries();
+
+        expect(queries).toEqual([
+            { id: 12, name: 'Open issues', isPublic: true, projectId: 5 },
+            { id: 18, name: 'My team backlog', isPublic: false, projectId: null }
+        ]);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:3000/projects/1/canvas_gantt/queries.json',
+            expect.anything()
+        );
+    });
+});
+
 describe('apiClient.fetchData', () => {
     afterEach(() => {
         vi.restoreAllMocks();
@@ -30,6 +70,9 @@ describe('apiClient.fetchData', () => {
                         due_date: '2025-01-02',
                         ratio_done: 0,
                         status_id: 1,
+                        priority_id: 7,
+                        priority_name: '緊急',
+                        priority_position: 4,
                         assigned_to_id: null,
                         assigned_to_name: null,
                         parent_id: null,
@@ -85,6 +128,7 @@ describe('apiClient.fetchData', () => {
         });
 
         expect(data.relations).toEqual([{ id: '99', from: '10', to: '11', type: 'precedes', delay: undefined }]);
+        expect(data.tasks[0]?.priorityPosition).toBe(4);
         expect(data.initialState).toEqual({
             queryId: 7,
             selectedStatusIds: [1],
@@ -166,6 +210,43 @@ describe('apiClient.fetchData', () => {
                 }
             }
         });
+    });
+});
+
+describe('apiClient.fetchQueries', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        delete window.RedmineCanvasGantt;
+    });
+
+    it('fetches and parses saved queries', async () => {
+        window.RedmineCanvasGantt = {
+            projectId: 1,
+            apiBase: '/projects/1/canvas_gantt',
+            redmineBase: '',
+            authToken: 'token',
+            apiKey: 'key'
+        };
+
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                queries: [
+                    { id: 12, name: 'Open issues', is_public: true, project_id: 1 },
+                    { id: 13, name: 'Shared', is_public: false, project_id: null }
+                ]
+            })
+        });
+        vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+        await expect(apiClient.fetchQueries()).resolves.toEqual([
+            { id: 12, name: 'Open issues', isPublic: true, projectId: 1 },
+            { id: 13, name: 'Shared', isPublic: false, projectId: null }
+        ]);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'http://localhost:3000/projects/1/canvas_gantt/queries.json',
+            expect.anything()
+        );
     });
 });
 

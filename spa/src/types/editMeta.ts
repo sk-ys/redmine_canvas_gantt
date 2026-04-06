@@ -15,6 +15,7 @@ export interface InlineEditSettings {
 export interface EditOption {
     id: number;
     name: string;
+    position?: number;
 }
 
 export type CustomFieldFormat = 'string' | 'int' | 'float' | 'list' | 'bool' | 'date' | 'text';

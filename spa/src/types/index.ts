@@ -18,6 +18,7 @@ export interface Task {
     fixedVersionId?: string;
     priorityId?: number;
     priorityName?: string;
+    priorityPosition?: number;
     authorId?: number;
     authorName?: string;
     categoryId?: number;
@@ -70,6 +71,13 @@ export interface Project {
     name: string;
     startDate?: string;
     dueDate?: string;
+}
+
+export interface SavedQuery {
+    id: number;
+    name: string;
+    isPublic: boolean;
+    projectId: number | null;
 }
 
 export interface FilterProjectOption {
