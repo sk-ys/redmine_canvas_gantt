@@ -46,6 +46,7 @@ interface UIState {
     autoCalculateDelay: boolean;
     autoApplyDefaultRelation: boolean;
     autoScheduleMoveMode: AutoScheduleMoveModeValue;
+    sidebarFontSize: number;
     addNotification: (message: string, type?: NotificationType) => void;
     removeNotification: (id: string) => void;
     toggleProgressLine: () => void;
@@ -76,6 +77,7 @@ interface UIState {
     setAutoCalculateDelay: (value: boolean) => void;
     setAutoApplyDefaultRelation: (value: boolean) => void;
     setAutoScheduleMoveMode: (value: AutoScheduleMoveModeValue) => void;
+    setSidebarFontSize: (size: number) => void;
     resetRelationPreferences: () => void;
 }
 
@@ -122,6 +124,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     autoCalculateDelay: preferences.autoCalculateDelay ?? true,
     autoApplyDefaultRelation: preferences.autoApplyDefaultRelation ?? true,
     autoScheduleMoveMode: preferences.autoScheduleMoveMode ?? AutoScheduleMoveMode.ConstraintPush,
+    sidebarFontSize: preferences.sidebarFontSize ?? 13,
     addNotification: (message, type = 'info') => {
         const id = Math.random().toString(36).substring(7);
         set((state) => ({
@@ -204,6 +207,10 @@ export const useUIStore = create<UIState>((set, get) => ({
     setAutoCalculateDelay: (value) => set(() => ({ autoCalculateDelay: value })),
     setAutoApplyDefaultRelation: (value) => set(() => ({ autoApplyDefaultRelation: value })),
     setAutoScheduleMoveMode: (value) => set(() => ({ autoScheduleMoveMode: value })),
+    setSidebarFontSize: (size) => {
+        set(() => ({ sidebarFontSize: size }));
+        savePreferences({ sidebarFontSize: size });
+    },
     resetRelationPreferences: () => set(() => ({
         defaultRelationType: DEFAULT_RELATION_TYPE,
         autoCalculateDelay: true,

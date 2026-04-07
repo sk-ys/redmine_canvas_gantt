@@ -171,6 +171,10 @@ export const UiSidebar: React.FC = () => {
     const activeInlineEdit = useUIStore(state => state.activeInlineEdit);
     const columnWidths = useUIStore(state => state.columnWidths);
     const setColumnWidth = useUIStore(state => state.setColumnWidth);
+    const sidebarFontSize = useUIStore(state => state.sidebarFontSize);
+
+    const smallFontSize = Math.max(9, sidebarFontSize - 2);
+    const mediumSmallFontSize = Math.max(10, sidebarFontSize - 1);
 
     const editMetaByTaskId = useEditMetaStore((s) => s.metaByTaskId);
     const fetchEditMeta = useEditMetaStore((s) => s.fetchEditMeta);
@@ -265,7 +269,7 @@ export const UiSidebar: React.FC = () => {
             render: (t: Task) => (
                 <span
                     data-testid={`task-id-${t.id}`}
-                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', color: '#666' }}
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', color: '#666', fontSize: `${mediumSmallFontSize}px` }}
                 >
                     {t.id}
                 </span>
@@ -467,7 +471,7 @@ export const UiSidebar: React.FC = () => {
                         color: style.text,
                         padding: '2px 8px',
                         borderRadius: '12px',
-                        fontSize: '11px',
+                        fontSize: `${smallFontSize}px`,
                         fontWeight: 600,
                         display: 'inline-block',
                         whiteSpace: 'nowrap'
@@ -488,13 +492,13 @@ export const UiSidebar: React.FC = () => {
                             <div
                                 className="assignee-avatar"
                                 title={t.assignedToName}
-                                style={{ backgroundColor: getAvatarColor(t.assignedToName || ''), width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '10px', flexShrink: 0 }}
+                                style={{ backgroundColor: getAvatarColor(t.assignedToName || ''), width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: `${smallFontSize - 1}px`, flexShrink: 0 }}
                             >
                                 {getInitials(t.assignedToName)}
                             </div>
                         </>
                     ) : (
-                        <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>
+                        <span style={{ color: '#ccc', fontSize: `${mediumSmallFontSize}px` }}>-</span>
                     )}
                 </div>
             ))
@@ -528,7 +532,7 @@ export const UiSidebar: React.FC = () => {
             title: i18n.t('field_project') || 'Project',
             width: columnWidths['project'] ?? 120,
             render: (t: Task) => renderEditableCell(t, 'projectId', (
-                <span style={{ color: '#666', fontSize: '12px' }}>{t.projectName || '-'}</span>
+                <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.projectName || '-'}</span>
             ))
         },
         {
@@ -536,7 +540,7 @@ export const UiSidebar: React.FC = () => {
             title: i18n.t('field_tracker') || 'Tracker',
             width: columnWidths['tracker'] ?? 100,
             render: (t: Task) => renderEditableCell(t, 'trackerId', (
-                <span style={{ color: '#666', fontSize: '12px' }}>{t.trackerName || '-'}</span>
+                <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.trackerName || '-'}</span>
             ))
         },
         {
@@ -552,7 +556,7 @@ export const UiSidebar: React.FC = () => {
                         color: style.text,
                         padding: '2px 8px',
                         borderRadius: '12px',
-                        fontSize: '11px',
+                        fontSize: `${smallFontSize}px`,
                         fontWeight: 600,
                         display: 'inline-block',
                         whiteSpace: 'nowrap'
@@ -567,7 +571,7 @@ export const UiSidebar: React.FC = () => {
             title: i18n.t('field_author') || 'Author',
             width: columnWidths['author'] ?? 100,
             render: (t: Task) => renderEditableCell(t, 'authorId', (
-                <span style={{ color: '#666', fontSize: '12px' }}>{t.authorName || '-'}</span>
+                <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.authorName || '-'}</span>
             ))
         },
         {
@@ -575,7 +579,7 @@ export const UiSidebar: React.FC = () => {
             title: i18n.t('field_category') || 'Category',
             width: columnWidths['category'] ?? 100,
             render: (t: Task) => renderEditableCell(t, 'categoryId', (
-                <span style={{ color: '#666', fontSize: '12px' }}>{t.categoryName || '-'}</span>
+                <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.categoryName || '-'}</span>
             ))
         },
         {
@@ -583,33 +587,33 @@ export const UiSidebar: React.FC = () => {
             title: i18n.t('field_estimated_hours') || 'Estimated Time',
             width: columnWidths['estimatedHours'] ?? 80,
             render: (t: Task) => renderEditableCell(t, 'estimatedHours', (
-                <span style={{ color: '#666', fontSize: '12px' }}>{t.estimatedHours !== undefined ? `${t.estimatedHours}h` : '-'}</span>
+                <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.estimatedHours !== undefined ? `${t.estimatedHours}h` : '-'}</span>
             ))
         },
         {
             key: 'createdOn',
             title: i18n.t('field_created_on') || 'Created',
             width: columnWidths['createdOn'] ?? 120,
-            render: (t: Task) => <span style={{ color: '#666', fontSize: '12px' }}>{t.createdOn ? new Date(t.createdOn).toLocaleString() : '-'}</span>
+            render: (t: Task) => <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.createdOn ? new Date(t.createdOn).toLocaleString() : '-'}</span>
         },
         {
             key: 'updatedOn',
             title: i18n.t('field_updated_on') || 'Updated',
             width: columnWidths['updatedOn'] ?? 120,
-            render: (t: Task) => <span style={{ color: '#666', fontSize: '12px' }}>{t.updatedOn ? new Date(t.updatedOn).toLocaleString() : '-'}</span>
+            render: (t: Task) => <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.updatedOn ? new Date(t.updatedOn).toLocaleString() : '-'}</span>
         },
         {
             key: 'spentHours',
             title: i18n.t('field_spent_hours') || 'Spent Time',
             width: columnWidths['spentHours'] ?? 80,
-            render: (t: Task) => <span style={{ color: '#666', fontSize: '12px' }}>{t.spentHours !== undefined ? `${t.spentHours}h` : '-'}</span>
+            render: (t: Task) => <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.spentHours !== undefined ? `${t.spentHours}h` : '-'}</span>
         },
         {
             key: 'version',
             title: i18n.t('field_version') || 'Target Version',
             width: columnWidths['version'] ?? 120,
             render: (t: Task) => renderEditableCell(t, 'fixedVersionId', (
-                <span style={{ color: '#666', fontSize: '12px' }}>{t.fixedVersionName || '-'}</span>
+                <span style={{ color: '#666', fontSize: `${mediumSmallFontSize}px` }}>{t.fixedVersionName || '-'}</span>
             ))
         },
         ...customFields.map((customField) => ({
@@ -620,7 +624,7 @@ export const UiSidebar: React.FC = () => {
                 const displayValue = formatCustomFieldCellValue(t, customField);
                 return renderEditableCell(t, customFieldEditField(String(customField.id)), (
                     <span
-                        style={{ color: displayValue === '-' ? '#999' : '#666', fontSize: '12px' }}
+                        style={{ color: displayValue === '-' ? '#999' : '#666', fontSize: `${mediumSmallFontSize}px` }}
                         data-tooltip={displayValue !== '-' ? displayValue : undefined}
                     >
                         {displayValue}
@@ -662,7 +666,7 @@ export const UiSidebar: React.FC = () => {
                 fontWeight: 600,
                 backgroundColor: '#f8f9fa',
                 color: '#444',
-                fontSize: '13px',
+                fontSize: `${sidebarFontSize}px`,
                 overflow: 'hidden'
             }}>
                 {
@@ -943,7 +947,7 @@ export const UiSidebar: React.FC = () => {
                                     backgroundColor: isDropTarget ? '#e6f4ea' : (isSelected ? '#e8f0fe' : 'transparent'),
                                     boxShadow: isDropTarget ? 'inset 0 0 0 1px #34a853' : 'none',
                                     cursor: 'pointer',
-                                    fontSize: '13px',
+                                     fontSize: `${sidebarFontSize}px`,
                                     color: '#3c4043',
                                     transition: 'background-color 0.2s, color 0.2s'
                                 }}
@@ -1023,7 +1027,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'assignedToId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                     const current = task.assignedToId ?? null;
                                                     return (
                                                         <SelectEditor
@@ -1050,7 +1054,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'statusId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                     return (
                                                         <SelectEditor
                                                             value={task.statusId}
@@ -1167,7 +1171,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'priorityId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                     return (
                                                         <SelectEditor
                                                             value={task.priorityId ?? null}
@@ -1192,7 +1196,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'authorId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                     return (
                                                         <SelectEditor
                                                             value={task.authorId ?? null}
@@ -1215,7 +1219,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'categoryId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                     return (
                                                         <SelectEditor
                                                             value={task.categoryId ?? null}
@@ -1258,7 +1262,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'projectId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                     return (
                                                         <SelectEditor
                                                             value={task.projectId ? Number(task.projectId) : null}
@@ -1282,7 +1286,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'trackerId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                     return (
                                                         <SelectEditor
                                                             value={task.trackerId ?? null}
@@ -1306,7 +1310,7 @@ export const UiSidebar: React.FC = () => {
 
                                                 if (field === 'fixedVersionId') {
                                                     const taskMeta = editMetaByTaskId[task.id];
-                                                    if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                    if (!taskMeta) return <span style={{ fontSize: `${mediumSmallFontSize}px`, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
 
                                                     const allVersions = useTaskStore.getState().versions;
                                                     const closedVersionIds = new Set(allVersions.filter(v => v.status === 'closed').map(v => Number(v.id)));
@@ -1339,7 +1343,7 @@ export const UiSidebar: React.FC = () => {
                                                     const customFieldId = customFieldIdFromEditField(field);
                                                     if (customFieldId) {
                                                         const taskMeta = editMetaByTaskId[task.id];
-                                                        if (!taskMeta) return <span style={{ fontSize: 12, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
+                                                        if (!taskMeta) return <span style={{ fontSize: mediumSmallFontSize, color: '#666' }}>{i18n.t('label_loading') || 'Loading...'}</span>;
                                                         if (!taskMeta.editable.customFieldValues) return <span>{i18n.t('button_edit')}</span>;
 
                                                         const customField = taskMeta.options.customFields.find((cf) => String(cf.id) === customFieldId)
