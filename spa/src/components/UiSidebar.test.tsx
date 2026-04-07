@@ -5,7 +5,7 @@ import { useTaskStore } from '../stores/TaskStore';
 import { useUIStore } from '../stores/UIStore';
 import type { Task } from '../types';
 import { useEditMetaStore } from '../stores/EditMetaStore';
-import { SIDEBAR_RESIZE_CURSOR } from '../constants';
+import { SIDEBAR_RESIZE_CURSOR, SIDEBAR_DRAG_EDGE_TOLERANCE } from '../constants';
 import { resetCanvasGanttTestState } from '../test/testSetup';
 import { buildColumnSettingsFromVisibleKeys } from '../components/sidebar/sidebarColumnSettings';
 import { getColumnDefinitions } from '../components/sidebar/sidebarColumnCatalog';
@@ -165,6 +165,79 @@ describe('UiSidebar', () => {
         const taskRow = screen.getByTestId('task-row-125');
         expect(taskRow).toHaveAttribute('draggable', 'true');
         expect(getComputedStyle(taskRow).cursor).toBe('pointer');
+    });
+
+    it('prevents drag start when mouse is near the right edge of the sidebar', () => {
+        const columnSettings = buildColumnSettingsFromVisibleKeys(getColumnDefinitions(), ['subject']);
+        useUIStore.setState({ visibleColumns: ['subject'], columnSettings });
+
+        useTaskStore.setState({
+            viewport: {
+                startDate: 0,
+                scrollX: 0,
+                scrollY: 0,
+                scale: 1,
+                width: 800,
+                height: 600,
+                rowHeight: 32
+            },
+            groupByProject: false
+        });
+
+        const task: Task = {
+            id: '127',
+            subject: 'Edge drag test task',
+            startDate: 0,
+            dueDate: 1,
+            ratioDone: 0,
+            statusId: 1,
+            lockVersion: 0,
+            editable: true,
+            rowIndex: 0,
+            hasChildren: false
+        };
+
+        useTaskStore.getState().setTasks([task]);
+
+        render(<UiSidebar />);
+
+        const taskRow = screen.getByTestId('task-row-127');
+
+        // Mock getBoundingClientRect
+        vi.spyOn(taskRow, 'getBoundingClientRect').mockReturnValue({
+            right: 300,
+            width: 300,
+            left: 0,
+            top: 0,
+            bottom: 32,
+            height: 32,
+            x: 0,
+            y: 0,
+            toJSON: () => { }
+        } as DOMRect);
+
+        const dataTransfer = createMockDataTransfer();
+
+        // Case 1: Near the edge (within SIDEBAR_DRAG_EDGE_TOLERANCE)
+        const edgeEvent = createDragEvent('dragStart', taskRow, dataTransfer);
+        Object.defineProperty(edgeEvent, 'clientX', { value: 300 - (SIDEBAR_DRAG_EDGE_TOLERANCE - 5) });
+
+        const preventDefaultSpy = vi.spyOn(edgeEvent, 'preventDefault');
+
+        fireEvent(taskRow, edgeEvent);
+
+        expect(preventDefaultSpy).toHaveBeenCalled();
+        expect(dataTransfer.setData).not.toHaveBeenCalled();
+
+        // Case 2: Far from the edge
+        const centerEvent = createDragEvent('dragStart', taskRow, dataTransfer);
+        centerEvent.preventDefault = vi.fn();
+        Object.defineProperty(centerEvent, 'clientX', { value: 300 - (SIDEBAR_DRAG_EDGE_TOLERANCE + 5) });
+
+        fireEvent(taskRow, centerEvent);
+
+        expect(centerEvent.preventDefault).not.toHaveBeenCalled();
+        expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', '127');
     });
 
     it('uses ew-resize and restores previous body styles during column resize', async () => {
