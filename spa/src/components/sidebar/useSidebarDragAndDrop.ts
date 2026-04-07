@@ -3,6 +3,7 @@ import { useUIStore } from '../../stores/UIStore';
 import { i18n } from '../../utils/i18n';
 import type { MoveTaskAsChildResult, Viewport } from '../../types';
 import { getSidebarAutoScrollMetrics } from './sidebarAutoScroll';
+import { SIDEBAR_DRAG_EDGE_TOLERANCE } from '../../constants';
 
 type Params = {
     bodyRef: React.RefObject<HTMLDivElement | null>;
@@ -115,6 +116,12 @@ export const useSidebarDragAndDrop = ({
     React.useEffect(() => stopAutoScroll, [stopAutoScroll]);
 
     const handleTaskDragStart = React.useCallback((taskId: string, e: React.DragEvent<HTMLDivElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (rect.right - e.clientX <= SIDEBAR_DRAG_EDGE_TOLERANCE) {
+            e.preventDefault();
+            return;
+        }
+
         stopAutoScroll();
         setDraggingTaskId(taskId);
         setDropTargetTaskId(null);

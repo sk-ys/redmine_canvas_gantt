@@ -30,6 +30,7 @@ export interface StoredPreferences {
     leafIssuesOnly?: boolean;
     includeClosedIssues?: boolean;
     todayOnwardOnly?: boolean;
+    sidebarFontSize?: number;
 }
 
 const sanitizePreferences = (prefs: StoredPreferences): StoredPreferences => Object.fromEntries(
@@ -56,7 +57,8 @@ const sanitizePreferences = (prefs: StoredPreferences): StoredPreferences => Obj
         leafIssuesOnly: prefs.leafIssuesOnly,
         includeClosedIssues: prefs.includeClosedIssues,
         todayOnwardOnly: prefs.todayOnwardOnly,
-        organizeByDependency: prefs.organizeByDependency
+        organizeByDependency: prefs.organizeByDependency,
+        sidebarFontSize: prefs.sidebarFontSize
     }).filter(([, value]) => value !== undefined)
 ) as StoredPreferences;
 

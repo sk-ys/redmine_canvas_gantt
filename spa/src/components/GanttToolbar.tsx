@@ -74,7 +74,9 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         setAutoScheduleMoveMode,
         resetRelationPreferences,
         openQueryDialog,
-        savedQueriesReloadToken
+        savedQueriesReloadToken,
+        sidebarFontSize,
+        setSidebarFontSize
     } = useUIStore();
     const baselineSaveStatus = useBaselineStore(state => state.saveStatus);
     const hasBaseline = useBaselineStore(state => state.hasBaseline);
@@ -591,6 +593,11 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
         { value: 36, label: i18n.t('label_row_height_m') || 'M' },
         { value: 44, label: i18n.t('label_row_height_l') || 'L' },
         { value: 52, label: i18n.t('label_row_height_xl') || 'XL' }
+    ];
+    const FONT_SIZE_OPTIONS = [
+        { value: 11, label: i18n.t('label_font_size_small') || 'Small' },
+        { value: 13, label: i18n.t('label_font_size_medium') || 'Medium' },
+        { value: 15, label: i18n.t('label_font_size_large') || 'Large' }
     ];
     const currentRowHeightOption = ROW_HEIGHT_OPTIONS.find(option => option.value === viewport.rowHeight) || ROW_HEIGHT_OPTIONS[2];
 
@@ -1883,6 +1890,35 @@ export const GanttToolbar: React.FC<GanttToolbarProps> = ({ zoomLevel, onZoomCha
                                             type="checkbox"
                                             checked={checked}
                                             onChange={() => setRowHeight(option.value)}
+                                        />
+                                        {option.label}
+                                    </label>
+                                );
+                            })}
+
+                            <div style={{ fontWeight: 600, marginTop: '12px', marginBottom: '8px', color: '#333', borderTop: '1px solid #f0f0f0', paddingTop: '12px' }}>
+                                {i18n.t('label_font_size') || 'Font size'}
+                            </div>
+                            {FONT_SIZE_OPTIONS.map(option => {
+                                const checked = sidebarFontSize === option.value;
+
+                                return (
+                                    <label
+                                        key={option.value}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            padding: '4px 0',
+                                            color: checked ? '#1a73e8' : '#444',
+                                            cursor: 'pointer',
+                                            fontWeight: checked ? 600 : 400
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => setSidebarFontSize(option.value)}
                                         />
                                         {option.label}
                                     </label>
